@@ -10,13 +10,13 @@ double EPSILON = 0.001;
 TEST(EigenTools, createTransFromPosesSimple)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << 0, 0, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 10, 10, 0;
-    transform2d_t res_trans;
+    transform2d_t<double> res_trans;
     res_trans.matrix() << 1, 0, 10, 0, 1, 10, 0, 0, 1;
-    Eigen::Matrix3d calc = transBtwPoses(first_pose, second_pose).matrix();
+    auto calc = transBtwPoses(first_pose, second_pose).matrix();
     EXPECT_TRUE((res_trans.matrix() - calc).cwiseAbs().sum() < EPSILON);
     // ADD_FAILURE() <<res_trans.matrix()<< "\n\n"<< calc;
   } catch (...) {
@@ -27,13 +27,13 @@ TEST(EigenTools, createTransFromPosesSimple)
 TEST(EigenTools, createTransFromPosesAdvance)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << 10, 10, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 20, 20, 0;
-    transform2d_t res_trans;
+    transform2d_t<double> res_trans;
     res_trans.matrix() << 1, 0, 10, 0, 1, 10, 0, 0, 1;
-    Eigen::Matrix3d calc = transBtwPoses(first_pose, second_pose).matrix();
+    auto calc = transBtwPoses(first_pose, second_pose).matrix();
     EXPECT_TRUE((res_trans.matrix() - calc).cwiseAbs().sum() < EPSILON);
     // ADD_FAILURE() <<res_trans.matrix()<< "\n\n"<< calc;
   } catch (...) {
@@ -44,13 +44,13 @@ TEST(EigenTools, createTransFromPosesAdvance)
 TEST(EigenTools, createTransFromPosesAngle)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << 0, 0, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 0, 0, M_PI;
-    transform2d_t res_trans;
+    transform2d_t<double> res_trans;
     res_trans.matrix() << -1, 0, 0, 0, -1, 0, 0, 0, 1;
-    Eigen::Matrix3d calc = transBtwPoses(first_pose, second_pose).matrix();
+    auto calc = transBtwPoses(first_pose, second_pose).matrix();
     EXPECT_TRUE((res_trans.matrix() - calc).cwiseAbs().sum() < EPSILON);
     // ADD_FAILURE() <<res_trans.matrix()<< "\n\n"<< calc;
   } catch (...) {
@@ -61,12 +61,12 @@ TEST(EigenTools, createTransFromPosesAngle)
 TEST(EigenTools, CycleTest)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << 10, 20, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << -10, 30, -M_PI;
-    transform2d_t calc_trans = transBtwPoses(first_pose, second_pose);
-    pose2d_t calc_sec_pose = transformPose(first_pose,calc_trans);
+    auto calc_trans = transBtwPoses(first_pose, second_pose);
+    auto calc_sec_pose = transformPose(first_pose,calc_trans);
     std::cout<<getAngle(calc_trans)<<"\n";
     std::cout<<getPoseFromTransform(calc_trans)<<"\n";
     std::cout<<"target pose: " <<second_pose.transpose()<<" calc target pose: " << calc_sec_pose.transpose()<< "\n";
@@ -79,12 +79,12 @@ TEST(EigenTools, CycleTest)
 TEST(EigenTools, CycleTest2)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << -10, 5, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 10, 6, 2;
-    transform2d_t calc_trans = transBtwPoses(first_pose, second_pose);
-    pose2d_t calc_sec_pose = transformPose(first_pose,calc_trans);
+    auto calc_trans = transBtwPoses(first_pose, second_pose);
+    auto calc_sec_pose = transformPose(first_pose,calc_trans);
     std::cout<<getAngle(calc_trans)<<"\n";
     std::cout<<getPoseFromTransform(calc_trans)<<"\n";
     std::cout<<"target pose: " <<second_pose.transpose()<<" calc target pose: " << calc_sec_pose.transpose()<< "\n";
@@ -97,12 +97,12 @@ TEST(EigenTools, CycleTest2)
 TEST(EigenTools, CycleTest3)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << -10, 5, 1;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 10, 6, M_PI;
-    transform2d_t calc_trans = transBtwPoses(first_pose, second_pose);
-    pose2d_t calc_sec_pose = transformPose(first_pose,calc_trans);
+    auto calc_trans = transBtwPoses(first_pose, second_pose);
+    auto calc_sec_pose = transformPose(first_pose,calc_trans);
     std::cout<<getAngle(calc_trans)<<"\n";
     std::cout<<getPoseFromTransform(calc_trans)<<"\n";
     std::cout<<"target pose: " <<second_pose.transpose()<<" calc target pose: " << calc_sec_pose.transpose()<< "\n";
@@ -115,10 +115,10 @@ TEST(EigenTools, CycleTest3)
 TEST(EigenTools, complexInterfaceTest)
 {
   try {
-    pose2d_t source_pose;
-    pose2d_t target_pose;
-    transform2d_t trans_btw_poses;
-    pose2d_t trans_btw_poses_short;
+    pose2d_t<double> source_pose;
+    pose2d_t<double> target_pose;
+    transform2d_t<double> trans_btw_poses;
+    pose2d_t<double> trans_btw_poses_short;
     double angle_diff;
     double displacement;
 
@@ -128,12 +128,12 @@ TEST(EigenTools, complexInterfaceTest)
     displacement = std::sqrt(std::pow(source_pose(0) - target_pose(0), 2) +
                              std::pow(source_pose(1) - target_pose(1), 2));
     trans_btw_poses_short << 6.31512, 19.0031, 0.8;
-    transform2d_t calc_trans = transBtwPoses(source_pose, target_pose);
-    double calc_angle = getAngle(calc_trans);
-    double calc_angle_diff = getAngleDiffrence(source_pose,target_pose);
-    double calc_displacement = getDisplacement(calc_trans);
-    pose2d_t calc_pose = getPoseFromTransform(calc_trans);
-    pose2d_t calc_trans_pose = transformPose(source_pose, calc_trans);
+    auto calc_trans = transBtwPoses(source_pose, target_pose);
+    auto calc_angle = getAngle(calc_trans);
+    auto calc_angle_diff = getAngleDiffrence(source_pose,target_pose);
+    auto calc_displacement = getDisplacement(calc_trans);
+    auto calc_pose = getPoseFromTransform(calc_trans);
+    auto calc_trans_pose = transformPose(source_pose, calc_trans);
     std::cout<< calc_trans.matrix() << "\n";
     std::cout<<"angle: " <<calc_angle << "\n";
     std::cout<<"angle diffrence: " <<calc_angle_diff << "\n";
@@ -171,12 +171,12 @@ TEST(EigenTools, normalizeAngle){
 TEST(EigenTools, getTransFromPoseTest)
 {
   try {
-    pose2d_t first_pose;
+    pose2d_t<double> first_pose;
     first_pose << -10, 5, 0;
-    pose2d_t second_pose;
+    pose2d_t<double> second_pose;
     second_pose << 10, 6, 2;
-    transform2d_t calc_trans = transBtwPoses(first_pose, second_pose);
-    pose2d_t calc_pose = getPoseFromTransform(calc_trans);
+    auto calc_trans = transBtwPoses(first_pose, second_pose);
+    auto calc_pose = getPoseFromTransform(calc_trans);
     EXPECT_LT((calc_trans.matrix() - getTransFromPose(calc_pose).matrix()).cwiseAbs().sum(),EPSILON);
   } catch (...) {
     ADD_FAILURE() << "Uncaught exception";
