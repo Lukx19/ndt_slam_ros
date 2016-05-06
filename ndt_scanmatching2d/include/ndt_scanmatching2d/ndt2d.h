@@ -179,51 +179,15 @@ public:
     return (nr_iterations_);
   }
 
-  inline virtual Eigen::Matrix3d getCovariance() const
+  inline Eigen::Matrix3d getCovariance() const
   {
     return covariance_;
   }
 
-  inline virtual Eigen::Matrix3d getInformMatrix() const
+  inline Eigen::Matrix3d getInformMatrix() const
   {
     return inform_matrix_;
   }
-
-  // /** \brief Convert 6 element transformation vector to affine
-  // transformation.
-  //   * \param[in] x transformation vector of the form [x, y, z, roll, pitch,
-  //   yaw]
-  //   * \param[out] trans affine transform corresponding to given transfomation
-  //   vector
-  //   */
-  // static void
-  // convertTransform (const VectorTrans &x, Eigen::Affine3f &trans)
-  // {
-  //   trans = Eigen::Translation<float, 3>(float (x (0)), float (x (1)), float
-  //   (x (2))) *
-  //           Eigen::AngleAxis<float>(float (x (3)), Eigen::Vector3f::UnitX ())
-  //           *
-  //           Eigen::AngleAxis<float>(float (x (4)), Eigen::Vector3f::UnitY ())
-  //           *
-  //           Eigen::AngleAxis<float>(float (x (5)), Eigen::Vector3f::UnitZ
-  //           ());
-  // }
-
-  // /** \brief Convert 6 element transformation vector to transformation
-  // matrix.
-  //   * \param[in] x transformation vector of the form [x, y, z, roll, pitch,
-  //   yaw]
-  //   * \param[out] trans 4x4 transformation matrix corresponding to given
-  //   transfomation vector
-  //   */
-  // static void
-  // convertTransform (const Eigen::Matrix<double, 6, 1> &x, Eigen::Matrix4f
-  // &trans)
-  // {
-  //   Eigen::Affine3f _affine;
-  //   convertTransform (x, _affine);
-  //   trans = _affine.matrix ();
-  // }
 
 protected:
   using Registration<PointSource, PointTarget>::reg_name_;

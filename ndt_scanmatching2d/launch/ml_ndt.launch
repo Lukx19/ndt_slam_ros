@@ -1,0 +1,24 @@
+<launch>
+  <group ns="slam">
+    <node pkg="ml_ndt_scanmatching" type="ml_ndt_node" name="ml_ndt" respawn="false">
+      <param name="tf_prefix" value="p3dx_0"/>
+      <param name="robot_base_frame_id" value="base_footprint"/>
+      <!-- incomming odometry  tf frame_id without tf_prefix -->
+      <param name="odom_frame_id" value="odom"/>
+      <!-- new calculated odometry result frame_id name -->
+      <param name="new_pose_farme_id" value="ndt_odom"/>
+      <!-- topic to listen on for odometry messages -->
+      <param name="odom_topic" value="/p3dx_0/dpl/odom"/>
+      <!--  where to publish calculated odometry msgs -->
+      <param name="calculated_pose_topic" value="/p3dx_0/slam/pose"/>
+      <!-- where to listen for incomming laser msgs -->
+      <param name="laser_topic" value="/p3dx_0/dpl/hal/laser/sensor0/LaserScan"/>
+      <!-- How many cells will be created on the highest level. Next levels will have more cells  -->
+       <param name="resolution" type="int" value="16"/>
+       <!-- Maximal allowe range of laser sensor. Data exceeding this number will be dropped -->
+       <param name="maximal_laser_range" type="double" value="16.0"/>
+       <!-- Number of layers used to calculate ML-NDT Default:4 -->
+       <param name="number_of_layers" type="int" value="1"/>
+    </node>
+  </group>
+</launch>

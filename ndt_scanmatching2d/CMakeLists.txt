@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(ndt_scanmatching2d)
-
+set(PCL_DIR "/usr/local/share/pcl-1.7/PCLConfig.cmake")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -9,6 +9,11 @@ find_package(catkin REQUIRED
     sensor_msgs
     laser_geometry
     dynamic_slam_utils
+    nav_msgs
+    geometry_msgs
+    message_filters
+    tf
+    pcl_ros
     )
 find_package(PCL 1.7 REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -103,9 +108,9 @@ find_package(Eigen3 REQUIRED)
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-#  LIBRARIES ndt_scanmatching2d
-  #CATKIN_DEPENDS dynamic_slam_utils
-  DEPENDS Eigen3
+  LIBRARIES ndt2d
+  CATKIN_DEPENDS roscpp dynamic_slam_utils
+  DEPENDS eigen pcl
 )
 
 ###########
@@ -138,8 +143,15 @@ catkin_package(
 #   ${catkin_LIBRARIES}
 # )
 
- set(CMAKE_CXX_COMPILER "clang++")
- set(CMAKE_C_COMPILER "clang")
+set(CMAKE_CXX_COMPILER "clang++")
+set(CMAKE_C_COMPILER "clang")
+include(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+if(COMPILER_SUPPORTS_CXX11)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+else()
+        message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+endif()
 
 
 include_directories(
@@ -161,6 +173,13 @@ target_link_libraries (ndt2d_visual
   ${PCL_LIBRARIES}
   ${catkin_LIBRARIES}
   )
+
+add_executable(ndt_scanmatching2d_node src/ndt_scanmatching2d_node.cpp)
+add_dependencies(ndt_scanmatching2d_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ndt_scanmatching2d_node
+    ${PCL_LIBRARIES}
+    ${catkin_LIBRARIES}
+)
 
 
 
@@ -199,6 +218,12 @@ target_link_libraries (ndt2d_visual
 #   # myfile2
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
+
+# install(TARGETS ndt2d
+#    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+#    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+#  )
 
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}

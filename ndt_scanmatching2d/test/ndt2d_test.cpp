@@ -108,7 +108,7 @@ void preparePoseData(std::string folder){
 
 void testMatch(size_t source_id, size_t target_id){
 
-  eigt::pose2d_t real_trans = eigt::getPoseFromTransform(eigt::transBtwPoses(real_poses[target_id],real_poses[source_id]));
+  eigt::pose2d_t<double> real_trans = eigt::getPoseFromTransform(eigt::transBtwPoses(real_poses[target_id],real_poses[source_id]));
   //real_trans<<real_trans(0),real_trans(1)+0.077,real_trans(2);
   matcher->setInputSource(scans[source_id]);
   matcher->setInputTarget(scans[target_id]);
@@ -125,15 +125,15 @@ void testMatch(size_t source_id, size_t target_id){
   std::cout<<"sucess"<<matcher->hasConverged()<<std::endl;
   ASSERT_TRUE(matcher->hasConverged());
   std::cout<<"result score: "<<matcher->getFitnessScore()<<std::endl;
-  eigt::pose2d_t calc_trans = eigt::getPoseFromTransform(
-      eigt::convertToTransform(
+  eigt::pose2d_t<double> calc_trans = eigt::getPoseFromTransform(
+      eigt::convertToTransform<double>(
           matcher->getFinalTransformation().cast<double>()));
-  eigt::pose2d_t proof_trans = eigt::getPoseFromTransform(
-      eigt::convertToTransform(
+  eigt::pose2d_t<double> proof_trans = eigt::getPoseFromTransform(
+      eigt::convertToTransform<double>(
           proofer->getFinalTransformation().cast<double>()));
   std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<std::endl;
   std::cout<<"CALC TRANSFORM:"<<calc_trans.transpose()<<std::endl;
-  eigt::pose2d_t diff = (proof_trans - calc_trans).cwiseAbs();
+  eigt::pose2d_t<double> diff = (proof_trans - calc_trans).cwiseAbs();
   std::cout<<"DIFF:"<<diff.transpose()<<std::endl<<std::endl;
   EXPECT_LT(diff(0),0.05);
   EXPECT_LT(diff(1),0.05);
@@ -148,7 +148,7 @@ TEST(NormalDistributionsTransform2DEx, scanPairCalcError)
   size_t target = 0;
   std::cout<<"start test"<<std::endl;
   for(size_t i =0; i< 499; ++i){
-    eigt::transform2d_t real_trans = eigt::transBtwPoses(real_poses[target],real_poses[i]);
+    eigt::transform2d_t<double> real_trans = eigt::transBtwPoses(real_poses[target],real_poses[i]);
     if (eigt::getAngle(real_trans) > MIN_ROTATION ||
         eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT){
       std::cout<<"matching "<<i<< "  "<<target<<std::endl;
