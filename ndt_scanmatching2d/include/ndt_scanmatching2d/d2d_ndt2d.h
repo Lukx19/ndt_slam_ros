@@ -19,12 +19,15 @@ struct ScoreAndDerivatives
 {
   ScoreAndDerivatives() : hessian_(), gradient_(), value_()
   {
-    Zero();
+    hessian_.setZero();
+    gradient_.setZero();
+    value_ = 0;
   }
 
   Eigen::Matrix<T, N, N> hessian_;
   Eigen::Matrix<T, N, 1> gradient_;
   T value_;
+
 
   static ScoreAndDerivatives<N, T> Zero()
   {
@@ -89,14 +92,20 @@ struct JacobianHessianDerivatives
 
   JacobianHessianDerivatives()
   {
-    Zero();
+    setZero();
   }
-  void Zero()
+  void setZero()
   {
     Jest.setZero();
     Hest.setZero();
     Zest.setZero();
     ZHest.setZero();
+  }
+  static JacobianHessianDerivatives Zero()
+  {
+    JacobianHessianDerivatives res;
+    res.setZero();
+    return res;
   }
 };
 }  // end of namespace d2d_ndt2d
@@ -303,7 +312,7 @@ protected:
         return false;
 
     resolutions_.clear();
-    for (size_t i = 0; i < layer_count_; ++i) {
+    for (int i = layer_count_-1; i >=0; --i) {
       resolutions_.push_back(base_resolution * std::pow(2, i));
     }
     return true;
@@ -342,7 +351,7 @@ protected:
                                   bool calc_hessian);
 
   virtual d2d_ndt2d::ScoreAndDerivatives<3, double> calcSourceCellScore(
-      const typename SourceGrid::Leaf *cell_s, const Eigen::Vector3d &trans,
+      const Eigen::Vector3d & mean_source, const Eigen::Matrix3d & cov_source,
       const typename TargetGrid::Leaf *cell_t,
       const d2d_ndt2d::JacobianHessianDerivatives &deriv,
       const d2d_ndt2d::FittingParams &param, bool calc_hessian);
@@ -397,10 +406,28 @@ protected:
   {
     return (g_a - mu * g_0);
   }
-
-  Eigen::Matrix4f vecToMat(const Eigen::Vector3d &trans) const;
-  Eigen::Vector3d matToVec(const Eigen::Matrix4f &trans) const;
+  template <typename T = float>
+  Eigen::Matrix<T,4,4> vecToMat(const Eigen::Vector3d &trans) const;
+  template <typename T = float>
+  Eigen::Vector3d matToVec(const Eigen::Matrix<T,4,4> &trans) const;
 };
+////////////////////////////////////////////////////////////////////////
+template <typename PointSource, typename PointTarget>
+D2DNormalDistributionsTransform2D<
+    PointSource, PointTarget>::D2DNormalDistributionsTransform2D()
+    : step_size_(0.1)
+    , outlier_ratio_ (0.55)
+    , trans_probability_()
+    ,layer_count_(4)
+{
+  nr_iterations_ = 0;
+  max_iterations_ = 35;
+  transformation_epsilon_ = 0.1;
+  converged_ = false;
+  initResolutions(0.25);
+  initParams();
+}
+
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
@@ -412,15 +439,16 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
     SourceGrid source_grid;
     target_grid.setLeafSize(resolutions_[i], resolutions_[i], resolutions_[i]);
     source_grid.setLeafSize(resolutions_[i], resolutions_[i], resolutions_[i]);
-    target_grid.filter(target_, true);
-    source_grid.filter(input_, true);
-    if (!computeSingleGrid(source_grid, trans, target_grid, params_[i]),
-        trans) {
+    target_grid.setInputCloud(target_);
+    source_grid.setInputCloud(input_);
+    target_grid.filter(true);
+    source_grid.filter(true);
+    if (!computeSingleGrid(source_grid, trans, target_grid, params_[i],trans)) {
       converged_ = false;
       return;
     }
   }
-  transformPointCloud(input_, output, vecToMat(trans));
+  transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;
   converged_ = true;
 }
@@ -442,10 +470,9 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
   Eigen::Vector3d delta_xytheta_p;
   Eigen::Matrix4f p;
   double delta_p_norm;
-  d2d_ndt2d::ScoreAndDerivatives<> score;
+  d2d_ndt2d::ScoreAndDerivatives<3,double> score;
   while (!converged_) {
-    score =
-        calcScore(param, source_grid, xytheta_p, target_grid, xytheta_p, true);
+    score = calcScore(param, source_grid, xytheta_p, target_grid, true);
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -462,7 +489,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
       covariance_.setIdentity();
       inform_matrix_.setIdentity();
       ROS_ERROR_STREAM(
-          "Not enough overlap. Probability: " << trans_probability_);
+          "[D2D_NDT2D]:Not enough overlap. Probability: " << trans_probability_);
       return false;
     }
     delta_xytheta_p.normalize();
@@ -486,7 +513,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
     transformation_ = p;
     trans_probability_ =
         score.value_ / static_cast<double>(input_->points.size());
-    ROS_DEBUG_STREAM("[NDT2D]: Step: "
+    ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
                      << delta_p_norm
                      << " Delta: " << delta_xytheta_p.transpose()
                      << " Score: " << score.value_
@@ -516,29 +543,39 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
       SourceMap;
 
   d2d_ndt2d::ScoreAndDerivatives<3, double> res;
-  Eigen::Vector3d mean;
+  Eigen::Vector3d mean_source;
+  Eigen::Matrix3d cov_source;
+  Eigen::Transform<double, 3, Eigen::Affine, Eigen::ColMajor> trans_mat;
+
   const SourceMap &source_map = sourceNDT.getLeaves();
   for (typename SourceMap::const_iterator source_cell = source_map.cbegin();
        source_cell != source_map.cend(); ++source_cell) {
-    mean = source_cell->getMean();
+
+    // TRANSFORMATION OF SOURCE GRID
+    trans_mat.matrix() = vecToMat<double>(trans);
+    mean_source = trans_mat * source_cell->second.getMean();
+    cov_source = trans_mat.rotation() * source_cell->second.getCov() *
+                 trans_mat.rotation().transpose();
+    // compute derivatives of score function
     d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
-    computeDerivatives(mean, source_cell->getCov(), partial_derivatives,
+    computeDerivatives(mean_source, cov_source, partial_derivatives,
                        calc_hessian);
 
     PointTarget pt;
     NeighborsVector neighborhood;
     std::vector<float> distances;
-    pt.x = mean(0);
-    pt.y = mean(1);
-    pt.z = mean(2);
+    pt.x = mean_source(0);
+    pt.y = mean_source(1);
+    pt.z = mean_source(2);
     // select target cells which are 2 hops in k-d tree away from source cell
     targetNDT.nearestKSearch(pt, 2, neighborhood, distances);
     for (typename NeighborsVector::iterator target_cell = neighborhood.begin();
          target_cell != neighborhood.end(); target_cell++) {
-      res += calcSourceCellScore(&source_cell, trans, *target_cell,
+      res += calcSourceCellScore(mean_source,cov_source, *target_cell,
                                  partial_derivatives, param, calc_hessian);
     }
   }
+  return res;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -548,7 +585,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeDerivatives(
     const Eigen::Vector3d &x, const Eigen::Matrix3d &cov,
     d2d_ndt2d::JacobianHessianDerivatives &data, bool calc_hessian)
 {
-  data.Zero();
+  data.setZero();
   data.Jest.block<2, 2>(0, 0).setIdentity();
   data.Jest(0, 2) = -x(1);
   data.Jest(1, 2) = x(0);
@@ -569,7 +606,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeDerivatives(
 template <typename PointSource, typename PointTarget>
 d2d_ndt2d::ScoreAndDerivatives<3, double>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore(
-    const typename SourceGrid::Leaf *cell_s, const Eigen::Vector3d &trans,
+    const Eigen::Vector3d & mean_source, const Eigen::Matrix3d & cov_source,
     const typename TargetGrid::Leaf *cell_t,
     const d2d_ndt2d::JacobianHessianDerivatives &deriv,
     const d2d_ndt2d::FittingParams &param, bool calc_hessian)
@@ -577,9 +614,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore
   d2d_ndt2d::ScoreAndDerivatives<3, double> res;
 
   // declaration
-  Eigen::Transform<double, 3, Eigen::Affine, Eigen::ColMajor> trans_mat;
-  Eigen::Vector3d mean_source, diff_mean;
-  Eigen::Matrix3d cov_source, cov_sum, icov;
+  Eigen::Vector3d diff_mean;
+  Eigen::Matrix3d cov_sum, icov;
   double det = 0;
   bool exists = false;
   double dist;
@@ -598,11 +634,6 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore
   xtBZhBx.setZero();
   TMP1.setZero();
   xtB.setZero();
-  // transform mean and covariance of cource
-  trans_mat.matrix() = vecToMat(trans);
-  mean_source = trans_mat * cell_s->getMean();
-  cov_source = trans_mat.rotation() * cell_s->getCov() *
-               trans_mat.rotation().transpose();
 
   diff_mean = (mean_source - cell_t->getMean());
   cov_sum = (cell_t->getCov() + cov_source);
@@ -924,27 +955,29 @@ double D2DNormalDistributionsTransform2D<
 }
 
 template <typename PointSource, typename PointTarget>
-Eigen::Matrix4f D2DNormalDistributionsTransform2D<
+template <typename T>
+Eigen::Matrix<T,4,4> D2DNormalDistributionsTransform2D<
     PointSource, PointTarget>::vecToMat(const Eigen::Vector3d &trans) const
 {
-  Eigen::Matrix4f trans_mat = Eigen::Matrix4f::Identity();
+  Eigen::Matrix<T,4,4> trans_mat = Eigen::Matrix<T,4,4>::Identity();
 
-  trans_mat.block<3, 3>(0, 0).matrix() = Eigen::Matrix3f(Eigen::AngleAxisf(
-      static_cast<float>(trans(2)), Eigen::Vector3f::UnitZ()));
+  trans_mat.block(0, 0,3,3).matrix() = Eigen::Matrix<T,3,3>(Eigen::AngleAxis<T>(
+      static_cast<T>(trans(2)), Eigen::Matrix<T,3,1>::UnitZ()));
 
-  trans_mat.block<3, 1>(0, 3).matrix() = Eigen::Vector3f(
-      static_cast<float>(trans(0)), static_cast<float>(trans(1)), 0.0f);
+  trans_mat.block(0, 3,3,1).matrix() = Eigen::Matrix<T,3,1>(
+      static_cast<T>(trans(0)), static_cast<T>(trans(1)), 0.0);
 
   return trans_mat;
 }
 
 template <typename PointSource, typename PointTarget>
+template <typename T>
 Eigen::Vector3d D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget>::matToVec(const Eigen::Matrix4f &trans) const
+    PointSource, PointTarget>::matToVec(const Eigen::Matrix<T,4,4> &trans) const
 {
   Eigen::Vector3d vec;
-  Eigen::Affine3f trans_mat(trans);
-  Eigen::Vector3f translation = trans_mat.translation();
+  Eigen::Transform<T, 3, Eigen::Affine, Eigen::ColMajor> trans_mat(trans);
+  Eigen::Matrix<T,3,1> translation = trans_mat.translation();
   vec << translation(0), translation(1),
       std::atan2(trans_mat.rotation()(1, 0), trans_mat.rotation()(0, 0));
   return vec;

@@ -15,6 +15,7 @@
 #include <boost/thread/thread.hpp>
 
 #include <ndt_scanmatching2d/ndt2d.h>
+#include <ndt_scanmatching2d/d2d_ndt2d.h>
 
 #include <Eigen/Dense>
 
@@ -30,7 +31,7 @@ double MIN_ROTATION = 0.3;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 //std::vector<MatchResult> matches;
-NormalDistributionsTransform2DEx<pcl::PointXYZ,pcl::PointXYZ> * matcher;
+Registration<pcl::PointXYZ,pcl::PointXYZ> * matcher;
 NormalDistributionsTransform<pcl::PointXYZ,pcl::PointXYZ> * proofer;
 
 
@@ -179,7 +180,6 @@ void testMatch(size_t source_id, size_t target_id){
 void test()
 {
   //matches.clear();
-  matcher->setResolution(1);
   size_t target = 0;
   std::cout<<"start test"<<std::endl;
   for(size_t i =0; i< 499; ++i){
@@ -199,15 +199,20 @@ void test()
 int main(int argc, char **argv)
 {
   std::vector<std::string> args(argv,argv+argc);
-  if(args.size() != 2){
-    std::cout << "Missing cmd argument: Path to the folder with data.poses, data.scans was not provided";
+  if(args.size() != 3 && args[2] != "d2d" && args[2] != "basic"){
+    std::cout << "Correct format of arguments: \n Path to the folder with data.poses, data.scans was not provided\n Calculation engine (d2d,basic)";
     std::cout<<std::endl;
     return 0;
   }
+  //matcher->setResolution(1);
   preparePoseData(args[1]);
   prepareLaserScans(args[1]);
-  matcher = new NormalDistributionsTransform2DEx<pcl::PointXYZ,pcl::PointXYZ>();
   proofer = new NormalDistributionsTransform<pcl::PointXYZ,pcl::PointXYZ>();
+  if(args[2] == "basic"){
+    matcher = new NormalDistributionsTransform2DEx<pcl::PointXYZ,pcl::PointXYZ>();
+  }else if(args[2] == "d2d"){
+    matcher = new D2DNormalDistributionsTransform2D<pcl::PointXYZ,pcl::PointXYZ>();
+  }
   test();
   delete matcher;
   delete proofer;
