@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <chrono>
 
 #include <sensor_msgs/PointCloud.h>
 #include <laser_geometry/laser_geometry.h>
@@ -108,20 +109,30 @@ void preparePoseData(std::string folder){
 
 void testMatch(size_t source_id, size_t target_id){
 
+   std::chrono::time_point<std::chrono::system_clock> s_proof, e_proof, s_match, e_match;
   eigt::pose2d_t<double> real_trans = eigt::getPoseFromTransform(eigt::transBtwPoses(real_poses[target_id],real_poses[source_id]));
-  //real_trans<<real_trans(0),real_trans(1)+0.077,real_trans(2);
-  matcher->setInputSource(scans[source_id]);
-  matcher->setInputTarget(scans[target_id]);
-  proofer->setInputSource(scans[source_id]);
-  proofer->setInputTarget(scans[target_id]);
+  std::chrono::duration<double> elapsed_seconds;
   pcl_t::Ptr output_pr(new pcl_t);
   pcl_t::Ptr output_m(new pcl_t);
 
-  //Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
-   Eigen::Matrix4f guess = eigt::convertFromTransform(eigt::transBtwPoses(
-                              real_poses[target_id], real_poses[source_id])).cast<float>();
+  //prepare initial guess
+  Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
+  // Eigen::Matrix4f guess = eigt::convertFromTransform(eigt::transBtwPoses(
+  //                             real_poses[target_id], real_poses[source_id])).cast<float>();
+  // calculate proof
+  s_proof = std::chrono::system_clock::now();
+  proofer->setInputSource(scans[source_id]);
+  proofer->setInputTarget(scans[target_id]);
   proofer->align(*output_pr,guess);
+  e_proof = std::chrono::system_clock::now();
+
+  //calculate my matcher
+  s_match = std::chrono::system_clock::now();
+  matcher->setInputSource(scans[source_id]);
+  matcher->setInputTarget(scans[target_id]);
   matcher->align(*output_m, guess);
+  e_match = std::chrono::system_clock::now();
+
   std::cout<<"sucess"<<matcher->hasConverged()<<std::endl;
   std::cout<<"result score: "<<matcher->getFitnessScore()<<std::endl;
   eigt::pose2d_t<double> calc_trans = eigt::getPoseFromTransform(
@@ -130,8 +141,10 @@ void testMatch(size_t source_id, size_t target_id){
   eigt::pose2d_t<double> proof_trans = eigt::getPoseFromTransform(
       eigt::convertToTransform<double>(
           proofer->getFinalTransformation().cast<double>()));
-  std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<std::endl;
-  std::cout<<"CALC TRANSFORM:"<<calc_trans.transpose()<<std::endl;
+  elapsed_seconds = (e_proof - s_proof);
+  std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
+  elapsed_seconds = (e_match - s_match);
+  std::cout<<"CALC TRANSFORM:"<<calc_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
   std::cout<<"DIFF:"<<(proof_trans - calc_trans).cwiseAbs().transpose()<<std::endl<<std::endl;
 
   // Transforming unfiltered, input cloud using found transform.
