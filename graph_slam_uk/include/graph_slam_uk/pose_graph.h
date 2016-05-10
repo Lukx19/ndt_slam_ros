@@ -64,19 +64,22 @@ template <typename P, typename T>
 typename Graph<P, T>::Id Graph<P, T>::addEdge(E&& edg)
 {
   std::unique_ptr<E> e_ptr(new E(std::move(edg)));
+  size_t id;
   if (id_edge_pool_.empty()) {
     edges_.push_back(std::move(e_ptr));
     size_t edge_id = edges_.size() - 1;
-    edges_[edge_id]->setId(edge_id);
-    return edge_id;
+    id = edge_id;
   } else {
     // previously deleted edges left unallocated possitions. Fill in new edge.
     size_t free_id = id_edge_pool_.back();
     id_edge_pool_.pop_back();
     edges_[free_id] = std::move(e_ptr);
-    edges_[free_id]->setId(free_id);
-    return free_id;
+    id = free_id;
   }
+  edges_[id]->setId(id);
+  nodes_[edges_[id]->getFrom()->getId()]->addEdgeOut(edges_[id].get());
+  nodes_[edges_[id]->getTo()->getId()]->addEdgeIn(edges_[id].get());
+  return id;
 }
 
 template <typename P, typename T>
@@ -468,7 +471,7 @@ bool Node<P, T>::addEdgeIn(Edge<P, T>* e)
 template <typename P, typename T>
 typename Node<P, T>::edge_list_t& Node<P, T>::getEdgesIn()
 {
-  return edges_out_;
+  return edges_in_;
 }
 
 template <typename P, typename T>
@@ -575,8 +578,6 @@ public:
     , transform_(trans)
     , inform_mat_(inform)
   {
-    from->addEdgeOut(this);
-    to->addEdgeIn(this);
   }
   const Node<P, T>* getFrom() const;
   const Node<P, T>* getTo() const;

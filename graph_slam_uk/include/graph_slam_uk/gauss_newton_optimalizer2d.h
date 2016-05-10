@@ -10,6 +10,8 @@
 #include <geometry_msgs/Point.h>
 #include <std_msgs/ColorRGBA.h>
 
+#include <ros/ros.h>
+
 #include <deque>
 #include <dynamic_slam_utils/eigen_tools.h>
 
@@ -28,7 +30,7 @@ class GaussNewtonOptimalize2d : public IGraphOptimalizer2d<T>
   typedef Slam2d_Policy Policy;
 
 public:
-  GaussNewtonOptimalize2d(IScanmatcher2d &matcher)
+  explicit GaussNewtonOptimalize2d(IScanmatcher2d &matcher)
     : epsilon_(0.001)
     , iterations_(5)
     , last_node_id_(0)

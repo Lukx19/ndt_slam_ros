@@ -5,7 +5,7 @@
 #include <ndt_scanmatching2d/ndt2d.h>
 #include <dynamic_slam_utils/eigen_tools.h>
 
-#include <ndt_scanmatching2d/ndt2d.h>
+#include <ndt_scanmatching2d/d2d_ndt2d.h>
 
 namespace slamuk
 {
@@ -27,7 +27,7 @@ public:
   virtual void setTransformationEpsilon(double epsilon);
 
 protected:
-  pcl::NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>
+  pcl::D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>
       pcl_matcher_;
 };
 }
