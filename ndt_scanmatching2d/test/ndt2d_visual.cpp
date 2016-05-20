@@ -17,6 +17,7 @@
 
 #include <ndt_scanmatching2d/ndt2d.h>
 #include <ndt_scanmatching2d/d2d_ndt2d.h>
+#include <ndt_scanmatching2d/ml_correlative_matcher2d.h>
 
 #include <Eigen/Dense>
 
@@ -117,14 +118,20 @@ void testMatch(size_t source_id, size_t target_id){
 
   //prepare initial guess
   Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
-  // Eigen::Matrix4f guess = eigt::convertFromTransform(eigt::transBtwPoses(
-  //                             real_poses[target_id], real_poses[source_id])).cast<float>();
+   //Eigen::Matrix4f guess = eigt::convertFromTransform(eigt::transBtwPoses(
+   //                            real_poses[target_id], real_poses[source_id])).cast<float>();
   // calculate proof
   s_proof = std::chrono::system_clock::now();
   proofer->setInputSource(scans[source_id]);
   proofer->setInputTarget(scans[target_id]);
   proofer->align(*output_pr,guess);
   e_proof = std::chrono::system_clock::now();
+
+  eigt::pose2d_t<double> proof_trans = eigt::getPoseFromTransform(
+      eigt::convertToTransform<double>(
+          proofer->getFinalTransformation().cast<double>()));
+  elapsed_seconds = (e_proof - s_proof);
+  std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
 
   //calculate my matcher
   s_match = std::chrono::system_clock::now();
@@ -138,11 +145,7 @@ void testMatch(size_t source_id, size_t target_id){
   eigt::pose2d_t<double> calc_trans = eigt::getPoseFromTransform(
       eigt::convertToTransform<double>(
           matcher->getFinalTransformation().cast<double>()));
-  eigt::pose2d_t<double> proof_trans = eigt::getPoseFromTransform(
-      eigt::convertToTransform<double>(
-          proofer->getFinalTransformation().cast<double>()));
-  elapsed_seconds = (e_proof - s_proof);
-  std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
+
   elapsed_seconds = (e_match - s_match);
   std::cout<<"CALC TRANSFORM:"<<calc_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
   std::cout<<"DIFF:"<<(proof_trans - calc_trans).cwiseAbs().transpose()<<std::endl<<std::endl;
@@ -156,9 +159,12 @@ void testMatch(size_t source_id, size_t target_id){
     viewer_final->setBackgroundColor (0, 0, 0);
 
     // Coloring and visualizing target cloud (red).
+     pcl_t::Ptr target(new pcl_t);
+    auto tpos = Eigen::Matrix4f::Identity();//eigt::convertFromTransform(eigt::getTransFromPose(real_poses[target_id]).cast<float>());
+    pcl::transformPointCloud(*scans[target_id], *target,tpos);
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
-    target_color (scans[target_id], 255, 0, 0);
-    viewer_final->addPointCloud<pcl::PointXYZ> (scans[target_id], target_color, "target cloud");
+    target_color (target, 255, 0, 0);
+    viewer_final->addPointCloud<pcl::PointXYZ> (target, target_color, "target cloud");
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "target cloud");
 
@@ -170,9 +176,12 @@ void testMatch(size_t source_id, size_t target_id){
                                                     1, "output cloud");
 
     // Coloring and visualizing input cloud (blue).
+    pcl_t::Ptr source(new pcl_t);
+    auto iguess = Eigen::Matrix4f::Identity();//eigt::convertFromTransform(eigt::getTransFromPose(real_poses[source_id]).cast<float>());
+    pcl::transformPointCloud(*scans[source_id], *source,iguess);
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
-    source_color (output, 100, 0, 255);
-    viewer_final->addPointCloud<pcl::PointXYZ> (scans[source_id], source_color, "source cloud");
+    source_color (source, 100, 0, 255);
+    viewer_final->addPointCloud<pcl::PointXYZ> (source, source_color, "source cloud");
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "source cloud");
 
@@ -195,7 +204,7 @@ void test()
   //matches.clear();
   size_t target = 0;
   std::cout<<"start test"<<std::endl;
-  for(size_t i =0; i< 499; ++i){
+  for(size_t i =0; i< scans.size(); ++i){
     eigt::transform2d_t<double> real_trans = eigt::transBtwPoses(real_poses[target],real_poses[i]);
     if (eigt::getAngle(real_trans) > MIN_ROTATION ||
         eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT){
@@ -212,10 +221,19 @@ void test()
 int main(int argc, char **argv)
 {
   std::vector<std::string> args(argv,argv+argc);
-  if(args.size() != 3 && args[2] != "d2d" && args[2] != "basic"){
-    std::cout << "Correct format of arguments: \n Path to the folder with data.poses, data.scans was not provided\n Calculation engine (d2d,basic)";
+  if(args.size() < 3 && (args[2] != "d2d" && args[2] != "basic" && args[2] != "corr")){
+    std::cout << "Correct format of arguments: \n Path to the folder with "
+                 "data.poses, data.scans was not provided\n Calculation engine "
+                 "(d2d,basic,corr) \n [Min displacement (m) min rotation (rad)]";
     std::cout<<std::endl;
     return 0;
+  }
+  if(args.size() == 4){
+    MIN_DISPLACEMENT = std::stoi(args[3]);
+  }
+  if (args.size() == 5){
+    MIN_DISPLACEMENT = std::stoi(args[3]);
+    MIN_ROTATION = std::stoi(args[4]);
   }
   //matcher->setResolution(1);
   preparePoseData(args[1]);
@@ -225,7 +243,14 @@ int main(int argc, char **argv)
     matcher = new NormalDistributionsTransform2DEx<pcl::PointXYZ,pcl::PointXYZ>();
   }else if(args[2] == "d2d"){
     matcher = new D2DNormalDistributionsTransform2D<pcl::PointXYZ,pcl::PointXYZ>();
+  }else if(args[2] == "corr"){
+    matcher = new MultiLayerCorrelativeMatcher<pcl::PointXYZ,pcl::PointXYZ>();
   }
+  //testMatch(4,2);
+  //testMatch(2,0);
+  //testMatch(6,0);
+  //testMatch(0,10);
+  //testMatch(0, 100);
   test();
   delete matcher;
   delete proofer;
