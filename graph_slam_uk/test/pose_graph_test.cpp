@@ -141,6 +141,37 @@ TEST(PoseGraph, iterators)
   }
 }
 
+TEST(PoseGraph, inputOutputEdges)
+{
+  graph_t graph;
+  obj_t obj;
+  P::Pose p;
+  P::InformMatrix inform;
+  prepareGraphIncrementaly(graph);
+  graph.addEdge(edge_t(&graph.getNode(1), &graph.getNode(3), p, inform));
+  graph.addEdge(edge_t(&graph.getNode(3), &graph.getNode(1), p, inform));
+  //1->2->3->4
+  //1->3
+  //3->1
+  EXPECT_EQ(2,graph.getNode(3).getEdgesIn().size());
+  EXPECT_EQ(2,graph.getNode(3).getEdgesOut().size());
+
+  EXPECT_EQ(1,graph.getNode(1).getEdgesOut()[0]->getId());
+  EXPECT_EQ(2,graph.getNode(1).getEdgesOut()[0]->getTo()->getId());
+  EXPECT_EQ(1,graph.getNode(1).getEdgesOut()[0]->getFrom()->getId());
+
+  EXPECT_EQ(0,graph.getNode(1).getEdgesIn()[0]->getId());
+  EXPECT_EQ(0,graph.getNode(1).getEdgesIn()[0]->getFrom()->getId());
+  EXPECT_EQ(1,graph.getNode(1).getEdgesIn()[0]->getTo()->getId());
+
+  EXPECT_EQ(3,graph.getNode(3).getEdgesOut()[0]->getFrom()->getId());
+  EXPECT_EQ(4,graph.getNode(3).getEdgesOut()[0]->getTo()->getId());
+  EXPECT_EQ(1,graph.getNode(3).getEdgesOut()[1]->getTo()->getId());
+
+  EXPECT_EQ(2,graph.getNode(3).getEdgesIn()[0]->getFrom()->getId());
+  EXPECT_EQ(1,graph.getNode(3).getEdgesIn()[1]->getFrom()->getId());
+}
+
 // Run all the tests that were declared with TEST()
 int main(int argc, char **argv)
 {

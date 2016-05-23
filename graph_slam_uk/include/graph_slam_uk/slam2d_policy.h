@@ -10,6 +10,7 @@ private:
   // typedef Eigen::Matrix<double, 3, 3> TransformMatrixRaw;
 public:
   // change sizes to multiples of 2 for use of vector instructions
+  typedef size_t Id;
   typedef Eigen::Matrix<double, 3, 3> JacobianMatrix;
   typedef Eigen::Matrix<double, 3, 3> InformMatrix;
   typedef Eigen::Matrix<double, 3, 3> CovarMatrix;

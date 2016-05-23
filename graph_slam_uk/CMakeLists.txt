@@ -161,6 +161,13 @@ target_link_libraries(graph_slam2d
    ${PCL_LIBRARIES}
    ${Boost_LIBRARIES}
 )
+
+add_executable(gauss_newton_optimalizer_test test/gauss_newton_optimalizer_test.cpp src/pcl_ndt_scanmatcher.cpp)
+target_link_libraries(gauss_newton_optimalizer_test
+   ${catkin_LIBRARIES}
+   ${PCL_LIBRARIES}
+   ${Boost_LIBRARIES}
+)
 #############
 ## Install ##
 #############

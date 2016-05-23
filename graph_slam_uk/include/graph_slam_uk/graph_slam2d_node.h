@@ -159,15 +159,15 @@ GraphSlamNode<T>::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
                                                               5, false);
 
   if (subscribe_mode_ == "ODOM") {
-    laser_sub_.subscribe(nh_, laser_topic_, 10);
-    odom_sub_.subscribe(nh_, odom_topic_, 10);
+    laser_sub_.subscribe(nh_, laser_topic_, 3);
+    odom_sub_.subscribe(nh_, odom_topic_, 3);
     // sync messages using approximate alghorithm
     odom_sync_.connectInput(odom_sub_, laser_sub_);
     odom_sync_.registerCallback(
         boost::bind(&GraphSlamNode::odom_cb, this, _1, _2));
   } else if (subscribe_mode_ == "POSE") {
-    laser_sub_.subscribe(nh_, laser_topic_, 10);
-    pose_sub_.subscribe(nh_, pose_topic_, 10);
+    laser_sub_.subscribe(nh_, laser_topic_, 3);
+    pose_sub_.subscribe(nh_, pose_topic_, 3);
     // sync messages using approximate alghorithm
     pose_sync_.connectInput(pose_sub_, laser_sub_);
     pose_sync_.registerCallback(
@@ -175,7 +175,7 @@ GraphSlamNode<T>::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
   } else {
     // NON
     laser_only_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
-        laser_topic_, 100, boost::bind(&GraphSlamNode::laser_cb, this, _1));
+        laser_topic_, 3, boost::bind(&GraphSlamNode::laser_cb, this, _1));
   }
 
   ROS_INFO("Graph_slam2d: Node is initialized.");
@@ -384,13 +384,25 @@ void GraphSlamNode<T>::doAlgorithm(const ros::Time &time_stamp,
     publishTF(time_stamp);
     return;
   }
-  // adding node to optimalizer;
-  scans_.push_back(opt_engine_->addPose(pose, pcl));
   // adding odometry constrain to optimalizer
   pose_t odom_trans =
       eigt::getPoseFromTransform(eigt::transBtwPoses(last_odom_, pose));
-  opt_engine_->addLastConstrain(odom_trans, covar.inverse());
-
+  auto res_match = scan_match_->match(pcl,last_scan_,eigt::transBtwPoses(last_odom_, pose).matrix());
+  //opt_engine_->addLastConstrain(odom_trans, covar.inverse());
+  // if(res_match.success_){
+  //   ROS_DEBUG("using scanmatched edge");
+  //   // adding node to optimalizer;
+  //   auto matcher_pose = eigt::transformPose(last_odom_,res_match.transform_);
+  //   scans_.push_back(opt_engine_->addPose(matcher_pose, pcl));
+  //   opt_engine_->addLastConstrain(eigt::getPoseFromTransform(res_match.transform_), res_match.inform_);
+  //   updateTFTrans(pose,matcher_pose);
+  //   last_odom_ = matcher_pose;
+  // }else{
+    // adding node to optimalizer;
+    scans_.push_back(opt_engine_->addPose(pose, pcl));
+    opt_engine_->addLastConstrain(odom_trans, covar.inverse());
+    last_odom_ = pose;
+  // }
   // try to close loop closures
 
   bool res = false;
@@ -446,7 +458,7 @@ void GraphSlamNode<T>::doAlgorithm(const ros::Time &time_stamp,
     ROS_INFO("Graph_slam2d:GRAPH Markers published.");
   }
   // prepare data for next iteration
-  last_odom_ = pose;
+  //last_odom_ = pose;
   last_scan_ = pcl;
   ++seq_;
 }

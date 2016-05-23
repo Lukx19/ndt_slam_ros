@@ -7,6 +7,8 @@
 #include <graph_slam_uk/graph_slam_interfaces.h>
 #include <queue>
 #include <Eigen/Eigenvalues>
+#include <pcl/common/centroid.h>
+#include <graph_slam_uk/loop_detector.h>
 
 namespace slamuk
 {
@@ -17,6 +19,9 @@ class OlsonLoopDetector
   {
     size_t edge_id_;
     size_t hops_count_;
+
+    LoopConstrain():edge_id_(0),hops_count_(0)
+    {}
   };
 
   struct EdgeGroup
@@ -33,43 +38,6 @@ class OlsonLoopDetector
     }
   };
 
-  struct EdgeCov
-  {
-    typedef Eigen::Matrix3d covar_t;
-    size_t node_id_;  // id of node to search
-    covar_t cov_;
-    size_t hop_;
-    EdgeCov() : node_id_(0), cov_(covar_t::Zero()), hop_(0)
-    {
-    }
-    EdgeCov(size_t node_id, const covar_t &cov)
-      : node_id_(node_id), cov_(cov), hop_(1)
-    {
-    }
-
-    bool operator<(const EdgeCov &other) const
-    {
-      return cov_.determinant() < other.cov_.determinant() ? true : false;
-    }
-
-    static EdgeCov combineEdges(const EdgeCov &orig_e, const EdgeCov &new_e)
-    {
-      EdgeCov e;
-      e.hop_ = orig_e.hop_ + 1;
-      e.cov_ = orig_e.cov_ + new_e.cov_;
-      e.node_id_ = new_e.node_id_;
-      return e;
-    }
-  };
-
-  struct EdgeCovComparer
-  {
-    bool operator()(const EdgeCov &a, const EdgeCov &b)
-    {
-      return a < b;
-    }
-  };
-
   typedef Edge<P, T> edge_t;
   typedef Node<P, T> node_t;
 
@@ -83,11 +51,10 @@ public:
   bool tryLoopClose(size_t node_id);
 
 protected:
-  double max_laser_range_;
   Graph<P, T> *graph_;
-  IScanmatcher2d *matcher_;
+
   std::deque<EdgeGroup> groups_;
-  std::vector<float> laser_range_;
+  std::vector<ScanInfo> laser_range_;
 
   double MATCH_SCORE = 0.1;
   size_t MAX_LOOP_LENGTH = 5;
@@ -110,17 +77,6 @@ protected:
                const typename P::TransformMatrix &trans_b,
                const typename P::CovarMatrix &cov_a,
                const typename P::CovarMatrix &cov_b) const;
-  //*********************************
-  std::vector<LoopConstrain> generateAllClosures(size_t node_id);
-  std::vector<EdgeCov> genPossibleEdges(size_t node_id,
-                                        const EdgeCov &last_edge);
-  double calcLaserRange(size_t node_id);
-  double calcMahalanobisDist(size_t start_node, size_t match_node,
-                             const Eigen::Matrix3d &covar);
-  bool isGlobalyAmbiguious(size_t start_node, size_t match_node,
-                           const EdgeCov &edge) const;
-  LoopConstrain addLoopClosureEdge(size_t start_node, size_t match_node,
-                                   const MatchResult &res, size_t hops);
 
   size_t getOdomEdgeCount(size_t start_node, size_t end_node) const;
   std::vector<Edge<P, T> *> getOutOdomEdges(size_t node_id) const;
@@ -151,7 +107,13 @@ bool OlsonLoopDetector<P, T>::tryLoopClose(size_t node_id)
   //   return true;
   // else
   //   return false;
-  generateAllClosures(node_id);
+  //auto res  = generateAllClosures(node_id);
+  for(auto & edge:generateAllClosures(node_id))
+  {
+    graph_->getEdge(edge.edge_id_).setState(edge_t::State::ACTIVE);
+    std::cout << graph_->getEdge(edge.edge_id_).getFrom()->getId() << "-->"
+              << graph_->getEdge(edge.edge_id_).getTo()->getId() << std::endl;
+  }
   return false;
 }
 
@@ -372,164 +334,6 @@ typename P::CovarMatrix OlsonLoopDetector<P, T>::combineCovar(
          jaccobian_b * cov_b * jaccobian_b.transpose();
 }
 
-//********************************** GENERATING LOOP CLOSURE EDGES********
-template <typename P, typename T>
-std::vector<typename OlsonLoopDetector<P, T>::LoopConstrain>
-OlsonLoopDetector<P, T>::generateAllClosures(size_t node_id)
-{
-  std::vector<LoopConstrain> all_constrains;
-  size_t nodes_visited = 0;
-  std::priority_queue<EdgeCov, std::vector<EdgeCov>, EdgeCovComparer> fringe;
-  graph_->getNode(node_id).setVisited(true);
-  ++nodes_visited;
-  // initialize start node edges
-  auto first_edges = genPossibleEdges(node_id, EdgeCov());
-  for (EdgeCov &e : first_edges) {
-    fringe.push(e);
-  }
-  // repeat while some nodes are unvisited
-  while (graph_->nodeCount() != nodes_visited) {
-    size_t curr_node_id = fringe.top().node_id_;
-    // stop consecutive nodes becoming loop closures
-    if (fringe.top().hop_ > 1) {
-      // enough overlap
-      double dist =
-          calcMahalanobisDist(node_id, curr_node_id, fringe.top().cov_);
-      if (dist < MAX_DISTANCE_TO_OVERLAP) {
-        // calculate transformation with scanmatching
-        node_t &source_n = graph_->getNode(curr_node_id);
-        node_t &target_n = graph_->getNode(node_id);
-        // try to match laser scans
-        // MatchResult res =
-        //     matcher_->match(source_n.getDataObj(), target_n.getDataObj(),
-        //                     eigt::transBtwPoses(target_n.getPose(),
-        //                                         source_n.getPose()).matrix());
-        // // test if sucesfull match
-        // if (res.success_ && res.score_ > MATCH_SCORE) {
-        //   // create edge
-        //   LoopConstrain lp_constr = addLoopClosureEdge(
-        //       node_id, curr_node_id, res, fringe.top().hop_);
-        //   all_constrains.push_back(std::move(lp_constr));
-        // }
-      }
-    }
-    graph_->getNode(curr_node_id).setVisited(true);
-    ++nodes_visited;
-    auto f_top = fringe.top();
-    fringe.pop();
-    auto next_edges = genPossibleEdges(curr_node_id, f_top);
-    std::for_each(next_edges.begin(), next_edges.end(),
-                  [&fringe](EdgeCov &e) { fringe.push(e); });
-  }
-
-  // put whole graph to base state
-  std::for_each(graph_->beginNode(), graph_->endNode(),
-                [](Node<P, T> &nd) { nd.setVisited(false); });
-  std::for_each(graph_->beginEdge(), graph_->endEdge(),
-                [](Edge<P, T> &e) { e.setUsed(false); });
-  return all_constrains;
-}
-
-template <typename P, typename T>
-std::vector<typename OlsonLoopDetector<P, T>::EdgeCov>
-OlsonLoopDetector<P, T>::genPossibleEdges(size_t node_id,
-                                          const EdgeCov &last_edge)
-{
-  std::vector<EdgeCov> outp;
-  // travers graph into the past robot positionsd
-  node_t &nd = graph_->getNode(node_id);
-  for (edge_t *edge_in : nd.getEdgesIn()) {
-    if (edge_in->isUsed())
-      continue;
-    edge_in->setUsed(true);
-    if (edge_in->getFrom()->isVisited())
-      continue;
-    EdgeCov ec(edge_in->getFrom()->getId(),
-               edge_in->getInformationMatrix().inverse());
-    outp.emplace_back(EdgeCov::combineEdges(last_edge, ec));
-  }
-  // traverse graph to the future if there is any
-  // for (edge_t *edge_out : nd->getEdgesOut()) {
-  //   if (edge_out->isUsed())
-  //     continue;
-  //   edge_out->isUsed(true);
-  //   if (edge_out->getTo().isVisited())
-  //     continue;
-  //   EdgeCov ec(edge_out->getTo()->getId(),
-  //              edge_out->getInformationMatrix().inverse());
-  //   outp.emplace_back(EdgeCov::combineEdges(last_edge, ec));
-  // }
-  return outp;
-}
-
-// specific implementation based on structure of data T
-template <typename P, typename T>
-double OlsonLoopDetector<P, T>::calcLaserRange(size_t node_id)
-{
-  // allocate space if not enough for this node
-  if (node_id > laser_range_.size())
-    laser_range_.insert(laser_range_.end(), node_id - laser_range_.size(),
-                        -1.0);
-  // in case of existance of cached data use them
-  if (laser_range_[node_id] > 0.0)
-    return laser_range_[node_id];
-  std::vector<float> ranges_horizontal;
-  std::vector<float> ranges_vertical;
-  auto pcl = graph_->getNode(node_id).getDataObj();
-  for (auto &pt : pcl->points) {
-    ranges_vertical.push_back(std::abs(pt.data[0] - pcl->sensor_origin_(0)));
-    ranges_horizontal.push_back(std::abs(pt.data[1] - pcl->sensor_origin_(1)));
-  }
-  std::sort(ranges_horizontal.begin(), ranges_horizontal.end());
-  std::sort(ranges_vertical.begin(), ranges_vertical.end());
-
-  size_t idx = ranges_vertical.size() * (2 / 3);
-  size_t idy = ranges_horizontal.size() * (2 / 3);
-  laser_range_[node_id] = std::sqrt(std::pow(ranges_vertical[idx], 2) +
-                                    std::pow(ranges_horizontal[idy], 2));
-  return laser_range_[node_id];
-}
-
-template <typename P, typename T>
-double OlsonLoopDetector<P, T>::calcMahalanobisDist(
-    size_t start_node, size_t match_node, const Eigen::Matrix3d &covar)
-{
-  float a_range = calcLaserRange(start_node);
-  float b_range = calcLaserRange(match_node);
-  Eigen::Vector3d delta_c = (graph_->getNode(match_node).getPose() -
-                             graph_->getNode(start_node).getPose());
-  Eigen::Vector3d separation =
-      std::max(0.0, delta_c.norm() - b_range - a_range) * delta_c.normalized();
-  return (separation.transpose() * covar.inverse()).dot(separation);
-}
-
-template <typename P, typename T>
-bool OlsonLoopDetector<P, T>::isGlobalyAmbiguious(size_t start_node,
-                                                  size_t curr_node,
-                                                  const EdgeCov &edge) const
-{
-  return false;
-}
-
-template <typename P, typename T>
-typename OlsonLoopDetector<P, T>::LoopConstrain
-OlsonLoopDetector<P, T>::addLoopClosureEdge(size_t start_node,
-                                            size_t match_node,
-                                            const MatchResult &res, size_t hops)
-{
-  node_t &from_n = graph_->getNode(start_node);
-  node_t &to_n = graph_->getNode(match_node);
-  Edge<P, T> new_e(&from_n, &to_n, eigt::getPoseFromTransform(res.transform_),
-                   res.inform_);
-  size_t e_id = graph_->addEdge(std::move(new_e));
-  graph_->getEdge(e_id).setType(edge_t::Type::LOOP);
-  graph_->getEdge(e_id).setState(edge_t::State::TEMP);
-  LoopConstrain loop_edge;
-  loop_edge.edge_id_ = e_id;
-  loop_edge.hops_count_ = hops;
-
-  return loop_edge;
-}
 template <typename P, typename T>
 size_t OlsonLoopDetector<P, T>::getOdomEdgeCount(size_t start_node,
                                                  size_t end_node) const
