@@ -5,6 +5,7 @@
 #include <pcl/registration/registration.h>
 #include <pcl/filters/voxel_grid_covariance.h>
 #include <Eigen/Dense>
+#include <pcl/common/time.h>
 
 namespace pcl
 {
@@ -472,7 +473,10 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
   double delta_p_norm;
   d2d_ndt2d::ScoreAndDerivatives<3,double> score;
   while (!converged_) {
-    score = calcScore(param, source_grid, xytheta_p, target_grid, true);
+    {
+      pcl::ScopeTime t_init ("score calc________:");
+      score = calcScore(param, source_grid, xytheta_p, target_grid, true);
+   }
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -541,39 +545,66 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
   typedef std::vector<typename TargetGrid::LeafConstPtr> NeighborsVector;
   typedef std::map<size_t, typename VoxelGridCovariance<PointSource>::Leaf>
       SourceMap;
+  typedef std::vector<typename VoxelGridCovariance<PointSource>::Leaf>
+      SourceVec;
+  typedef d2d_ndt2d::ScoreAndDerivatives<3,double> ReturnVals;
 
-  d2d_ndt2d::ScoreAndDerivatives<3, double> res;
-  Eigen::Vector3d mean_source;
-  Eigen::Matrix3d cov_source;
+  ReturnVals res;
+
   Eigen::Transform<double, 3, Eigen::Affine, Eigen::ColMajor> trans_mat;
+  trans_mat.matrix() = vecToMat<double>(trans);
 
   const SourceMap &source_map = sourceNDT.getLeaves();
+  SourceVec source_cells;
+  source_cells.reserve(source_map.size());
   for (typename SourceMap::const_iterator source_cell = source_map.cbegin();
-       source_cell != source_map.cend(); ++source_cell) {
+           source_cell != source_map.cend(); ++source_cell) {
+    source_cells.push_back(source_cell->second);
+  }
 
-    // TRANSFORMATION OF SOURCE GRID
-    trans_mat.matrix() = vecToMat<double>(trans);
-    mean_source = trans_mat * source_cell->second.getMean();
-    cov_source = trans_mat.rotation() * source_cell->second.getCov() *
-                 trans_mat.rotation().transpose();
-    // compute derivatives of score function
-    d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
-    computeDerivatives(mean_source, cov_source, partial_derivatives,
-                       calc_hessian);
+  std::vector<ReturnVals> omp_ret;
+  omp_ret.resize(4);
+  for(size_t i = 0; i< 4;++i){
+      omp_ret.push_back(ReturnVals());
+  }
 
-    PointTarget pt;
-    NeighborsVector neighborhood;
-    std::vector<float> distances;
-    pt.x = mean_source(0);
-    pt.y = mean_source(1);
-    pt.z = mean_source(2);
-    // select target cells which are 2 hops in k-d tree away from source cell
-    targetNDT.nearestKSearch(pt, 2, neighborhood, distances);
-    for (typename NeighborsVector::iterator target_cell = neighborhood.begin();
-         target_cell != neighborhood.end(); target_cell++) {
-      res += calcSourceCellScore(mean_source,cov_source, *target_cell,
-                                 partial_derivatives, param, calc_hessian);
+#pragma omp parallel num_threads(2)
+  {
+
+#pragma omp for
+    for (size_t cell_id = 0; cell_id < source_cells.size(); ++cell_id) {
+      int thread_id = omp_get_thread_num();
+      Eigen::Vector3d mean_source;
+      Eigen::Matrix3d cov_source;
+
+      // TRANSFORMATION OF SOURCE GRID
+      mean_source = trans_mat * source_cells[cell_id].getMean();
+      cov_source = trans_mat.rotation() * source_cells[cell_id].getCov() *
+                   trans_mat.rotation().transpose();
+      // compute derivatives of score function
+      d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
+      computeDerivatives(mean_source, cov_source, partial_derivatives,
+                         calc_hessian);
+
+      PointTarget pt;
+      NeighborsVector neighborhood;
+      std::vector<float> distances;
+      pt.x = mean_source(0);
+      pt.y = mean_source(1);
+      pt.z = mean_source(2);
+      // select target cells which are 2 hops in k-d tree away from source cell
+      targetNDT.nearestKSearch(pt, 2, neighborhood, distances);
+      for (typename NeighborsVector::iterator target_cell =
+               neighborhood.begin();
+           target_cell != neighborhood.end(); target_cell++) {
+        omp_ret[thread_id] +=
+            calcSourceCellScore(mean_source, cov_source, *target_cell,
+                                partial_derivatives, param, calc_hessian);
+      }
     }
+  }
+ for(size_t i = 0; i< omp_ret.size();++i){
+     res += omp_ret[i];
   }
   return res;
 }
