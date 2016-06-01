@@ -115,7 +115,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
                                            // initial guess
   transformPointCloud(*input_, guess_pcl, guess);
   // initialize lookup tables
-  coarse_lookup_.initGrid(*target_, coarse_step_, 0.5);
+  coarse_lookup_.initGrid(*target_, coarse_step_, 0.5f);
   ROS_DEBUG_STREAM("grids initialized");
   //////////////////
   ml_corr::SearchVoxel voxel2;

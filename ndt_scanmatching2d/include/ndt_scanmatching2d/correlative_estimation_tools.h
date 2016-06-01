@@ -27,7 +27,7 @@ struct IndexPoint
   int x_idx_;
   int y_idx_;
 };
-///////////////////////////////////////////SMOOTHING KERNEL /////////////////////////
+///////////////////////////////////////////SMOOTHING KERNEL//////////////
 class SmoothingKernel
 {
 public:
@@ -61,8 +61,10 @@ public:
   * 14   100  14 -------->        [0,0]
   *  2    14   2 [row,col] [1,-1]     [1,1]
   */
-  const CellType & operator()(int row, int col) const{
-    return kernel_[static_cast<size_t>((row + half_size_) * size_ + col+half_size_)];
+  const CellType &operator()(int row, int col) const
+  {
+    return kernel_[static_cast<size_t>((row + half_size_) * size_ + col +
+                                       half_size_)];
   }
 
 protected:
@@ -93,7 +95,8 @@ protected:
         double euclidean_dist =
             std::hypot(col * resolution_, row * resolution_);
         double val =
-            std::exp(-0.5 * std::pow(euclidean_dist / std_deviation_, 2)) * occupancy_;
+            std::exp(-0.5 * std::pow(euclidean_dist / std_deviation_, 2)) *
+            occupancy_;
         assert(std::lround(val) < 255);
         kernel_.push_back(static_cast<CellType>(std::lround(val)));
       }
@@ -107,16 +110,17 @@ std::ostream &operator<<(std::ostream &out, const SmoothingKernel &k)
   for (size_t i = 0; i < k.kernel_.size(); ++i) {
     if (i % k.size_ == 0)
       out << std::endl;
-    out << std::setw(5)<< k.kernel_[i];
+    out << std::setw(5) << k.kernel_[i];
   }
   return out;
 }
 
-////////////////////////////////////////////// LOOK UP TABLE //////////////////////
+////////////////////////////////////////////// LOOK UP TABLE///////
 template <typename PointType>
 class LookUpTable
 {
   typedef short CellType;
+
 public:
   LookUpTable()
     : cell_size_(0)
@@ -127,13 +131,14 @@ public:
     , maxy_(0)
     , cell_count_row_(0)
     , cell_count_col_(0)
-    , border_size_ (0)
+    , border_size_(0)
   {
   }
-  void initGrid(const pcl::PointCloud<PointType> &target, float grid_step, float std_deviation);
+  void initGrid(const pcl::PointCloud<PointType> &target, float grid_step,
+                float std_deviation);
   double getScore(const pcl::PointCloud<PointType> &pcl) const;
   double getScore(const std::vector<IndexPoint> &pcl) const;
-  double getMaxScore()const;
+  double getMaxScore() const;
   std::vector<IndexPoint> toIndexes(const pcl::PointCloud<PointType> &pcl) const;
   void moveIndexes(std::vector<IndexPoint> &indexes, int dx, int dy) const;
   void transformIndexes(const std::vector<IndexPoint> &source,
@@ -156,7 +161,8 @@ protected:
   size_t getCellIdx(const Eigen::Vector2d &pt) const;
   size_t getCellIdx(size_t row, size_t col) const;
   void applyKernel(size_t row, size_t col);
-  // float calcCellScore(const std::vector<float> &grid, size_t i, size_t j) const;
+  // float calcCellScore(const std::vector<float> &grid, size_t i, size_t j)
+  // const;
   CellType getPtScore(const Eigen::Vector2d &pt) const;
   CellType getPtScore(const IndexPoint &pt) const;
   void getMinMax2D(const pcl::PointCloud<PointType> &pcl, float &minx,
@@ -164,27 +170,30 @@ protected:
   template <typename P>
   friend std::ostream &operator<<(std::ostream &out, const LookUpTable<P> &o);
 };
-////////////////////////////IMPLEMENTATION ///////////////////////
+////////////////////////////IMPLEMENTATION
 template <typename PointType>
 void LookUpTable<PointType>::initGrid(const pcl::PointCloud<PointType> &target,
                                       float grid_step, float std_deviation)
 {
   target_points_ = target.size();
-  kernel_ =  SmoothingKernel(1/grid_step,std_deviation,OCCUPIED_CELL);
+  kernel_ = SmoothingKernel(1 / grid_step, std_deviation, OCCUPIED_CELL);
   border_size_ = kernel_.halfSize();
   cell_size_ = grid_step;
   cell_size_half_ = cell_size_ / 2;
   getMinMax2D(target, minx_, miny_, maxx_, maxy_);
-  cell_count_row_ = std::ceil((maxx_ - minx_) / grid_step)+1+2*border_size_;
-  cell_count_col_ = std::ceil((maxy_ - miny_) / grid_step)+1+2*border_size_;
+  cell_count_row_ =
+      std::ceil((maxx_ - minx_) / grid_step) + 1 + 2 * border_size_;
+  cell_count_col_ =
+      std::ceil((maxy_ - miny_) / grid_step) + 1 + 2 * border_size_;
   // kernel is used for smearing points in look up table
 
-  std::cout<<"Smoothing kernel:\n"<<kernel_<<std::endl;
-  ROS_DEBUG_STREAM("creating grid cells x: "<<cell_count_row_<< " y: "<<cell_count_col_);
-  ROS_DEBUG_STREAM("values: minx: "<<minx_<<" maxx: "<<maxx_<<" miny "<<miny_<<" maxy "<<maxy_);
+  std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
+  ROS_DEBUG_STREAM("creating grid cells x: " << cell_count_row_
+                                             << " y: " << cell_count_col_);
+  ROS_DEBUG_STREAM("values: minx: " << minx_ << " maxx: " << maxx_ << " miny "
+                                    << miny_ << " maxy " << maxy_);
   initGridWindowFce(target);
   ROS_DEBUG_STREAM("grid initialized");
-
 }
 
 template <typename PointType>
@@ -196,13 +205,13 @@ LookUpTable<PointType>::getScore(const pcl::PointCloud<PointType> &pcl) const
   size_t valid_pts = 0;
   for (size_t i = 0; i < pcl.size(); ++i) {
     temp = getPtScore(Eigen::Vector2d(pcl.points[i].x, pcl.points[i].y));
-    if(temp == OCCUPIED_CELL)
+    if (temp == OCCUPIED_CELL)
       ++valid_pts;
     res += temp;
   }
-  if(pcl.size() == 0)
+  if (pcl.size() == 0)
     return 0;
-  return res / (OCCUPIED_CELL *target_points_);
+  return res / (OCCUPIED_CELL * target_points_);
 }
 
 template <typename PointType>
@@ -212,30 +221,33 @@ double LookUpTable<PointType>::getScore(const std::vector<IndexPoint> &pcl) cons
   CellType temp = 0;
   size_t valid_pts = 0;
   for (size_t i = 0; i < pcl.size(); ++i) {
-    if (!(pcl[i].x_idx_ < 0 || pcl[i].y_idx_ < 0 || pcl[i].x_idx_ >= cell_count_row_ ||
-      pcl[i].y_idx_ >= cell_count_col_)) {
+    if (!(pcl[i].x_idx_ < 0 || pcl[i].y_idx_ < 0 ||
+          pcl[i].x_idx_ >= cell_count_row_ ||
+          pcl[i].y_idx_ >= cell_count_col_)) {
       ++valid_pts;
     }
     temp = getPtScore(pcl[i]);
-    //if(temp == OCCUPIED_CELL)
+    // if(temp == OCCUPIED_CELL)
     //  ++valid_pts;
     res += temp;
   }
-  if(pcl.size() == 0)
+  if (pcl.size() == 0)
     return 0;
-  //ROS_DEBUG_STREAM("valid points: "<<valid_pts <<" score: "<<res <<" (pts*score)/100 "<<res*valid_pts / 100);
+  // ROS_DEBUG_STREAM("valid points: "<<valid_pts <<" score: "<<res <<"
+  // (pts*score)/100 "<<res*valid_pts / 100);
   return res / (target_points_ * OCCUPIED_CELL);
 }
 template <typename PointType>
-double LookUpTable<PointType>::getMaxScore()const{
+double LookUpTable<PointType>::getMaxScore() const
+{
   double sum = 0;
   size_t pts = 0;
-  for(auto && cell : table_){
-    sum+=cell;
-    if(cell > 0)
+  for (auto &&cell : table_) {
+    sum += cell;
+    if (cell > 0)
       ++pts;
   }
-  return sum ;/// (pts * OCCUPIED_CELL);
+  return sum;  /// (pts * OCCUPIED_CELL);
 }
 
 template <typename PointType>
@@ -283,10 +295,10 @@ LookUpTable<PointType>::transformIndexes(const std::vector<IndexPoint> &source,
   }
 }
 
-
 //////////PROTECTED
 template <typename PointType>
-void LookUpTable<PointType>::initGridWindowFce(const pcl::PointCloud<PointType> &target)
+void LookUpTable<PointType>::initGridWindowFce(
+    const pcl::PointCloud<PointType> &target)
 {
   table_.clear();
   table_.reserve(cell_count_row_ * cell_count_col_);
@@ -298,21 +310,20 @@ void LookUpTable<PointType>::initGridWindowFce(const pcl::PointCloud<PointType> 
   // every point is projected to certain cell. If is cell in the grid we set
   // this cell OCCUPIED
   for (size_t i = 0; i < target.size(); ++i) {
-    if (target[i].x < maxx_ && target[i].y < maxy_ &&
-        target[i].x > minx_ && target[i].y > miny_) {
+    if (target[i].x < maxx_ && target[i].y < maxy_ && target[i].x > minx_ &&
+        target[i].y > miny_) {
       Eigen::Vector2d pt(target[i].x, target[i].y);
       size_t idx = getCellIdx(pt);
-      table_[idx] =  OCCUPIED_CELL;
+      table_[idx] = OCCUPIED_CELL;
     }
   }
 
   // apply smoothing kernel
   for (size_t row = 1; row < cell_count_col_ - 1; ++row) {
     for (size_t col = 1; col < cell_count_row_ - 1; ++col) {
-      size_t idx = getCellIdx(row,col);
-      if(table_[idx] == OCCUPIED_CELL)
-        applyKernel(row,col);
-
+      size_t idx = getCellIdx(row, col);
+      if (table_[idx] == OCCUPIED_CELL)
+        applyKernel(row, col);
     }
   }
 }
@@ -321,9 +332,11 @@ template <typename PointType>
 size_t LookUpTable<PointType>::getCellIdx(const Eigen::Vector2d &pt) const
 {
   size_t x_id = static_cast<size_t>(
-      std::floor((pt(0) - minx_ + cell_size_half_) / cell_size_) + border_size_);
+      std::floor((pt(0) - minx_ + cell_size_half_) / cell_size_) +
+      border_size_);
   size_t y_id = static_cast<size_t>(
-      std::floor((-pt(1) + maxy_ + cell_size_half_) / cell_size_) + border_size_);
+      std::floor((-pt(1) + maxy_ + cell_size_half_) / cell_size_) +
+      border_size_);
   return y_id * cell_count_row_ + x_id;
 }
 
@@ -333,20 +346,19 @@ size_t LookUpTable<PointType>::getCellIdx(size_t row, size_t col) const
   return row * cell_count_row_ + col;
 }
 
-template<typename PointType>
-void LookUpTable<PointType>::applyKernel(size_t row, size_t col){
-
-   int half_kernel = kernel_.halfSize();
-   for(int r = - half_kernel; r <= half_kernel;++r){
-    for(int c = -half_kernel; c <= half_kernel;++c){
-      size_t idx = getCellIdx(row+r,col+c);
-      CellType kernel_val = kernel_(r,c);
-      if(table_[idx] < kernel_val){
-        table_[idx] =  kernel_val;
+template <typename PointType>
+void LookUpTable<PointType>::applyKernel(size_t row, size_t col)
+{
+  int half_kernel = kernel_.halfSize();
+  for (int r = -half_kernel; r <= half_kernel; ++r) {
+    for (int c = -half_kernel; c <= half_kernel; ++c) {
+      size_t idx = getCellIdx(row + r, col + c);
+      CellType kernel_val = kernel_(r, c);
+      if (table_[idx] < kernel_val) {
+        table_[idx] = kernel_val;
       }
     }
   }
-
 }
 
 template <typename PointType>
@@ -394,7 +406,7 @@ std::ostream &operator<<(std::ostream &out, const LookUpTable<P> &o)
   for (size_t i = 0; i < o.table_.size(); ++i) {
     if (i % o.cell_count_row_ == 0)
       out << std::endl;
-    out << std::setw(5)<< o.table_[i];
+    out << std::setw(5) << o.table_[i];
   }
   return out;
 }
@@ -409,22 +421,22 @@ void rotatePointCloud(const pcl::PointCloud<PointType> &source,
   // y' = y cos f + x sin f
   float si = std::sin(angle);
   float co = std::cos(angle);
-  Eigen::MatrixXf rotation(4,4);
-  rotation << co, -si,0,0,si,co,0,0,0,0,0,0,0,0,0,0;
-  Eigen::MatrixXf points(4,source.size());
+  Eigen::MatrixXf rotation(4, 4);
+  rotation << co, -si, 0, 0, si, co, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+  Eigen::MatrixXf points(4, source.size());
   outp.clear();
   outp.reserve(source.size());
   for (size_t i = 0; i < source.size(); ++i) {
-    points.block<4,1>(0,i) << source[i].x, source[i].y,0,0;
-     //  PointType pt = source[i];
-     // pt.x = source[i].x * co - source[i].y * si;
-     // pt.y = source[i].x * si + source[i].y * co;
-     // outp.push_back(pt);
+    points.block<4, 1>(0, i) << source[i].x, source[i].y, 0, 0;
+    //  PointType pt = source[i];
+    // pt.x = source[i].x * co - source[i].y * si;
+    // pt.y = source[i].x * si + source[i].y * co;
+    // outp.push_back(pt);
   }
 
-  points =rotation * points;
+  points = rotation * points;
   for (size_t i = 0; i < source.size(); ++i) {
-    outp.push_back(PointType(points(0,i),points(1,i),0));
+    outp.push_back(PointType(points(0, i), points(1, i), 0));
   }
 }
 
@@ -443,6 +455,6 @@ void translatePointCloud(const pcl::PointCloud<PointType> &source,
 }
 
 }  // end of namespace ml_corr
-} // end of pcl namespace
+}  // end of pcl namespace
 
 #endif
