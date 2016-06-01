@@ -17,6 +17,8 @@ find_package(catkin REQUIRED
     )
 find_package(PCL 1.7 REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(OpenMP)
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -143,17 +145,24 @@ catkin_package(
 #   ${catkin_LIBRARIES}
 # )
 
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_C_COMPILER "clang")
+#set(CMAKE_CXX_COMPILER "clang++")
+#set(CMAKE_C_COMPILER "clang")
+set(cxx_compiler_flags "-O3 -msse3")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
+    set(cxx_compiler_flags "${cxx_compiler_flags} -std=c++11")
 else()
         message(STATUS "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
+if(OPENMP_FOUND)
+  set(cxx_compiler_flags "${cxx_compiler_flags} ${OpenMP_CXX_FLAGS}")
+endif()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${cxx_compiler_flags}")
+message(STATUS "Flags handed to compiler: ${CMAKE_CXX_FLAGS}")
 include_directories(
     include
     ${PCL_INCLUDE_DIRS}

@@ -12,8 +12,7 @@
 namespace pcl
 {
 template <typename PointSource, typename PointTarget>
-class CorrelativeEstimation
-    : public Registration<PointSource, PointTarget>
+class CorrelativeEstimation : public Registration<PointSource, PointTarget>
 {
 protected:
   typedef typename Registration<PointSource, PointTarget>::PointCloudSource
@@ -40,8 +39,7 @@ protected:
   typedef typename TargetGrid::LeafConstPtr TargetGridLeafConstPtr;
 
 public:
-  typedef boost::shared_ptr<
-      CorrelativeEstimation<PointSource, PointTarget>> Ptr;
+  typedef boost::shared_ptr<CorrelativeEstimation<PointSource, PointTarget>> Ptr;
   typedef boost::shared_ptr<
       const CorrelativeEstimation<PointSource, PointTarget>> ConstPtr;
   typedef Eigen::Vector3d VectorTrans;
@@ -69,16 +67,11 @@ protected:
   using Registration<PointSource, PointTarget>::final_transformation_;
   using Registration<PointSource, PointTarget>::converged_;
 
-  Eigen::Matrix3d covariance_;
-  Eigen::Matrix3d inform_matrix_;
-
   float coarse_step_;
-  float fine_step_;
   float coarse_rot_step_;
-  float fine_rot_step_;
   float translation_range_;  // search from [-range,range]
   float rotation_range_;     // maximum is [-Pi,Pi]
-  float MIN_OVERLAP_SCORE = 0;
+  float MIN_OVERLAP_SCORE = 0.3f;
 
   ml_corr::LookUpTable<PointTarget> coarse_lookup_;
   ml_corr::LookUpTable<PointTarget> fine_lookup_;
@@ -105,8 +98,7 @@ protected:
 };
 
 template <typename PointSource, typename PointTarget>
-CorrelativeEstimation<PointSource,
-                             PointTarget>::CorrelativeEstimation()
+CorrelativeEstimation<PointSource, PointTarget>::CorrelativeEstimation()
   : coarse_step_(0.5f)
   , coarse_rot_step_(0.2f)
   , translation_range_(4.5f)
@@ -116,30 +108,31 @@ CorrelativeEstimation<PointSource,
 }
 
 template <typename PointSource, typename PointTarget>
-void
-CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
+void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
     PclSource &output, const Eigen::Matrix4f &guess)
 {
-  pcl::PointCloud<PointSource> guess_pcl;
+  pcl::PointCloud<PointSource> guess_pcl;  // pcl with points transformed by
+                                           // initial guess
   transformPointCloud(*input_, guess_pcl, guess);
   // initialize lookup tables
-  coarse_lookup_.initGrid(*target_, coarse_step_,0.5);
+  coarse_lookup_.initGrid(*target_, coarse_step_, 0.5);
   ROS_DEBUG_STREAM("grids initialized");
   //////////////////
-   ml_corr::SearchVoxel voxel2;
-   voxel2.transform_ << 0, 0, 0;
-   voxel2.score_ = coarse_lookup_.getScore(guess_pcl);
-   ROS_DEBUG_STREAM("[CorrelativeEstimation]: Coarse Voxel guess = trans: "
-                    << voxel2.transform_.transpose()
-                    << " score: " << voxel2.score_);
+  ml_corr::SearchVoxel voxel2;
+  voxel2.transform_ << 0, 0, 0;
+  voxel2.score_ = coarse_lookup_.getScore(guess_pcl);
+  ROS_DEBUG_STREAM("[CorrelativeEstimation]: Coarse Voxel guess = trans: "
+                   << voxel2.transform_.transpose()
+                   << " score: " << voxel2.score_);
 
   voxel2.transform_ << 0, 0, 0;
   voxel2.score_ = coarse_lookup_.getScore(*target_);
   ROS_DEBUG_STREAM("[CorrelativeEstimation]: Coarse Voxel target= trans: "
                    << voxel2.transform_.transpose()
                    << " score: " << voxel2.score_);
-  ROS_DEBUG_STREAM("[CorrelativeEstimation]: maximum on target: "<<coarse_lookup_.getMaxScore());
-  // iterate over coarse grid /////////////////
+  ROS_DEBUG_STREAM("[CorrelativeEstimation]: maximum on target: "
+                   << coarse_lookup_.getMaxScore());
+  // prepare array for all results
   std::vector<ml_corr::SearchVoxel> search_voxels;
   size_t elements = static_cast<size_t>(
       std::ceil(std::pow((2 * translation_range_) / coarse_step_, 2) *
@@ -147,30 +140,32 @@ CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
 
   search_voxels.reserve(elements);
 
+  // preparre storage for thrread based result voxels
   std::vector<ml_corr::SearchVoxel> search_voxels_thread[4];
+
   // prepare all rotations
   std::vector<float> rotations;
-  for(float theta = -rotation_range_; theta < rotation_range_;
-         theta += coarse_rot_step_){
+  for (float theta = -rotation_range_; theta < rotation_range_;
+       theta += coarse_rot_step_) {
     rotations.push_back(theta);
   }
   {
     pcl::ScopeTime t_init("try total:");
-//#pragma omp parallel num_threads(4)
- // {
-   // pcl::ScopeTime t_init("try all translates:");
-   pcl::PointCloud<PointSource> rot_pcl;
-   std::vector<ml_corr::IndexPoint> index_pcl;
-   std::vector<ml_corr::IndexPoint> transl_index_pcl;
 
-#pragma omp parallel for private(rot_pcl,index_pcl, transl_index_pcl) num_threads(4)
+    pcl::PointCloud<PointSource> rot_pcl;  // cloud with points after applied
+                                           // rotation
+    std::vector<ml_corr::IndexPoint> index_pcl;  // rotated points to indexes
+    std::vector<ml_corr::IndexPoint> transl_index_pcl;  // translated rotated
+                                                        // indexes
+
+#pragma omp parallel for private(rot_pcl, index_pcl,                           \
+                                 transl_index_pcl) num_threads(4)
     for (size_t theta_id = 0; theta_id < rotations.size(); ++theta_id) {
       int thread_id = omp_get_thread_num();
       // rotate point cloud
       ml_corr::rotatePointCloud(guess_pcl, rot_pcl, rotations[theta_id]);
-      // float theta = 0;
       index_pcl = coarse_lookup_.toIndexes(rot_pcl);
-      pcl::ScopeTime t_init("try single translates:");
+      pcl::ScopeTime t_inside("try single translates:");
       // iterate over all possible translation x values
       for (float dx = -translation_range_; dx < translation_range_;
            dx += coarse_step_) {
@@ -186,13 +181,13 @@ CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
       }
     }
 
- // end of parallel world
- // merge parallel results
-  for (size_t i = 0; i < 4; ++i) {
-    std::copy(search_voxels_thread[i].begin(), search_voxels_thread[i].end(),
-              std::back_inserter(search_voxels));
+    // end of parallel world
+    // merge parallel results
+    for (size_t i = 0; i < 4; ++i) {
+      std::copy(search_voxels_thread[i].begin(), search_voxels_thread[i].end(),
+                std::back_inserter(search_voxels));
+    }
   }
- }
   // find voxel with best score = best chance for good match
   std::sort(search_voxels.begin(), search_voxels.end());
   ml_corr::SearchVoxel best_voxel;
@@ -201,28 +196,10 @@ CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
     converged_ = false;
     return;
   }
-  ROS_DEBUG_STREAM("[CorrelativeEstimation]: delta_trans:"
-                   << search_voxels.back().transform_.transpose());
-  double best_score = 0;
-  Eigen::Vector3f best_trans = search_voxels.back().transform_;
-  Eigen::Matrix3f K = Eigen::Matrix3f::Identity();
-  Eigen::Vector3f u = Eigen::Vector3f::Identity();
-  float s = 0;
-  ROS_DEBUG_STREAM("number of search voxels: "<<search_voxels.size());
-  for (size_t i = search_voxels.size() - 1; i > search_voxels.size() - 20;
-       --i) {
-    ROS_DEBUG_STREAM("[CorrelativeEstimation]: Coarse Voxel = trans: "
-                     << search_voxels[i].transform_.transpose()
-                     << " score: " << search_voxels[i].score_);
-  }
-
-  ROS_DEBUG_STREAM("[CorrelativeEstimation]: final_delta_trans:"
-                   << best_trans.transpose());
-  ROS_DEBUG_STREAM("\n"<<coarse_lookup_);
-  // calculate covariance
-  covariance_ =
-      ((1 / s) * K - (1 / std::pow(s, 2) * (u * u.transpose()))).cast<double>();
-  inform_matrix_ = covariance_.inverse();
+  Eigen::Vector3f best_trans=  search_voxels.back().transform_;
+  ROS_DEBUG_STREAM(
+      "[CorrelativeEstimation]: final_delta_trans:" << best_trans.transpose());
+  ROS_DEBUG_STREAM("\n" << coarse_lookup_);
 
   // output data
   converged_ = true;
@@ -230,10 +207,10 @@ CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   transformPointCloud(*input_, output, final_transformation_);
 }
 
+/////////////////////////////////
 template <typename PointSource, typename PointTarget>
 template <typename T, typename In>
-Eigen::Matrix<T, 4, 4>
-CorrelativeEstimation<PointSource, PointTarget>::vecToMat(
+Eigen::Matrix<T, 4, 4> CorrelativeEstimation<PointSource, PointTarget>::vecToMat(
     const Eigen::Matrix<In, 3, 1> &trans) const
 {
   Eigen::Matrix<T, 4, 4> trans_mat = Eigen::Matrix<T, 4, 4>::Identity();
