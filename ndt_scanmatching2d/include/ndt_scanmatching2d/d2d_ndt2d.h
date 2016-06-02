@@ -159,32 +159,42 @@ public:
   inline void setNumLayers(size_t num)
   {
     layer_count_ = num;
+    initCellSizes();
+    initParams();
   }
 
   inline size_t getNumLayers()
   {
     return layer_count_;
   }
-  /** \brief Set/change the voxel grid resolution for largest grid. Other grids
-   * will have smaller resolution
-    * \param[in] resolution side length of voxels
+  /** \brief Set/change the voxel grid cell size for the finnest grid. Other grids
+   * will have higher length of cell (coarse)
+    * \param[in] cel_size cell size in meters
     */
-  inline void setResolution(float resolution)
+  inline void setCellSize(float cell_size)
   {
     // Prevents unnessary voxel initiations
-    if (initResolutions(resolution)) {
+    if (initCellSizes(cell_size)) {
       // if (input_)
       // initGrid();
       initParams();
     }
   }
 
+  void setCellSize(const std::vector<float> & cell_sizes){
+    layer_count_ = cell_sizes.size();
+    cell_sizes_ = cell_sizes;
+    std::sort(cell_sizes_.begin(), cell_sizes_.end());
+    std::reverse(cell_sizes_.begin(), cell_sizes_.end());
+    initParams();
+  }
+
   /** \brief Get voxel grid resolution.
-    * \return side length of voxels
+    * \return calculated resolutions of each cell
     */
-  inline std::vector<float> getResolutions() const
+  inline std::vector<float> getCellSizes() const
   {
-    return (resolutions_);
+    return (cell_sizes_);
   }
 
   /** \brief Get the newton line search maximum step length.
@@ -263,11 +273,8 @@ protected:
   using Registration<PointSource, PointTarget>::inlier_threshold_;
   using Registration<PointSource, PointTarget>::update_visualizer_;
 
-  /** \brief The voxel grid generated from target cloud containing point means
-   * and covariances. */
-  // std::vector<TargetGrid> target_cells_;
   /** \brief The side length of voxels. */
-  std::vector<float> resolutions_;
+  std::vector<float> cell_sizes_;
 
   /** \brief The maximum step length. */
   double step_size_;
@@ -296,25 +303,23 @@ protected:
   virtual inline void initParams()
   {
     params_.clear();
-    for (size_t i = 0; i < resolutions_.size(); ++i) {
+    for (size_t i = 0; i < cell_sizes_.size(); ++i) {
       params_.push_back(
-          d2d_ndt2d::FittingParams(outlier_ratio_, resolutions_[i]));
+          d2d_ndt2d::FittingParams(outlier_ratio_, 1/cell_sizes_[i]));
     }
   }
-  /** \brief Initialize resolutions. First resolution hase value of
-   * base_resolution. Other layers have resolution in multiples of 2. e.g. 0.25
-   * 0.5 1 2 . Numer of resolutions is chosen based on layer_count parameter.
-  * \return Returns true if made any changes to resolutions_
+  /** \brief Initialize cell_sizes. First grid will have cells of base_size length.base_size
+  * Other layers have cell sizes in multiples of 2. e.g.
+  * 0.25, 0.5, 1, 2
+   * Numer of layers is chosen based on layer_count parameter. Cell sizes
+  * are sorted from coarsest grid to finest grid size
+  * \return Returns true if made any changes to cell_sizes_
   */
-  virtual inline bool initResolutions(float base_resolution)
+  virtual inline bool initCellSizes(float base_size)
   {
-    if (!resolutions_.empty())
-      if (base_resolution == resolutions_[0])
-        return false;
-
-    resolutions_.clear();
+    cell_sizes_.clear();
     for (int i = layer_count_-1; i >=0; --i) {
-      resolutions_.push_back(base_resolution * std::pow(2, i));
+      cell_sizes_.push_back(base_size * std::pow(2, i));
     }
     return true;
   }
@@ -425,7 +430,7 @@ D2DNormalDistributionsTransform2D<
   max_iterations_ = 35;
   transformation_epsilon_ = 0.1;
   converged_ = false;
-  initResolutions(0.25);
+  initCellSizes(0.25);
   initParams();
 }
 
@@ -435,11 +440,11 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
     computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
 {
   Eigen::Matrix4f trans = guess;
-  for (size_t i = 0; i < resolutions_.size(); ++i) {
+  for (size_t i = 0; i < cell_sizes_.size(); ++i) {
     TargetGrid target_grid;
     SourceGrid source_grid;
-    target_grid.setLeafSize(resolutions_[i], resolutions_[i], resolutions_[i]);
-    source_grid.setLeafSize(resolutions_[i], resolutions_[i], resolutions_[i]);
+    target_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
+    source_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
     target_grid.setInputCloud(target_);
     source_grid.setInputCloud(input_);
     target_grid.filter(true);
