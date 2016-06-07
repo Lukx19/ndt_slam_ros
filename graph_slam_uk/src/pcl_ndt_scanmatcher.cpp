@@ -19,7 +19,7 @@ MatchResult PclNdtScanmatcher::match(const pcl_constptr_t &source,
           << " Probability: " << pcl_matcher_.getTransformationProbability());
      MatchResult res;
      res.success_ = pcl_matcher_.hasConverged ();
-     res.score_ =  pcl_matcher_.getFitnessScore();
+     res.score_ =  1;
      res.inform_ =pcl_matcher_.getInformMatrix();
      res.transform_ = eigt::convertToTransform<double>(
                       pcl_matcher_.getFinalTransformation().cast<double>());
@@ -27,7 +27,7 @@ MatchResult PclNdtScanmatcher::match(const pcl_constptr_t &source,
 }
 void PclNdtScanmatcher::setGridStep(double step)
 {
-    pcl_matcher_.setResolution(static_cast<float>(1/step));
+    pcl_matcher_.setCellSize(static_cast<float>(step));
 }
 void PclNdtScanmatcher::setMaxRange(double range)
 {
