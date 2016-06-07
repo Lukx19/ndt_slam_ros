@@ -12,12 +12,15 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/registration/ndt.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/ia_ransac.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <boost/thread/thread.hpp>
 
 #include <ndt_scanmatching2d/ndt2d.h>
 #include <ndt_scanmatching2d/d2d_ndt2d.h>
-#include <ndt_scanmatching2d/ml_correlative_matcher2d.h>
+#include <ndt_scanmatching2d/correlative_estimation2d.h>
+#include <ndt_scanmatching2d/d2d_ndt2d_robust.h>
 
 #include <Eigen/Dense>
 
@@ -34,9 +37,9 @@ std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 //std::vector<MatchResult> matches;
 Registration<pcl::PointXYZ,pcl::PointXYZ> * matcher;
-NormalDistributionsTransform<pcl::PointXYZ,pcl::PointXYZ> * proofer;
-
-
+D2DNormalDistributionsTransform2D<pcl::PointXYZ,pcl::PointXYZ> * proofer;
+//IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> * proofer;
+//SampleConsensusInitialAlignment<pcl::PointXYZ, pcl::PointXYZ> * proofer;
 std::vector<std::string> split(std::string data, std::string token)
 {
     std::vector<std::string> output;
@@ -125,14 +128,14 @@ void testMatch(size_t source_id, size_t target_id){
   proofer->setInputSource(scans[source_id]);
   proofer->setInputTarget(scans[target_id]);
   proofer->align(*output_pr,guess);
-  e_proof = std::chrono::system_clock::now();
 
+  e_proof = std::chrono::system_clock::now();
   eigt::pose2d_t<double> proof_trans = eigt::getPoseFromTransform(
       eigt::convertToTransform<double>(
           proofer->getFinalTransformation().cast<double>()));
   elapsed_seconds = (e_proof - s_proof);
   std::cout<<"PROOF TRANSFORM:"<<proof_trans.transpose()<<" calc time: "<<elapsed_seconds.count()<<std::endl;
-
+////////////////////////////////////////////////////////
   //calculate my matcher
   s_match = std::chrono::system_clock::now();
   matcher->setInputSource(scans[source_id]);
@@ -175,16 +178,31 @@ void testMatch(size_t source_id, size_t target_id){
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "output cloud");
 
-    // Coloring and visualizing input cloud (blue).
-    pcl_t::Ptr source(new pcl_t);
-    auto iguess = Eigen::Matrix4f::Identity();//eigt::convertFromTransform(eigt::getTransFromPose(real_poses[source_id]).cast<float>());
-    pcl::transformPointCloud(*scans[source_id], *source,iguess);
+    // Coloring and visualizing input cloud transformed by odom (blue).
+    pcl_t::Ptr odom(new pcl_t);
+    //auto iguess = eigt::convertFromTransform(eigt::getTransFromPose(real_poses[source_id]).cast<float>());
+    auto iodom = eigt::convertFromTransform(eigt::transBtwPoses(
+                              real_poses[target_id], real_poses[source_id]));
+    pcl::transformPointCloud(*scans[source_id], *odom,iodom);
     pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
-    source_color (source, 100, 0, 255);
-    viewer_final->addPointCloud<pcl::PointXYZ> (source, source_color, "source cloud");
+    odom_color (odom, 100, 0, 255);
+    viewer_final->addPointCloud<pcl::PointXYZ> (odom, odom_color, "odom cloud");
+    viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+                                                    1, "odom cloud");
+
+    // // Coloring and visualizing proof cloud (gray).
+    // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
+    // proof_color (output_pr, 128, 128, 128);
+    // viewer_final->addPointCloud<pcl::PointXYZ> (output_pr, proof_color, "proof cloud");
+    // viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
+    //                                                 1, "proof cloud");
+
+    // Coloring and visualizing source cloud (gray).
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
+    source_color (scans[source_id], 128, 128, 128);
+    viewer_final->addPointCloud<pcl::PointXYZ> (scans[source_id], source_color, "source cloud");
     viewer_final->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
                                                     1, "source cloud");
-
     // Starting visualizer
     viewer_final->addCoordinateSystem (1.0, "global");
     viewer_final->initCameraParameters ();
@@ -199,15 +217,16 @@ void testMatch(size_t source_id, size_t target_id){
 }
 
 
-void test()
+void test(size_t start)
 {
   //matches.clear();
   size_t target = 0;
   std::cout<<"start test"<<std::endl;
-  for(size_t i =0; i< scans.size(); ++i){
+  for(size_t i =start; i< scans.size(); ++i){
     eigt::transform2d_t<double> real_trans = eigt::transBtwPoses(real_poses[target],real_poses[i]);
     if (eigt::getAngle(real_trans) > MIN_ROTATION ||
         eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT){
+      std::cout<<"real trans: "<<eigt::getPoseFromTransform(real_trans).transpose()<<std::endl;
       std::cout<<"matching "<<i<< "  "<<target<<std::endl;
       testMatch(i, target);
       target = i;
@@ -220,12 +239,14 @@ void test()
 
 int main(int argc, char **argv)
 {
-  std::vector<std::string> args(argv,argv+argc);
-  if(args.size() < 3 && (args[2] != "d2d" && args[2] != "basic" && args[2] != "corr")){
+  std::vector<std::string> args(argv, argv + argc);
+  if (args.size() < 3 && (args[2] != "d2d" && args[2] != "basic" &&
+                          args[2] != "corr" && args[2] != "robust")) {
     std::cout << "Correct format of arguments: \n Path to the folder with "
                  "data.poses, data.scans was not provided\n Calculation engine "
-                 "(d2d,basic,corr) \n [Min displacement (m) min rotation (rad)]";
-    std::cout<<std::endl;
+                 "(d2d,basic,corr,robust) \n [Min displacement (m) min "
+                 "rotation (rad)]";
+    std::cout << std::endl;
     return 0;
   }
   if(args.size() == 4){
@@ -238,20 +259,24 @@ int main(int argc, char **argv)
   //matcher->setResolution(1);
   preparePoseData(args[1]);
   prepareLaserScans(args[1]);
-  proofer = new NormalDistributionsTransform<pcl::PointXYZ,pcl::PointXYZ>();
+  proofer = new D2DNormalDistributionsTransform2D<pcl::PointXYZ,pcl::PointXYZ>();
+  //proofer = new SampleConsensusInitialAlignment<pcl::PointXYZ,pcl::PointXYZ>();
   if(args[2] == "basic"){
     matcher = new NormalDistributionsTransform2DEx<pcl::PointXYZ,pcl::PointXYZ>();
   }else if(args[2] == "d2d"){
     matcher = new D2DNormalDistributionsTransform2D<pcl::PointXYZ,pcl::PointXYZ>();
   }else if(args[2] == "corr"){
-    matcher = new MultiLayerCorrelativeMatcher<pcl::PointXYZ,pcl::PointXYZ>();
+    matcher = new CorrelativeEstimation<pcl::PointXYZ,pcl::PointXYZ>();
+  } else if (args[2] == "robust"){
+    matcher = new D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ,pcl::PointXYZ>();
   }
-  //testMatch(4,2);
-  //testMatch(2,0);
-  //testMatch(6,0);
-  //testMatch(0,10);
-  //testMatch(0, 100);
-  test();
+  testMatch(4,2);
+  testMatch(2,0);
+  testMatch(6,0);
+  testMatch(0,10);
+  testMatch(0, 100);
+  size_t start = 80;
+  test(start);
   delete matcher;
   delete proofer;
   return 0;
