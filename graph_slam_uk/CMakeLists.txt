@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(graph_slam_uk)
 set(PCL_DIR "/usr/local/share/pcl-1.7/PCLConfig.cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake-modules/")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -22,7 +23,8 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(PCL 1.7 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS program_options system)
 find_package(Eigen3 REQUIRED)
-
+# g2o #######################
+find_package(G2O REQUIRED)
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -141,25 +143,38 @@ include_directories(
     ${catkin_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
+    ${G2O_INCLUDE_DIR}
+    ${CSPARSE_INCLUDE_DIR}
 )
 link_directories(
     ${PCL_LIBRARY_DIRS}
+    ${G2O_LIBRARY_DIR}
+    ${CSPARSE_LIBRARY_DIRS}
 )
 add_definitions(
     ${PCL_DEFINITIONS}
 )
+link_libraries(${G2O_LIBRARIES})
+
 add_executable(graph_slam2d_g2o_parser src/parser2d.cpp src/pcl_ndt_scanmatcher.cpp)
 target_link_libraries(graph_slam2d_g2o_parser
     ${catkin_LIBRARIES}
     ${PCL_COMMON_LIBRARIES}
 )
 
-add_executable(graph_slam2d src/graph_slam2d_node.cpp src/pcl_ndt_scanmatcher.cpp)
-#add_dependencies(graph_slam2d ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_executable(graph_slam2d
+  src/graph_slam2d_node.cpp
+  src/pcl_ndt_scanmatcher.cpp
+  src/rrr_clusterizer.cpp
+  src/rrr_g20_wrapper.cpp
+  )
+# add_dependencies(graph_slam2d ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(graph_slam2d
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}
    ${Boost_LIBRARIES}
+   ${G2O_LIBRARIES}
+   ${CSPARSE_LIBRARY}
 )
 
 add_executable(gauss_newton_optimalizer_test test/gauss_newton_optimalizer_test.cpp src/pcl_ndt_scanmatcher.cpp)
