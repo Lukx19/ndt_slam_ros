@@ -107,7 +107,7 @@ protected:
   friend std::ostream &operator<<(std::ostream &out, const SmoothingKernel &k);
 };
 
-std::ostream &operator<<(std::ostream &out, const SmoothingKernel &k)
+inline std::ostream &operator<<(std::ostream &out, const SmoothingKernel &k)
 {
   for (size_t i = 0; i < k.kernel_.size(); ++i) {
     if (i % k.size_ == 0)
