@@ -147,7 +147,7 @@ catkin_package(
 
 #set(CMAKE_CXX_COMPILER "clang++")
 #set(CMAKE_C_COMPILER "clang")
-set(cxx_compiler_flags "-O3 -msse3")
+set(cxx_compiler_flags "-O3 -msse3 -funroll-loops")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)

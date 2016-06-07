@@ -199,7 +199,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   Eigen::Vector3f best_trans=  search_voxels.back().transform_;
   ROS_DEBUG_STREAM(
       "[CorrelativeEstimation]: final_delta_trans:" << best_trans.transpose());
-  ROS_DEBUG_STREAM("\n" << coarse_lookup_);
+  //ROS_DEBUG_STREAM("\n" << coarse_lookup_);
 
   // output data
   converged_ = true;

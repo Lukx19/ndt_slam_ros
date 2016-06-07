@@ -5,6 +5,7 @@
 #include <ndt_scanmatching2d/d2d_ndt2d.h>
 #include <ndt_scanmatching2d/correlative_estimation2d.h>
 #include <pcl/registration/registration.h>
+#include <pcl/registration/icp.h>
 
 namespace pcl
 {
@@ -47,6 +48,7 @@ public:
   {
     d2d_.setInputSource(cloud);
     corr_est_.setInputSource(cloud);
+    icp_.setInputSource(cloud);
     Registration<PointSource, PointTarget>::setInputSource(cloud);
   }
 
@@ -55,6 +57,7 @@ public:
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
     d2d_.setInputTarget(cloud);
     corr_est_.setInputTarget(cloud);
+    icp_.setInputTarget(cloud);
   }
 
   inline void setNumLayers(size_t num)
@@ -66,23 +69,23 @@ public:
   {
     return d2d_.getNumLayers();
   }
-  /** \brief Set/change the voxel grid resolution for largest grid(finest).
+  /** \brief Set/change the voxel grid cell size for largest grid(finest).
    * Other grids
-   * will have smaller resolution
-    * \param[in] resolution side length of voxels
+   * will have smaller longer cell size (coarser)
+    * \param[in] base_size side length of voxels
     */
-  inline void setResolution(float resolution)
+  inline void setCellSize(float base_size)
   {
-    d2d_.setResolution(resolution);
-    resolution_ = resolution;
+    d2d_.setCellSize(base_size);
+    cell_size_ = base_size;
   }
 
   /** \brief Get voxel grid resolution.
     * \return side length of the moast coarse
     */
-  inline float getResolution() const
+  inline float getCellSize() const
   {
-    return resolution_;
+    return cell_size_;
   }
 
   /** \brief Get the newton line search maximum step length.
@@ -130,7 +133,7 @@ public:
     */
   inline int getFinalNumIteration() const
   {
-    return (nr_iterations_);
+    return d2d_.getFinalNumIteration();
   }
 
   inline Eigen::Matrix3d getCovariance() const
@@ -157,8 +160,9 @@ protected:
 
   D2DNormalDistributionsTransform2D<PointSource, PointTarget> d2d_;
   CorrelativeEstimation<PointSource, PointTarget> corr_est_;
+  IterativeClosestPoint<PointSource, PointTarget> icp_;
 
-  float resolution_;
+  float cell_size_;
   float trans_probability_;
 
   /** \brief Estimate the transformation and returns the transformed source
@@ -178,54 +182,98 @@ protected:
   virtual void computeTransformation(PclSource &output,
                                      const Eigen::Matrix4f &guess);
 
-  virtual bool proofTransform(const Eigen::Matrix4f &trans);
+  virtual double proofTransform(const Eigen::Matrix4f &trans);
 };
 
 //////////////////////////////IMPLEMENTATION
 template <typename PointSource, typename PointTarget>
 D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget>::D2DNormalDistributionsTransform2DRobust()
-  : resolution_(2), trans_probability_(0)
+  : cell_size_(0.25), trans_probability_(0)
 {
   d2d_.setMaximumIterations(max_iterations_);
+  std::vector<float> cell_sizes;
+  cell_sizes.push_back(2);
+  cell_sizes.push_back(1);
+  cell_sizes.push_back(0.5);
+  cell_sizes.push_back(0.25);
+  d2d_.setCellSize(cell_sizes);
+  d2d_.setMaximumIterations(10);
+
+  //icp_.setMaxCorrespondenceDistance (0.5);
+  //icp_.setRANSACOutlierRejectionThreshold (0.5);
+  //icp_.setTransformationEpsilon (transformation_epsilon);
+  //icp_.setMaximumIterations (3);
 }
 //////////////////
 template <typename PointSource, typename PointTarget>
 void D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>::
     computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
 {
-  corr_est_.align(output, guess);
-  if (!corr_est_.hasConverged()) {
-    converged_ = false;
-    return;
+  // standard D2D match try for good guess estimations
+  d2d_.align(output, guess);
+  double score  = proofTransform(d2d_.getFinalTransformation());
+  Eigen::Matrix4f first_trans;
+  // test if first d2d has return bad result
+  if (!(d2d_.hasConverged() && score > 0.7)) {
+    // bad result -> robust aligment needed
+    first_trans = d2d_.getFinalTransformation();
+    corr_est_.align(output, guess);
+    if (!corr_est_.hasConverged()) {
+      converged_ = false;
+      final_transformation_.setIdentity();
+      return;
+    }
+    // second d2d -> precise alignment
+    d2d_.align(output, corr_est_.getFinalTransformation());
+    if (!d2d_.hasConverged()) {  //||
+                                 //!proofTransform(d2d_.getFinalTransformation()))
+                                 //{
+      converged_ = false;
+      final_transformation_.setIdentity();
+      return;
+    }
+ }
+ // score result
+ double score2 = proofTransform(d2d_.getFinalTransformation());
+  // robust alignemnt still not good enough
+  if(score2 < 0.4){
+    // Maybe at least first d2d got some reasonable result
+    if(score > 0.6){
+       converged_ = true;
+      final_transformation_ = first_trans;
+    }else{
+      // everyting is bad probably not the same place
+      converged_ = false;
+      final_transformation_.setIdentity();
+    }
+  }else{
+    // we got good result by robust algorithm
+     converged_ = true;
+    final_transformation_ =  d2d_.getFinalTransformation();
   }
-  d2d_.align(output, corr_est_.getFinalTransformation());
-  if (!d2d_.hasConverged() || !proofTransform(d2d_.getFinalTransformation())) {
-    converged_ = false;
-    return;
-  }
-
-  // output data
-  converged_ = true;
-  final_transformation_ = d2d_.getFinalTransformation();
-  transformPointCloud(*input_, output, final_transformation_);
+  // output cloud transform
+ transformPointCloud(*input_, output, final_transformation_);
 }
 
+/////////////////////
 template <typename PointSource, typename PointTarget>
-bool D2DNormalDistributionsTransform2DRobust<
+double D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget>::proofTransform(const Eigen::Matrix4f &trans)
 {
   ml_corr::LookUpTable<PointTarget> proof_grid;
-  proof_grid.initGrid(*target_,1/resolution_,0.5);
+  proof_grid.initGrid(*target_,cell_size_,4);
   PclSource output;
   transformPointCloud(*input_, output, trans);
   double score = proof_grid.getScore(output);
   ROS_DEBUG_STREAM("proofer score: "<< score);
-  if(score < 0.2)
-    return false;
-  else
-    return true;
+  return score;
+  // if(score > min_score){
+  //   return true;
+  // }
+  // return false;
 
+  //return proof_grid.testMatch(output,1f,0.6);
 }
 }  // end of namespace pcl
 

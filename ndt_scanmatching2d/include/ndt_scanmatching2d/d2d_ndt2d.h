@@ -439,8 +439,10 @@ template <typename PointSource, typename PointTarget>
 void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
     computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
 {
+  ROS_DEBUG_STREAM("[D2D_NDT2D]: guess:" << matToVec(guess).transpose());
   Eigen::Matrix4f trans = guess;
   for (size_t i = 0; i < cell_sizes_.size(); ++i) {
+    ROS_DEBUG_STREAM("[D2D_NDT2D]: computing layer: "<< i);
     TargetGrid target_grid;
     SourceGrid source_grid;
     target_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
@@ -454,6 +456,7 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
       return;
     }
   }
+  ROS_DEBUG_STREAM("[D2D_NDT2D]: final trans:" << matToVec(trans).transpose());
   transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;
   converged_ = true;
@@ -478,10 +481,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
   double delta_p_norm;
   d2d_ndt2d::ScoreAndDerivatives<3,double> score;
   while (!converged_) {
-    {
-      pcl::ScopeTime t_init ("score calc________:");
-      score = calcScore(param, source_grid, xytheta_p, target_grid, true);
-   }
+     score = calcScore(param, source_grid, xytheta_p, target_grid, true);
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -510,12 +510,6 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
     xytheta_p += delta_xytheta_p;
     p = vecToMat(xytheta_p);
 
-    // convergence testing
-    if (nr_iterations_ > max_iterations_ ||
-        (nr_iterations_ &&
-         (std::abs(delta_p_norm) < transformation_epsilon_))) {
-      converged_ = true;
-    }
 
     ++nr_iterations_;
     previous_transformation_ = transformation_;
@@ -526,7 +520,15 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
                      << delta_p_norm
                      << " Delta: " << delta_xytheta_p.transpose()
                      << " Score: " << score.value_
-                     << "probability of match: " << trans_probability_);
+                     << " probability of match: " << trans_probability_
+                     << " current transformation: \n"<< xytheta_p);
+    // convergence testing
+    if (nr_iterations_ >= max_iterations_ ||
+        (nr_iterations_ &&
+         (std::abs(delta_p_norm) < transformation_epsilon_))) {
+      converged_ = true;
+    }
+
     // // Update Visualizer (untested)
     // if (update_visualizer_ != 0) {
     //   transformPointCloud(*input_, output, transformation_);

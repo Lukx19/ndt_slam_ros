@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <iostream>
 #include <pcl/point_cloud.h>
+#include <math.h>
+
 namespace pcl
 {
 namespace ml_corr
@@ -143,7 +145,6 @@ public:
   void moveIndexes(std::vector<IndexPoint> &indexes, int dx, int dy) const;
   void transformIndexes(const std::vector<IndexPoint> &source,
                         std::vector<IndexPoint> &out, float dx, float dy) const;
-
 protected:
   float cell_size_;
   float cell_size_half_;
@@ -158,13 +159,13 @@ protected:
   SmoothingKernel kernel_;
 
   void initGridWindowFce(const pcl::PointCloud<PointType> &target);
-  size_t getCellIdx(const Eigen::Vector2d &pt) const;
+  size_t getCellIdx(const Eigen::Vector2f &pt) const;
   size_t getCellIdx(size_t row, size_t col) const;
   void applyKernel(size_t row, size_t col);
   // float calcCellScore(const std::vector<float> &grid, size_t i, size_t j)
   // const;
-  CellType getPtScore(const Eigen::Vector2d &pt) const;
-  CellType getPtScore(const IndexPoint &pt) const;
+  float getPtScore(const Eigen::Vector2f &pt) const;
+  float getPtScore(const IndexPoint &pt) const;
   void getMinMax2D(const pcl::PointCloud<PointType> &pcl, float &minx,
                    float &miny, float &maxx, float &maxy) const;
   template <typename P>
@@ -204,7 +205,7 @@ LookUpTable<PointType>::getScore(const pcl::PointCloud<PointType> &pcl) const
   CellType temp = 0;
   size_t valid_pts = 0;
   for (size_t i = 0; i < pcl.size(); ++i) {
-    temp = getPtScore(Eigen::Vector2d(pcl.points[i].x, pcl.points[i].y));
+    temp = getPtScore(Eigen::Vector2f(pcl.points[i].x, pcl.points[i].y));
     if (temp == OCCUPIED_CELL)
       ++valid_pts;
     res += temp;
@@ -226,10 +227,10 @@ double LookUpTable<PointType>::getScore(const std::vector<IndexPoint> &pcl) cons
           pcl[i].y_idx_ >= cell_count_col_)) {
       ++valid_pts;
     }
-    temp = getPtScore(pcl[i]);
+    res += getPtScore(pcl[i]);
     // if(temp == OCCUPIED_CELL)
     //  ++valid_pts;
-    res += temp;
+    //res += temp;
   }
   if (pcl.size() == 0)
     return 0;
@@ -312,7 +313,7 @@ void LookUpTable<PointType>::initGridWindowFce(
   for (size_t i = 0; i < target.size(); ++i) {
     if (target[i].x < maxx_ && target[i].y < maxy_ && target[i].x > minx_ &&
         target[i].y > miny_) {
-      Eigen::Vector2d pt(target[i].x, target[i].y);
+      Eigen::Vector2f pt(target[i].x, target[i].y);
       size_t idx = getCellIdx(pt);
       table_[idx] = OCCUPIED_CELL;
     }
@@ -329,7 +330,7 @@ void LookUpTable<PointType>::initGridWindowFce(
 }
 
 template <typename PointType>
-size_t LookUpTable<PointType>::getCellIdx(const Eigen::Vector2d &pt) const
+size_t LookUpTable<PointType>::getCellIdx(const Eigen::Vector2f &pt) const
 {
   size_t x_id = static_cast<size_t>(
       std::floor((pt(0) - minx_ + cell_size_half_) / cell_size_) +
@@ -362,8 +363,8 @@ void LookUpTable<PointType>::applyKernel(size_t row, size_t col)
 }
 
 template <typename PointType>
-typename LookUpTable<PointType>::CellType
-LookUpTable<PointType>::getPtScore(const Eigen::Vector2d &pt) const
+float
+LookUpTable<PointType>::getPtScore(const Eigen::Vector2f &pt) const
 {
   if (pt(0) < maxx_ && pt(1) < maxy_ && pt(0) > minx_ && pt(1) > miny_) {
     return table_[getCellIdx(pt)];
@@ -372,7 +373,7 @@ LookUpTable<PointType>::getPtScore(const Eigen::Vector2d &pt) const
 }
 
 template <typename PointType>
-typename LookUpTable<PointType>::CellType
+float
 LookUpTable<PointType>::getPtScore(const IndexPoint &pt) const
 {
   if (pt.x_idx_ < 0 || pt.y_idx_ < 0 || pt.x_idx_ >= cell_count_row_ ||
