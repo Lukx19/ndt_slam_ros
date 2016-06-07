@@ -5,7 +5,7 @@
 #include <graph_slam_uk/graph_slam_interfaces.h>
 #include <graph_slam_uk/slam2d_policy.h>
 #include <graph_slam_uk/pose_graph.h>
-#include <graph_slam_uk/olson_loop_detector.h>
+#include <graph_slam_uk/loop_detector.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
 #include <std_msgs/ColorRGBA.h>
@@ -24,7 +24,7 @@ class GaussNewtonOptimalize2d : public IGraphOptimalizer2d<T>
 {
   typedef Optimizer<Slam2d_Policy, T> optimizer_t;
   typedef Graph<Slam2d_Policy, T> graph_t;
-  typedef OlsonLoopDetector<Slam2d_Policy, T> loop_closurer_t;
+  typedef LoopDetector<Slam2d_Policy, T> loop_detector_t;
   typedef Node<Slam2d_Policy, T> node_t;
   typedef Edge<Slam2d_Policy, T> edge_t;
   typedef Slam2d_Policy Policy;
@@ -38,7 +38,7 @@ public:
     , first_node_id_(0)
     , first_node_added_(false)
     , matcher_(&matcher)
-    , loop_closure_engine_(loop_closurer_t(graph_, *matcher_))
+    , loop_detector_(loop_detector_t(&graph_, matcher_))
   {
   }
   // virtual ~GaussNewtonOptimalize2d()
@@ -83,7 +83,7 @@ protected:
   optimizer_t opt_engine_;
   graph_t graph_;
   IScanmatcher2d *matcher_;
-  loop_closurer_t loop_closure_engine_;
+  LoopDetector<Slam2d_Policy, T> loop_detector_;
 
   void initializeGrapFromOdom();
   visualization_msgs::MarkerArray createListMarkers(std::string frame_id) const;
@@ -151,15 +151,17 @@ size_t GaussNewtonOptimalize2d<T>::addLastConstrain(
 template <typename T>
 bool GaussNewtonOptimalize2d<T>::tryLoopClose()
 {
-  return loop_closure_engine_.tryLoopClose(last_node_id_);
-  // return false;
+  //return loop_closure_engine_.tryLoopClose(last_node_id_);
+  loop_detector_.addToGraph(loop_detector_.genLoopClosures(last_node_id_));
+  return false;
 }
 
 template <typename T>
 bool GaussNewtonOptimalize2d<T>::tryLoopClose(size_t node_id)
 {
-  return loop_closure_engine_.tryLoopClose(node_id);
-  // return false;
+  //return loop_closure_engine_.tryLoopClose(node_id);
+  loop_detector_.addToGraph(loop_detector_.genLoopClosures(node_id));
+  return false;
 }
 
 template <typename T>
