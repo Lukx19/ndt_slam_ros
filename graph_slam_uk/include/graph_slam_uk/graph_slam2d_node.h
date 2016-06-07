@@ -157,17 +157,17 @@ GraphSlamNode<T>::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
       nh_.advertise<sensor_msgs::PointCloud2>(pclmap_pub_topic_, 5, false);
   graph_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(graph_pub_topic_,
                                                               5, false);
-
+  const int message_cache = 10;
   if (subscribe_mode_ == "ODOM") {
-    laser_sub_.subscribe(nh_, laser_topic_, 3);
-    odom_sub_.subscribe(nh_, odom_topic_, 3);
+    laser_sub_.subscribe(nh_, laser_topic_, message_cache);
+    odom_sub_.subscribe(nh_, odom_topic_, message_cache);
     // sync messages using approximate alghorithm
     odom_sync_.connectInput(odom_sub_, laser_sub_);
     odom_sync_.registerCallback(
         boost::bind(&GraphSlamNode::odom_cb, this, _1, _2));
   } else if (subscribe_mode_ == "POSE") {
-    laser_sub_.subscribe(nh_, laser_topic_, 3);
-    pose_sub_.subscribe(nh_, pose_topic_, 3);
+    laser_sub_.subscribe(nh_, laser_topic_, message_cache);
+    pose_sub_.subscribe(nh_, pose_topic_, message_cache);
     // sync messages using approximate alghorithm
     pose_sync_.connectInput(pose_sub_, laser_sub_);
     pose_sync_.registerCallback(
@@ -175,7 +175,7 @@ GraphSlamNode<T>::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
   } else {
     // NON
     laser_only_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
-        laser_topic_, 3, boost::bind(&GraphSlamNode::laser_cb, this, _1));
+        laser_topic_, message_cache, boost::bind(&GraphSlamNode::laser_cb, this, _1));
   }
 
   ROS_INFO("Graph_slam2d: Node is initialized.");
@@ -387,8 +387,8 @@ void GraphSlamNode<T>::doAlgorithm(const ros::Time &time_stamp,
   // adding odometry constrain to optimalizer
   pose_t odom_trans =
       eigt::getPoseFromTransform(eigt::transBtwPoses(last_odom_, pose));
-  auto res_match = scan_match_->match(pcl,last_scan_,eigt::transBtwPoses(last_odom_, pose).matrix());
-  //opt_engine_->addLastConstrain(odom_trans, covar.inverse());
+  //auto res_match = scan_match_->match(pcl,last_scan_,eigt::transBtwPoses(last_odom_, pose).matrix());
+ // opt_engine_->addLastConstrain(odom_trans, covar.inverse());
   // if(res_match.success_){
   //   ROS_DEBUG("using scanmatched edge");
   //   // adding node to optimalizer;
