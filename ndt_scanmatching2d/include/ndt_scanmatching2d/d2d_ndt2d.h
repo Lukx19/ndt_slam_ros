@@ -442,7 +442,6 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
   ROS_DEBUG_STREAM("[D2D_NDT2D]: guess:" << matToVec(guess).transpose());
   Eigen::Matrix4f trans = guess;
   for (size_t i = 0; i < cell_sizes_.size(); ++i) {
-    ROS_DEBUG_STREAM("[D2D_NDT2D]: computing layer: "<< i);
     TargetGrid target_grid;
     SourceGrid source_grid;
     target_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
@@ -516,12 +515,12 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
     transformation_ = p;
     trans_probability_ =
         score.value_ / static_cast<double>(input_->points.size());
-    ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
-                     << delta_p_norm
-                     << " Delta: " << delta_xytheta_p.transpose()
-                     << " Score: " << score.value_
-                     << " probability of match: " << trans_probability_
-                     << " current transformation: \n"<< xytheta_p);
+    // ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
+    //                  << delta_p_norm
+    //                  << " Delta: " << delta_xytheta_p.transpose()
+    //                  << " Score: " << score.value_
+    //                  << " probability of match: " << trans_probability_
+    //                  << " current transformation: \n"<< xytheta_p);
     // convergence testing
     if (nr_iterations_ >= max_iterations_ ||
         (nr_iterations_ &&

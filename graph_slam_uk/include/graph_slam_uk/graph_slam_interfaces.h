@@ -32,10 +32,10 @@ public:
   virtual size_t addPose(const Eigen::Vector3d &position, T &obj) = 0;
   virtual size_t addConstrain(size_t node_id_from, size_t node_id_to,
                               const Eigen::Vector3d &trans,
-                              const Eigen::Matrix3d &covar) = 0;
+                              const Eigen::Matrix3d &inform_mat) = 0;
   // adds constrain between last two added positions
   virtual size_t addLastConstrain(const Eigen::Vector3d &trans,
-                                  const Eigen::Matrix3d &covar) = 0;
+                                  const Eigen::Matrix3d &inform_mat) = 0;
   // return true if any change to graph were made
   virtual bool tryLoopClose(size_t node_id) = 0;
   // try loop close on last edge added to graph

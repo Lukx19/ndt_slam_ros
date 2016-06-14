@@ -6,6 +6,7 @@
 #include <graph_slam_uk/graph_slam_interfaces.h>
 #include <queue>
 #include <pcl/common/centroid.h>
+#include <ros/ros.h>
 
 namespace slamuk
 {
@@ -146,7 +147,7 @@ std::vector<LoopClosure<P>>
 LoopDetector<P, T>::genLoopClosures(Id node_id)
 {
   typedef internal::EdgeCov EdgeCov;
-  std::cout<<"Finding loop closures for node: "<<node_id<<std::endl;
+  ROS_INFO_STREAM("Finding loop closures for node: "<<node_id);
   std::vector<LoopClosure<P>> all_constrains;
   size_t nodes_visited = 0;
   bool far_enough = false;
@@ -166,7 +167,6 @@ LoopDetector<P, T>::genLoopClosures(Id node_id)
     // enough overlap
     if (isCloseMatch(fringe.top())) {
       if(far_enough){
-        std::cout<<"loop closure: "<<curr_node_id<<" -> "<<node_id<<std::endl;
         // calculate transformation with scanmatching
         Node &source_n = graph_->getNode(curr_node_id);
         Node &target_n = graph_->getNode(node_id);
@@ -180,9 +180,11 @@ LoopDetector<P, T>::genLoopClosures(Id node_id)
         // test if sucesfull match
         if (res.success_ && res.score_ > MATCH_SCORE) {
           // create edge
-          ROS_DEBUG_STREAM("match sucessful");
+          ROS_INFO_STREAM("loop closure: "<<curr_node_id<<" -> "<<node_id<<"accepted by matching");
           all_constrains.push_back(
               LoopClosure<P>(node_id, curr_node_id, res.inform_, res.transform_));
+        }else{
+          ROS_INFO_STREAM("loop closure: "<<curr_node_id<<" -> "<<node_id<<"rejected by matching");
         }
       }
     }else{

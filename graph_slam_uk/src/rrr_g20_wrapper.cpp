@@ -41,12 +41,12 @@ void RRRG2OWrapper/*<VertexType,EdgeType>*/::parseGraph()
             e_it = optimizer_->edges().end();
 
     for (;it != e_it; ++it) {
-    // for(const g2o::HyperGraph::Edge * edge : optimizer_->edges()){
         int from = (*it)->vertex(0)->id();
         int to = (*it)->vertex(1)->id();
         if(std::abs(to-from) > 1 ){
             // loop closure
-            loop_edges_.emplace(std::make_pair(std::make_pair(from,to),*it));
+            loop_edges_[std::make_pair(from,to)] = dynamic_cast<EdgePtr>(*it);
+            //loop_edges_.insert(std::make_pair(std::make_pair(from,to),*it));
         }else{
             // odom
             odom_edges_.insert(*it);

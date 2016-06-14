@@ -262,7 +262,7 @@ double D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget>::proofTransform(const Eigen::Matrix4f &trans)
 {
   ml_corr::LookUpTable<PointTarget> proof_grid;
-  proof_grid.initGrid(*target_,cell_size_,4);
+  proof_grid.initGrid(*target_,cell_size_,0.5);
   PclSource output;
   transformPointCloud(*input_, output, trans);
   double score = proof_grid.getScore(output);

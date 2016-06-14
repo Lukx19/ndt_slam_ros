@@ -188,7 +188,7 @@ void LookUpTable<PointType>::initGrid(const pcl::PointCloud<PointType> &target,
       std::ceil((maxy_ - miny_) / grid_step) + 1 + 2 * border_size_;
   // kernel is used for smearing points in look up table
 
-  std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
+  //std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
   ROS_DEBUG_STREAM("creating grid cells x: " << cell_count_row_
                                              << " y: " << cell_count_col_);
   ROS_DEBUG_STREAM("values: minx: " << minx_ << " maxx: " << maxx_ << " miny "

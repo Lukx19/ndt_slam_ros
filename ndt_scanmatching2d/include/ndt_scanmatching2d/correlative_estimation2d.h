@@ -72,6 +72,7 @@ protected:
   float translation_range_;  // search from [-range,range]
   float rotation_range_;     // maximum is [-Pi,Pi]
   float MIN_OVERLAP_SCORE = 0.3f;
+  const int threads = 1;
 
   ml_corr::LookUpTable<PointTarget> coarse_lookup_;
   ml_corr::LookUpTable<PointTarget> fine_lookup_;
@@ -101,8 +102,8 @@ template <typename PointSource, typename PointTarget>
 CorrelativeEstimation<PointSource, PointTarget>::CorrelativeEstimation()
   : coarse_step_(0.5f)
   , coarse_rot_step_(0.2f)
-  , translation_range_(4.5f)
-  , rotation_range_(2.5f)
+  , translation_range_(4.0f)
+  , rotation_range_(1.6f)
 {
   converged_ = false;
 }
@@ -141,7 +142,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   search_voxels.reserve(elements);
 
   // preparre storage for thrread based result voxels
-  std::vector<ml_corr::SearchVoxel> search_voxels_thread[4];
+  std::vector<ml_corr::SearchVoxel> search_voxels_thread[threads];
 
   // prepare all rotations
   std::vector<float> rotations;
@@ -159,7 +160,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
                                                         // indexes
 
 #pragma omp parallel for private(rot_pcl, index_pcl,                           \
-                                 transl_index_pcl) num_threads(4)
+                                 transl_index_pcl) num_threads(threads)
     for (size_t theta_id = 0; theta_id < rotations.size(); ++theta_id) {
       int thread_id = omp_get_thread_num();
       // rotate point cloud
@@ -183,7 +184,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
 
     // end of parallel world
     // merge parallel results
-    for (size_t i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < threads; ++i) {
       std::copy(search_voxels_thread[i].begin(), search_voxels_thread[i].end(),
                 std::back_inserter(search_voxels));
     }
