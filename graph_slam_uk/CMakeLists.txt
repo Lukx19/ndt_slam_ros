@@ -165,7 +165,7 @@ add_definitions(
 )
 link_libraries(${G2O_LIBRARIES})
 
-add_executable(graph_slam2d_g2o_parser src/parser2d.cpp src/pcl_ndt_scanmatcher.cpp)
+add_executable(graph_slam2d_g2o_parser src/parser2d.cpp)
 target_link_libraries(graph_slam2d_g2o_parser
     ${catkin_LIBRARIES}
     ${PCL_COMMON_LIBRARIES}
@@ -173,7 +173,6 @@ target_link_libraries(graph_slam2d_g2o_parser
 
 add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
-  src/pcl_ndt_scanmatcher.cpp
   src/rrr_clusterizer.cpp
   src/rrr_g20_wrapper.cpp
   )
@@ -186,7 +185,7 @@ target_link_libraries(graph_slam2d
    ${CSPARSE_LIBRARY}
 )
 
-add_executable(gauss_newton_optimalizer_test test/gauss_newton_optimalizer_test.cpp src/pcl_ndt_scanmatcher.cpp)
+add_executable(gauss_newton_optimalizer_test test/gauss_newton_optimalizer_test.cpp)
 target_link_libraries(gauss_newton_optimalizer_test
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}

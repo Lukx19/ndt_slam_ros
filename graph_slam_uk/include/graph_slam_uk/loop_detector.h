@@ -116,7 +116,7 @@ private:
     typedef typename Graph<P, T>::N Node;
     typedef typename P::Id Id;
 public:
-    LoopDetector(Graph<P, T> * graph, IScanmatcher2d * matcher)
+    LoopDetector(Graph<P, T> * graph, IScanmatcher2d<T> * matcher)
      : graph_(graph)
      , matcher_(matcher)
      {}
@@ -125,7 +125,7 @@ public:
     void removeFromGraph(const std::vector<Id> & edges);
 protected:
     Graph<P, T> *graph_;
-    IScanmatcher2d *matcher_;
+    IScanmatcher2d<T> *matcher_;
 
     const float MATCH_SCORE  = 0;
     std::vector<internal::ScanInfo> laser_range_;

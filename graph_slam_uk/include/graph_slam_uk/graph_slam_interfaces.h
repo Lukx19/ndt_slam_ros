@@ -61,10 +61,11 @@ struct MatchResult
 public:
   typedef Eigen::Transform<double, 2, Eigen::TransformTraits::Affine>
       transform_t;
-  bool success_;
-  double score_;
   Eigen::Matrix3d inform_;
   transform_t transform_;
+  bool success_;
+  double score_;
+
 
   MatchResult() : success_(false), score_(0.0)
   {
@@ -72,27 +73,23 @@ public:
   }
 
   MatchResult(bool success, double score, const transform_t &trans)
-    : success_(success), score_(score), transform_(trans)
+    : transform_(trans),success_(success), score_(score)
   {
   }
 };
 
+template<typename FrameType>
 class IScanmatcher2d
 {
 public:
-  typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
-  typedef pcl_t::Ptr pcl_ptr_t;
-  typedef pcl_t::ConstPtr pcl_constptr_t;
+  typedef FrameType CloudFrame;
   virtual ~IScanmatcher2d()
   {
   }
 
   virtual MatchResult
-  match(const pcl_constptr_t &source, const pcl_constptr_t &target,
+  match(const CloudFrame &source, const CloudFrame &target,
         const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity()) = 0;
-  virtual void setGridStep(double step) = 0;
-  virtual void setMaxRange(double range) = 0;
-  virtual void setTransformationEpsilon(double epsilon) = 0;
 };
 
 }  // slamuk namespace
