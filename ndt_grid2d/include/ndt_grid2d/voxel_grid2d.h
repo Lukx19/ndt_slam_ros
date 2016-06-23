@@ -27,7 +27,7 @@ public:
   typedef Eigen::Matrix<size_t, 2, 1> CentroidIds;
   // typedef std::unique_ptr<CellType> CellTypePtr;
 public:
-  explicit VoxelGrid2D(const CellType& prototype);
+  explicit VoxelGrid2D();
 
   VoxelGrid2D(const VoxelGrid2D& other);
   VoxelGrid2D(VoxelGrid2D&& other) = default;
@@ -121,7 +121,6 @@ protected:
   // number of cells in all directions from centroid cell
   size_t width_left_, width_right_, height_up_, height_down_;
   size_t valid_cells_;
-  CellType prototype_;
   CellDataVector cells_;
 
   size_t calcIndex(const Point & pt) const;
@@ -143,7 +142,7 @@ protected:
 
 ////////////////////////IMPLEMENTATION//////////
 template <typename CellType>
-VoxelGrid2D<CellType>::VoxelGrid2D(const CellType& prototype)
+VoxelGrid2D<CellType>::VoxelGrid2D()
   : cell_size_(0.25f)
   , cell_size_half_(0.125f)
   , width_left_(0)
@@ -151,7 +150,6 @@ VoxelGrid2D<CellType>::VoxelGrid2D(const CellType& prototype)
   , height_up_(0)
   , height_down_(0)
   , valid_cells_(0)
-  , prototype_(prototype)
 {
 }
 
@@ -163,7 +161,6 @@ VoxelGrid2D<CellType>::VoxelGrid2D(const VoxelGrid2D& other)
   , width_right_(other.width_right_)
   , height_up_(other.height_up_)
   , height_down_(other.height_down_)
-  , prototype_(other.prototype)
 {
   cells_.resize(other.cells_.size());
   for (const std::unique_ptr<CellType>& cell : other.cells) {
@@ -184,7 +181,7 @@ VoxelGrid2D<CellType>& VoxelGrid2D<CellType>::operator=(const VoxelGrid2D& other
 template <typename CellType>
 VoxelGrid2D<CellType> VoxelGrid2D<CellType>::clone() const
 {
-  VoxelGrid2D new_grid(this->prototype_);
+  VoxelGrid2D new_grid
   new_grid.setCellSize(cell_size_);
   return new_grid;
 }
@@ -357,14 +354,14 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   size_t idx_finish = calcIndex(end);
   // add start cell as one of raytraced cell
   if (cells_[idx_old].get() == nullptr) {
-    cells_[idx_old].reset(new CellType(prototype_));
+    cells_[idx_old].reset(new CellType());
     res.push_back(cells_[idx_old].get());
   }
   while (idx_current != idx_finish) {
     // if program  is still in the same cell like last time just step forward
     if (idx_current != idx_old) {
       if (cells_[idx_current].get() == nullptr) {
-        cells_[idx_current].reset(new CellType(prototype_));
+        cells_[idx_current].reset(new CellType());
       }
       res.push_back(cells_[idx_current].get());
     }
