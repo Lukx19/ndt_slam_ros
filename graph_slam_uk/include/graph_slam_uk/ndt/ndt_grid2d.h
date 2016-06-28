@@ -1,13 +1,13 @@
-#ifndef NDT_GRID2D_NDT_GRID2D
-#define NDT_GRID2D_NDT_GRID2D
+#ifndef GRAPH_SLAM_UK_NDT_GRID2D
+#define GRAPH_SLAM_UK_NDT_GRID2D
 
-#include <ndt_grid2d/voxel_grid2d.h>
-#include <ndt_grid2d/types.h>
+#include <graph_slam_uk/ndt/voxel_grid2d.h>
+#include <graph_slam_uk/ndt/types.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/common/transforms.h>
-#include <dynamic_slam_utils/eigen_tools.h>
-#include <dynamic_slam_utils/point_cloud_tools.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/utils/point_cloud_tools.h>
 
 namespace slamuk
 {

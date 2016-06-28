@@ -27,8 +27,8 @@
 #include <pcl/point_types.h>
 //#include <pcl/filters/voxel_grid.h>
 
-#include <graph_slam_uk/graph_slam_interfaces.h>
-#include <dynamic_slam_utils/eigen_tools.h>
+#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
 
 namespace slamuk
 {
@@ -175,7 +175,8 @@ GraphSlamNode<T>::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
   } else {
     // NON
     laser_only_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
-        laser_topic_, message_cache, boost::bind(&GraphSlamNode::laser_cb, this, _1));
+        laser_topic_, message_cache,
+        boost::bind(&GraphSlamNode::laser_cb, this, _1));
   }
 
   ROS_INFO("Graph_slam2d: Node is initialized.");
@@ -387,21 +388,24 @@ void GraphSlamNode<T>::doAlgorithm(const ros::Time &time_stamp,
   // adding odometry constrain to optimalizer
   pose_t odom_trans =
       eigt::getPoseFromTransform(eigt::transBtwPoses(last_odom_, pose));
-  //auto res_match = scan_match_->match(pcl,last_scan_,eigt::transBtwPoses(last_odom_, pose).matrix());
- // opt_engine_->addLastConstrain(odom_trans, covar.inverse());
+  // auto res_match =
+  // scan_match_->match(pcl,last_scan_,eigt::transBtwPoses(last_odom_,
+  // pose).matrix());
+  // opt_engine_->addLastConstrain(odom_trans, covar.inverse());
   // if(res_match.success_){
   //   ROS_DEBUG("using scanmatched edge");
   //   // adding node to optimalizer;
   //   auto matcher_pose = eigt::transformPose(last_odom_,res_match.transform_);
   //   scans_.push_back(opt_engine_->addPose(matcher_pose, pcl));
-  //   opt_engine_->addLastConstrain(eigt::getPoseFromTransform(res_match.transform_), res_match.inform_);
+  //   opt_engine_->addLastConstrain(eigt::getPoseFromTransform(res_match.transform_),
+  //   res_match.inform_);
   //   updateTFTrans(pose,matcher_pose);
   //   last_odom_ = matcher_pose;
   // }else{
-    // adding node to optimalizer;
-    scans_.push_back(opt_engine_->addPose(pose, pcl));
-    opt_engine_->addLastConstrain(odom_trans, covar.inverse());
-    last_odom_ = pose;
+  // adding node to optimalizer;
+  scans_.push_back(opt_engine_->addPose(pose, pcl));
+  opt_engine_->addLastConstrain(odom_trans, covar.inverse());
+  last_odom_ = pose;
   // }
   // try to close loop closures
 
@@ -458,7 +462,7 @@ void GraphSlamNode<T>::doAlgorithm(const ros::Time &time_stamp,
     ROS_INFO("Graph_slam2d:GRAPH Markers published.");
   }
   // prepare data for next iteration
-  //last_odom_ = pose;
+  // last_odom_ = pose;
   last_scan_ = pcl;
   ++seq_;
 }

@@ -1,5 +1,5 @@
-#ifndef NDT_GRID2D_VOXEL_GRID2D
-#define NDT_GRID2D_VOXEL_GRID2D
+#ifndef GRAPH_SLAM_UK_VOXEL_GRID2D
+#define GRAPH_SLAM_UK_VOXEL_GRID2D
 
 #include <vector>
 #include <Eigen/Dense>

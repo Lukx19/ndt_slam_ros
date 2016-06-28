@@ -1,19 +1,20 @@
-#include <graph_slam_uk/rrr_clusterizer.h>
+#include <graph_slam_uk/slam_optimizer/rrr_clusterizer.h>
 
 namespace slamuk
 {
 namespace internal
 {
-std::vector<size_t> Clusterizer::clusterizeBulk(const IntPairSet & loops)
+std::vector<size_t> Clusterizer::clusterizeBulk(const IntPairSet& loops)
 {
   std::vector<size_t> new_clusters;
   closed_clusters_.clear();
   updateClusters(loops);
-  if(closed_clusters_.size() != 0)
-    std::cerr<<"Something wrong: Update should not have filled anything to closed loops\n";
-  for(size_t i  =0; i< active_clusters_.size(); ++i){
-    for(auto && loop:active_clusters_[i].loops_){
-      loop_to_id_map_.insert(std::make_pair(loop,i));
+  if (closed_clusters_.size() != 0)
+    std::cerr << "Something wrong: Update should not have filled anything to "
+                 "closed loops\n";
+  for (size_t i = 0; i < active_clusters_.size(); ++i) {
+    for (auto&& loop : active_clusters_[i].loops_) {
+      loop_to_id_map_.insert(std::make_pair(loop, i));
     }
 
     closed_clusters_.push_back(std::move(active_clusters_[i]));
@@ -23,41 +24,43 @@ std::vector<size_t> Clusterizer::clusterizeBulk(const IntPairSet & loops)
 }
 
 // return vector of new closed clusters ids
-std::vector<size_t> Clusterizer::updateClusters(const IntPairSet & loops)
+std::vector<size_t> Clusterizer::updateClusters(const IntPairSet& loops)
 {
   std::vector<size_t> recent_closed;
-  for(auto && edge:loops){
+  for (auto&& edge : loops) {
     clusterizeOne(edge);
   }
   // decrease time to live for all current clusters
-  for(auto && cluster: active_clusters_){
-    if(cluster.ttl_ == 0){
+  for (auto&& cluster : active_clusters_) {
+    if (cluster.ttl_ == 0) {
       // add move semantics in future
       closed_clusters_.push_back(cluster);
-      size_t id  = closed_clusters_.size()-1;
+      size_t id = closed_clusters_.size() - 1;
       recent_closed.push_back(id);
       // adding to map of loops
-      for(auto && loop:cluster.loops_){
-        loop_to_id_map_.insert(std::make_pair(loop,id));
+      for (auto&& loop : cluster.loops_) {
+        loop_to_id_map_.insert(std::make_pair(loop, id));
       }
     }
     --cluster.ttl_;
   }
   // remove old closed clusters
-  active_clusters_.erase(std::remove_if(active_clusters_.begin(), active_clusters_.end(),
-                 [](const Cluster & edge) {
-                  if(edge.ttl_ < 0)
-                    return true;
-                  return false; }),active_clusters_.end());
+  active_clusters_.erase(std::remove_if(active_clusters_.begin(),
+                                        active_clusters_.end(),
+                                        [](const Cluster& edge) {
+                           if (edge.ttl_ < 0)
+                             return true;
+                           return false;
+                         }),
+                         active_clusters_.end());
   return recent_closed;
 }
-
 
 void Clusterizer::clusterizeOne(const IntPair& loop)
 {
   int start = std::max(loop.first, loop.second);
   int end = std::min(loop.first, loop.second);
-  bool found_cluster =  false;
+  bool found_cluster = false;
   if (active_clusters_.empty()) {
     active_clusters_.emplace_back(Cluster(loop));
   } else {
@@ -102,9 +105,10 @@ void Clusterizer::clusterizeOne(const IntPair& loop)
 #endif
 }
 
-Cluster & Clusterizer::getCluster(size_t id){
-    assert(id > closed_clusters_.size()-1);
-    return closed_clusters_[id];
+Cluster& Clusterizer::getCluster(size_t id)
+{
+  assert(id > closed_clusters_.size() - 1);
+  return closed_clusters_[id];
 }
 
 const Cluster& Clusterizer::getCluster(size_t id) const
@@ -113,7 +117,8 @@ const Cluster& Clusterizer::getCluster(size_t id) const
   return closed_clusters_[id];
 }
 
-size_t Clusterizer::getClusterID(const IntPair & loop){
+size_t Clusterizer::getClusterID(const IntPair& loop)
+{
   return loop_to_id_map_[loop];
 }
 
@@ -126,10 +131,10 @@ bool Clusterizer::deleteCluster(size_t id)
 {
   auto it = closed_clusters_.begin();
   std::advance(it, id);
-  std::for_each(
-      it->loops_.begin(), it->loops_.end(),
-      [&](const IntPair& loop) { loop_to_id_map_.erase(loop); });
+  std::for_each(it->loops_.begin(), it->loops_.end(),
+                [&](const IntPair& loop) { loop_to_id_map_.erase(loop); });
   closed_clusters_.erase(it);
   return true;
 }
-}} // end of namespaces
+}
+}  // end of namespaces

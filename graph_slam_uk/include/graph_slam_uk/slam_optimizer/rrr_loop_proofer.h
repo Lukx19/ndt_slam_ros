@@ -32,8 +32,7 @@
 #include <map>
 #include <set>
 #include <boost/math/distributions/chi_squared.hpp>
-#include <graph_slam_uk/rrr_clusterizer.h>
-
+#include <graph_slam_uk/slam_optimizer/rrr_clusterizer.h>
 
 namespace slamuk
 {
@@ -44,6 +43,7 @@ private:
   typedef std::vector<size_t> IdVector;
   typedef std::pair<int, int> VerticesIntPair;
   typedef std::set<VerticesIntPair> VerticesIntPairSet;
+
 public:
   typedef std::pair<size_t, size_t> VerticesPair;
   typedef std::set<VerticesPair> VerticesPairSet;
@@ -63,18 +63,19 @@ public:
 
 protected:
   // TODO: remove when done
-  Optimizer * optimizer_;
+  Optimizer* optimizer_;
   int clustering_treshold_;
   int n_iterations_;
   int edge_dimention_;
 
- // used fo incremental adding
+  // used fo incremental adding
   IdVector last_good_clusters_;
   internal::Clusterizer clusterizer_;
 
-  bool intraClusterConsistent(size_t cluster_id,VerticesIntPairSet & bad_loops);
+  bool intraClusterConsistent(size_t cluster_id, VerticesIntPairSet& bad_loops);
   VerticesIntPairSet gatherEdges(const IdVector& clusterList);
-  bool interClusterConsistent(IdVector& H, IdVector& goodSet, IdVector& RejectSet);
+  bool interClusterConsistent(IdVector& H, IdVector& goodSet,
+                              IdVector& RejectSet);
   void optimizeCluster(size_t cluster_id, VerticesIntPairSet& bad_loops,
                        VerticesIntPairSet& good_loops);
   double chi2(int dof)
@@ -86,12 +87,12 @@ protected:
       return 0;
     }
   }
-
 };
 
 //////////////////////////////////////IMPLEMENTATION //////////////////////
 template <class Optimizer>
-bool RRRLoopProofer<Optimizer>::intraClusterConsistent(size_t cluster_id,VerticesIntPairSet & bad_loops)
+bool RRRLoopProofer<Optimizer>::intraClusterConsistent(
+    size_t cluster_id, VerticesIntPairSet& bad_loops)
 {
   typename Optimizer::Result res;
   res = optimizer_->optimize(clusterizer_.getCluster(cluster_id).loops_,
@@ -130,7 +131,7 @@ bool RRRLoopProofer<Optimizer>::intraClusterConsistent(size_t cluster_id,Vertice
     std::cerr << " Cluster " << cluster_id << " has been eliminated!"
               << std::endl;
     bad_loops.insert(clusterizer_.getCluster(cluster_id).loops_.begin(),
-                        clusterizer_.getCluster(cluster_id).loops_.end());
+                     clusterizer_.getCluster(cluster_id).loops_.end());
     return false;
   }
 
@@ -142,8 +143,9 @@ typename RRRLoopProofer<Optimizer>::VerticesIntPairSet
 RRRLoopProofer<Optimizer>::gatherEdges(const IdVector& cluster_ids)
 {
   VerticesIntPairSet links;
-  for(size_t id : cluster_ids){
-    links.insert(clusterizer_.getCluster(id).loops_.begin(),clusterizer_.getCluster(id).loops_.end());
+  for (size_t id : cluster_ids) {
+    links.insert(clusterizer_.getCluster(id).loops_.begin(),
+                 clusterizer_.getCluster(id).loops_.end());
   }
   return links;
 }
@@ -156,24 +158,26 @@ bool RRRLoopProofer<Optimizer>::interClusterConsistent(IdVector& candidates,
   if (candidates.empty())
     return true;
 
-  VerticesIntPairSet activeLinks (gatherEdges(good_clusters));
+  VerticesIntPairSet activeLinks(gatherEdges(good_clusters));
   auto temp = gatherEdges(candidates);
-  std::move(temp.begin(),temp.end(),std::inserter(activeLinks, activeLinks.begin()));
+  std::move(temp.begin(), temp.end(),
+            std::inserter(activeLinks, activeLinks.begin()));
 
   typename Optimizer::Result res;
-  res = optimizer_->optimize(activeLinks,n_iterations_);
+  res = optimizer_->optimize(activeLinks, n_iterations_);
 
   double activeChi2Graph = res.graph_error_;
   size_t activeEdgeCount = res.edge_count_;
 
   double allLinksError = 0;
-  for(auto && edge_err: res.loop_errors_){
-    allLinksError +=edge_err.second;
+  for (auto&& edge_err : res.loop_errors_) {
+    allLinksError += edge_err.second;
   }
 
   if (activeChi2Graph < chi2(edge_dimention_ * activeEdgeCount) and
       allLinksError < chi2(edge_dimention_ * activeLinks.size())) {
-    std::copy(candidates.begin(), candidates.end(),std::back_inserter(good_clusters));
+    std::copy(candidates.begin(), candidates.end(),
+              std::back_inserter(good_clusters));
     return true;  // all done .. we found a consistent solution
   } else {
     // Find which cluster is causing the problems
@@ -181,16 +185,16 @@ bool RRRLoopProofer<Optimizer>::interClusterConsistent(IdVector& candidates,
     // Find the error for each cluster
     // Sum cluster-wise
     std::map<size_t, double> error_map;
-    for(const auto & edge_err: res.loop_errors_){
+    for (const auto& edge_err : res.loop_errors_) {
       error_map[clusterizer_.getClusterID(edge_err.first)] += edge_err.second;
     }
 
     double min_CI = 0;
     long rejectID = -1;
-    for(size_t cluster_id: candidates){
+    for (size_t cluster_id : candidates) {
       double CI = error_map[cluster_id] /
                   chi2(edge_dimention_ *
-                              clusterizer_.getCluster(cluster_id).loops_.size());
+                       clusterizer_.getCluster(cluster_id).loops_.size());
       if (CI >= min_CI)  // Just looking for the ones in candidates
       {
         min_CI = CI;
@@ -207,28 +211,31 @@ bool RRRLoopProofer<Optimizer>::interClusterConsistent(IdVector& candidates,
 
 // returns true if some optimalization was done
 template <class Optimizer>
-bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loops,
-                                              VerticesPairSet& bad_loops_fin,
-                                              VerticesPairSet& good_loops_fin)
+bool
+RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loops,
+                                       VerticesPairSet& bad_loops_fin,
+                                       VerticesPairSet& good_loops_fin)
 {
   bad_loops_fin.clear();
   good_loops_fin.clear();
   // compatibility change from pair of size_t to pair of int
   VerticesIntPairSet possible_loops_int;
-  for(auto && loop: possible_loops){
-    possible_loops_int.insert(std::make_pair(static_cast<int>(loop.first),static_cast<int>(loop.second)));
+  for (auto&& loop : possible_loops) {
+    possible_loops_int.insert(std::make_pair(static_cast<int>(loop.first),
+                                             static_cast<int>(loop.second)));
   }
   // compatibility of output
   VerticesIntPairSet bad_loops;
   VerticesIntPairSet good_loops;
 
   // add possible loops to clusters
-  std::vector<size_t> new_clusters = clusterizer_.updateClusters(possible_loops_int);
-  std::cout<<"Added to clusters:\n";
-  for(auto && cluster_id:new_clusters){
-    std::cout<<cluster_id;
+  std::vector<size_t> new_clusters =
+      clusterizer_.updateClusters(possible_loops_int);
+  std::cout << "Added to clusters:\n";
+  for (auto&& cluster_id : new_clusters) {
+    std::cout << cluster_id;
   }
-  std::cout<<std::endl;
+  std::cout << std::endl;
   // std::vector<size_t> valid_clusters;
   // if(new_clusters.empty()){
   //   // nothing to optimize
@@ -265,7 +272,8 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
   //       continue;
   //     if (edge_err.second < chi2(edge_dimention_)) {
   //       // check if not already included in candidates
-  //       if(std::find(candidates.begin(),candidates.end(),id) == candidates.end())
+  //       if(std::find(candidates.begin(),candidates.end(),id) ==
+  //       candidates.end())
   //         candidates.push_back(id);
   //     }
   //   }
@@ -284,7 +292,8 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
   //   size_t good_clusters_size = last_good_clusters_.size();
 
   //   IdVector temp_rejected;
-  //   interClusterConsistent(all_candidates, last_good_clusters_, temp_rejected);
+  //   interClusterConsistent(all_candidates, last_good_clusters_,
+  //   temp_rejected);
   //   candidates.clear();
   //   if (last_good_clusters_.size() > good_clusters_size) {
   //          rejected_clusters.clear();
@@ -308,12 +317,14 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
   // }
 
   // output edges in correct form
-  for(auto && loop: bad_loops){
-    bad_loops_fin.insert(std::make_pair(static_cast<size_t>(loop.first), static_cast<size_t>(loop.second)));
+  for (auto&& loop : bad_loops) {
+    bad_loops_fin.insert(std::make_pair(static_cast<size_t>(loop.first),
+                                        static_cast<size_t>(loop.second)));
   }
 
-  for(auto && loop:good_loops){
-    good_loops_fin.insert(std::make_pair(static_cast<size_t>(loop.first), static_cast<size_t>(loop.second)));
+  for (auto&& loop : good_loops) {
+    good_loops_fin.insert(std::make_pair(static_cast<size_t>(loop.first),
+                                         static_cast<size_t>(loop.second)));
   }
   return true;
 }
@@ -321,8 +332,10 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
 // /** bad_loops[out], good_loops[in/out]*/
 // template <class Optimizer>
 // void RRRLoopProofer<Optimizer>::optimizeCluster(size_t cluster_id,
-//                                                 VerticesIntPairSet& bad_loops,
-//                                                 VerticesIntPairSet& good_loops)
+//                                                 VerticesIntPairSet&
+//                                                 bad_loops,
+//                                                 VerticesIntPairSet&
+//                                                 good_loops)
 // {
 
 // }
@@ -362,9 +375,11 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
 //     for (; cIt != cEnd; cIt++) {
 //       if (goodSet.find(*cIt) == goodSet.end() and
 //           rejectSet.find(*cIt) == rejectSet.end())  // We can't ignore this
-//                                                     // because it is nether in
+//                                                     // because it is nether
+//                                                     in
 //                                                     // goodSet nor in
-//                                                     // rejectSet at the moment
+//                                                     // rejectSet at the
+//                                                     moment
 //       {
 //         hypotheses.insert(*cIt);
 //       }
@@ -454,6 +469,5 @@ bool RRRLoopProofer<Optimizer>::optimizeInc(const VerticesPairSet& possible_loop
 //   return true;
 // }
 
-
-} // end of slamuk namespace
+}  // end of slamuk namespace
 #endif

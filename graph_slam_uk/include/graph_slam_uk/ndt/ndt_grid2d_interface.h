@@ -1,5 +1,6 @@
-#ifndef NDT_GRID2D_NDT_GRID2D_INTERFACE
-#define NDT_GRID2D_NDT_GRID2D_INTERFACE
+#ifndef GRAPH_SLAM_UK_NDT_GRID2D_INTERFACE
+#define GRAPH_SLAM_UK_NDT_GRID2D_INTERFACE
+
 #include <Eigen/Dense>
 #include <pcl/point_cloud.h>
 

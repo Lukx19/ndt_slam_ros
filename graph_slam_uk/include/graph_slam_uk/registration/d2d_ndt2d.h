@@ -1,5 +1,5 @@
-#ifndef NDT_SCANMATCHING2D_D2D_NDT2D
-#define NDT_SCANMATCHING2D_D2D_NDT2D
+#ifndef GRAPH_SLAM_UK_D2D_NDT2D
+#define GRAPH_SLAM_UK_D2D_NDT2D
 
 #include <ros/ros.h>
 #include <pcl/registration/registration.h>
@@ -28,7 +28,6 @@ struct ScoreAndDerivatives
   Eigen::Matrix<T, N, N> hessian_;
   Eigen::Matrix<T, N, 1> gradient_;
   T value_;
-
 
   static ScoreAndDerivatives<N, T> Zero()
   {
@@ -167,7 +166,8 @@ public:
   {
     return layer_count_;
   }
-  /** \brief Set/change the voxel grid cell size for the finnest grid. Other grids
+  /** \brief Set/change the voxel grid cell size for the finnest grid. Other
+   * grids
    * will have higher length of cell (coarse)
     * \param[in] cel_size cell size in meters
     */
@@ -181,7 +181,8 @@ public:
     }
   }
 
-  void setCellSize(const std::vector<float> & cell_sizes){
+  void setCellSize(const std::vector<float> &cell_sizes)
+  {
     layer_count_ = cell_sizes.size();
     cell_sizes_ = cell_sizes;
     std::sort(cell_sizes_.begin(), cell_sizes_.end());
@@ -305,10 +306,11 @@ protected:
     params_.clear();
     for (size_t i = 0; i < cell_sizes_.size(); ++i) {
       params_.push_back(
-          d2d_ndt2d::FittingParams(outlier_ratio_, 1/cell_sizes_[i]));
+          d2d_ndt2d::FittingParams(outlier_ratio_, 1 / cell_sizes_[i]));
     }
   }
-  /** \brief Initialize cell_sizes. First grid will have cells of base_size length.base_size
+  /** \brief Initialize cell_sizes. First grid will have cells of base_size
+  * length.base_size
   * Other layers have cell sizes in multiples of 2. e.g.
   * 0.25, 0.5, 1, 2
    * Numer of layers is chosen based on layer_count parameter. Cell sizes
@@ -318,7 +320,7 @@ protected:
   virtual inline bool initCellSizes(float base_size)
   {
     cell_sizes_.clear();
-    for (int i = layer_count_-1; i >=0; --i) {
+    for (int i = layer_count_ - 1; i >= 0; --i) {
       cell_sizes_.push_back(base_size * std::pow(2, i));
     }
     return true;
@@ -357,7 +359,7 @@ protected:
                                   bool calc_hessian);
 
   virtual d2d_ndt2d::ScoreAndDerivatives<3, double> calcSourceCellScore(
-      const Eigen::Vector3d & mean_source, const Eigen::Matrix3d & cov_source,
+      const Eigen::Vector3d &mean_source, const Eigen::Matrix3d &cov_source,
       const typename TargetGrid::Leaf *cell_t,
       const d2d_ndt2d::JacobianHessianDerivatives &deriv,
       const d2d_ndt2d::FittingParams &param, bool calc_hessian);
@@ -413,18 +415,15 @@ protected:
     return (g_a - mu * g_0);
   }
   template <typename T = float>
-  Eigen::Matrix<T,4,4> vecToMat(const Eigen::Vector3d &trans) const;
+  Eigen::Matrix<T, 4, 4> vecToMat(const Eigen::Vector3d &trans) const;
   template <typename T = float>
-  Eigen::Vector3d matToVec(const Eigen::Matrix<T,4,4> &trans) const;
+  Eigen::Vector3d matToVec(const Eigen::Matrix<T, 4, 4> &trans) const;
 };
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget>
 D2DNormalDistributionsTransform2D<
     PointSource, PointTarget>::D2DNormalDistributionsTransform2D()
-    : step_size_(0.1)
-    , outlier_ratio_ (0.55)
-    , trans_probability_()
-    ,layer_count_(4)
+  : step_size_(0.1), outlier_ratio_(0.55), trans_probability_(), layer_count_(4)
 {
   nr_iterations_ = 0;
   max_iterations_ = 35;
@@ -450,7 +449,8 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
     source_grid.setInputCloud(input_);
     target_grid.filter(true);
     source_grid.filter(true);
-    if (!computeSingleGrid(source_grid, trans, target_grid, params_[i],trans)) {
+    if (!computeSingleGrid(source_grid, trans, target_grid, params_[i],
+                           trans)) {
       converged_ = false;
       return;
     }
@@ -478,9 +478,9 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
   Eigen::Vector3d delta_xytheta_p;
   Eigen::Matrix4f p;
   double delta_p_norm;
-  d2d_ndt2d::ScoreAndDerivatives<3,double> score;
+  d2d_ndt2d::ScoreAndDerivatives<3, double> score;
   while (!converged_) {
-     score = calcScore(param, source_grid, xytheta_p, target_grid, true);
+    score = calcScore(param, source_grid, xytheta_p, target_grid, true);
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -496,8 +496,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
       converged_ = delta_p_norm == delta_p_norm;
       covariance_.setIdentity();
       inform_matrix_.setIdentity();
-      ROS_ERROR_STREAM(
-          "[D2D_NDT2D]:Not enough overlap. Probability: " << trans_probability_);
+      ROS_ERROR_STREAM("[D2D_NDT2D]:Not enough overlap. Probability: "
+                       << trans_probability_);
       return false;
     }
     delta_xytheta_p.normalize();
@@ -508,7 +508,6 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
     delta_xytheta_p *= delta_p_norm;
     xytheta_p += delta_xytheta_p;
     p = vecToMat(xytheta_p);
-
 
     ++nr_iterations_;
     previous_transformation_ = transformation_;
@@ -551,9 +550,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
   typedef std::vector<typename TargetGrid::LeafConstPtr> NeighborsVector;
   typedef std::map<size_t, typename VoxelGridCovariance<PointSource>::Leaf>
       SourceMap;
-  typedef std::vector<typename VoxelGridCovariance<PointSource>::Leaf>
-      SourceVec;
-  typedef d2d_ndt2d::ScoreAndDerivatives<3,double> ReturnVals;
+  typedef std::vector<typename VoxelGridCovariance<PointSource>::Leaf> SourceVec;
+  typedef d2d_ndt2d::ScoreAndDerivatives<3, double> ReturnVals;
 
   ReturnVals res;
 
@@ -564,19 +562,18 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
   SourceVec source_cells;
   source_cells.reserve(source_map.size());
   for (typename SourceMap::const_iterator source_cell = source_map.cbegin();
-           source_cell != source_map.cend(); ++source_cell) {
+       source_cell != source_map.cend(); ++source_cell) {
     source_cells.push_back(source_cell->second);
   }
 
   std::vector<ReturnVals> omp_ret;
   omp_ret.resize(4);
-  for(size_t i = 0; i< 4;++i){
-      omp_ret.push_back(ReturnVals());
+  for (size_t i = 0; i < 4; ++i) {
+    omp_ret.push_back(ReturnVals());
   }
 
 #pragma omp parallel num_threads(2)
   {
-
 #pragma omp for
     for (size_t cell_id = 0; cell_id < source_cells.size(); ++cell_id) {
       int thread_id = omp_get_thread_num();
@@ -609,8 +606,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
       }
     }
   }
- for(size_t i = 0; i< omp_ret.size();++i){
-     res += omp_ret[i];
+  for (size_t i = 0; i < omp_ret.size(); ++i) {
+    res += omp_ret[i];
   }
   return res;
 }
@@ -643,7 +640,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeDerivatives(
 template <typename PointSource, typename PointTarget>
 d2d_ndt2d::ScoreAndDerivatives<3, double>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore(
-    const Eigen::Vector3d & mean_source, const Eigen::Matrix3d & cov_source,
+    const Eigen::Vector3d &mean_source, const Eigen::Matrix3d &cov_source,
     const typename TargetGrid::Leaf *cell_t,
     const d2d_ndt2d::JacobianHessianDerivatives &deriv,
     const d2d_ndt2d::FittingParams &param, bool calc_hessian)
@@ -993,15 +990,16 @@ double D2DNormalDistributionsTransform2D<
 
 template <typename PointSource, typename PointTarget>
 template <typename T>
-Eigen::Matrix<T,4,4> D2DNormalDistributionsTransform2D<
+Eigen::Matrix<T, 4, 4> D2DNormalDistributionsTransform2D<
     PointSource, PointTarget>::vecToMat(const Eigen::Vector3d &trans) const
 {
-  Eigen::Matrix<T,4,4> trans_mat = Eigen::Matrix<T,4,4>::Identity();
+  Eigen::Matrix<T, 4, 4> trans_mat = Eigen::Matrix<T, 4, 4>::Identity();
 
-  trans_mat.block(0, 0,3,3).matrix() = Eigen::Matrix<T,3,3>(Eigen::AngleAxis<T>(
-      static_cast<T>(trans(2)), Eigen::Matrix<T,3,1>::UnitZ()));
+  trans_mat.block(0, 0, 3, 3).matrix() =
+      Eigen::Matrix<T, 3, 3>(Eigen::AngleAxis<T>(
+          static_cast<T>(trans(2)), Eigen::Matrix<T, 3, 1>::UnitZ()));
 
-  trans_mat.block(0, 3,3,1).matrix() = Eigen::Matrix<T,3,1>(
+  trans_mat.block(0, 3, 3, 1).matrix() = Eigen::Matrix<T, 3, 1>(
       static_cast<T>(trans(0)), static_cast<T>(trans(1)), 0.0);
 
   return trans_mat;
@@ -1009,12 +1007,13 @@ Eigen::Matrix<T,4,4> D2DNormalDistributionsTransform2D<
 
 template <typename PointSource, typename PointTarget>
 template <typename T>
-Eigen::Vector3d D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget>::matToVec(const Eigen::Matrix<T,4,4> &trans) const
+Eigen::Vector3d
+D2DNormalDistributionsTransform2D<PointSource, PointTarget>::matToVec(
+    const Eigen::Matrix<T, 4, 4> &trans) const
 {
   Eigen::Vector3d vec;
   Eigen::Transform<T, 3, Eigen::Affine, Eigen::ColMajor> trans_mat(trans);
-  Eigen::Matrix<T,3,1> translation = trans_mat.translation();
+  Eigen::Matrix<T, 3, 1> translation = trans_mat.translation();
   vec << translation(0), translation(1),
       std::atan2(trans_mat.rotation()(1, 0), trans_mat.rotation()(0, 0));
   return vec;

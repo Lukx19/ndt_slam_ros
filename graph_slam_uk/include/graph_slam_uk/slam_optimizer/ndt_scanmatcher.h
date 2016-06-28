@@ -1,9 +1,9 @@
 #ifndef GRAPH_SLAM_UK_NDT_SCANMATCHING
 #define GRAPH_SLAM_UK_NDT_SCANMATCHING
 
-#include <graph_slam_uk/graph_slam_interfaces.h>
-#include <dynamic_slam_utils/eigen_tools.h>
-#include <ndt_scanmatching2d/d2d_ndt2d_robust.h>
+#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/registration/d2d_ndt2d_robust.h>
 
 namespace slamuk
 {

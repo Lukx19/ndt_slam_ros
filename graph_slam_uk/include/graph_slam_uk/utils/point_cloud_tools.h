@@ -1,5 +1,5 @@
-#ifndef POINT_CLOUD_TOOLS
-#define POINT_CLOUD_TOOLS
+#ifndef GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
+#define GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 
 #include <pcl/point_cloud.h>
 

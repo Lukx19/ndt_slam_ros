@@ -1,9 +1,9 @@
-#ifndef NDT_SCANMATCHING2D_D2D_NDT2D_ROBUST
-#define NDT_SCANMATCHING2D_D2D_NDT2D_ROBUST
+#ifndef GRAPH_SLAM_UK_D2D_NDT2D_ROBUST
+#define GRAPH_SLAM_UK_D2D_NDT2D_ROBUST
 
-#include <ndt_scanmatching2d/correlative_estimation_tools.h>
-#include <ndt_scanmatching2d/d2d_ndt2d.h>
-#include <ndt_scanmatching2d/correlative_estimation2d.h>
+#include <graph_slam_uk/registration/correlative_estimation_tools.h>
+#include <graph_slam_uk/registration/d2d_ndt2d.h>
+#include <graph_slam_uk/registration/correlative_estimation2d.h>
 #include <pcl/registration/registration.h>
 #include <pcl/registration/icp.h>
 
@@ -200,10 +200,10 @@ D2DNormalDistributionsTransform2DRobust<
   d2d_.setCellSize(cell_sizes);
   d2d_.setMaximumIterations(10);
 
-  //icp_.setMaxCorrespondenceDistance (0.5);
-  //icp_.setRANSACOutlierRejectionThreshold (0.5);
-  //icp_.setTransformationEpsilon (transformation_epsilon);
-  //icp_.setMaximumIterations (3);
+  // icp_.setMaxCorrespondenceDistance (0.5);
+  // icp_.setRANSACOutlierRejectionThreshold (0.5);
+  // icp_.setTransformationEpsilon (transformation_epsilon);
+  // icp_.setMaximumIterations (3);
 }
 //////////////////
 template <typename PointSource, typename PointTarget>
@@ -212,7 +212,7 @@ void D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>::
 {
   // standard D2D match try for good guess estimations
   d2d_.align(output, guess);
-  double score  = proofTransform(d2d_.getFinalTransformation());
+  double score = proofTransform(d2d_.getFinalTransformation());
   Eigen::Matrix4f first_trans;
   // test if first d2d has return bad result
   if (!(d2d_.hasConverged() && score > 0.7)) {
@@ -227,33 +227,33 @@ void D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>::
     // second d2d -> precise alignment
     d2d_.align(output, corr_est_.getFinalTransformation());
     if (!d2d_.hasConverged()) {  //||
-                                 //!proofTransform(d2d_.getFinalTransformation()))
-                                 //{
+      //!proofTransform(d2d_.getFinalTransformation()))
+      //{
       converged_ = false;
       final_transformation_.setIdentity();
       return;
     }
- }
- // score result
- double score2 = proofTransform(d2d_.getFinalTransformation());
+  }
+  // score result
+  double score2 = proofTransform(d2d_.getFinalTransformation());
   // robust alignemnt still not good enough
-  if(score2 < 0.4){
+  if (score2 < 0.4) {
     // Maybe at least first d2d got some reasonable result
-    if(score > 0.6){
-       converged_ = true;
+    if (score > 0.6) {
+      converged_ = true;
       final_transformation_ = first_trans;
-    }else{
+    } else {
       // everyting is bad probably not the same place
       converged_ = false;
       final_transformation_.setIdentity();
     }
-  }else{
+  } else {
     // we got good result by robust algorithm
-     converged_ = true;
-    final_transformation_ =  d2d_.getFinalTransformation();
+    converged_ = true;
+    final_transformation_ = d2d_.getFinalTransformation();
   }
   // output cloud transform
- transformPointCloud(*input_, output, final_transformation_);
+  transformPointCloud(*input_, output, final_transformation_);
 }
 
 /////////////////////
@@ -262,18 +262,18 @@ double D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget>::proofTransform(const Eigen::Matrix4f &trans)
 {
   ml_corr::LookUpTable<PointTarget> proof_grid;
-  proof_grid.initGrid(*target_,cell_size_,0.5);
+  proof_grid.initGrid(*target_, cell_size_, 0.5);
   PclSource output;
   transformPointCloud(*input_, output, trans);
   double score = proof_grid.getScore(output);
-  ROS_DEBUG_STREAM("proofer score: "<< score);
+  ROS_DEBUG_STREAM("proofer score: " << score);
   return score;
   // if(score > min_score){
   //   return true;
   // }
   // return false;
 
-  //return proof_grid.testMatch(output,1f,0.6);
+  // return proof_grid.testMatch(output,1f,0.6);
 }
 }  // end of namespace pcl
 

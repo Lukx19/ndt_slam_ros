@@ -1,5 +1,5 @@
-#ifndef NDT_SCANMATCHING2D_CORRELATIVE_ESTIMATION_TOOLS
-#define NDT_SCANMATCHING2D_CORRELATIVE_ESTIMATION_TOOLS
+#ifndef GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION_TOOLS
+#define GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION_TOOLS
 
 #include <Eigen/Dense>
 #include <vector>
@@ -145,6 +145,7 @@ public:
   void moveIndexes(std::vector<IndexPoint> &indexes, int dx, int dy) const;
   void transformIndexes(const std::vector<IndexPoint> &source,
                         std::vector<IndexPoint> &out, float dx, float dy) const;
+
 protected:
   float cell_size_;
   float cell_size_half_;
@@ -188,7 +189,7 @@ void LookUpTable<PointType>::initGrid(const pcl::PointCloud<PointType> &target,
       std::ceil((maxy_ - miny_) / grid_step) + 1 + 2 * border_size_;
   // kernel is used for smearing points in look up table
 
-  //std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
+  // std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
   ROS_DEBUG_STREAM("creating grid cells x: " << cell_count_row_
                                              << " y: " << cell_count_col_);
   ROS_DEBUG_STREAM("values: minx: " << minx_ << " maxx: " << maxx_ << " miny "
@@ -230,7 +231,7 @@ double LookUpTable<PointType>::getScore(const std::vector<IndexPoint> &pcl) cons
     res += getPtScore(pcl[i]);
     // if(temp == OCCUPIED_CELL)
     //  ++valid_pts;
-    //res += temp;
+    // res += temp;
   }
   if (pcl.size() == 0)
     return 0;
@@ -363,8 +364,7 @@ void LookUpTable<PointType>::applyKernel(size_t row, size_t col)
 }
 
 template <typename PointType>
-float
-LookUpTable<PointType>::getPtScore(const Eigen::Vector2f &pt) const
+float LookUpTable<PointType>::getPtScore(const Eigen::Vector2f &pt) const
 {
   if (pt(0) < maxx_ && pt(1) < maxy_ && pt(0) > minx_ && pt(1) > miny_) {
     return table_[getCellIdx(pt)];
@@ -373,8 +373,7 @@ LookUpTable<PointType>::getPtScore(const Eigen::Vector2f &pt) const
 }
 
 template <typename PointType>
-float
-LookUpTable<PointType>::getPtScore(const IndexPoint &pt) const
+float LookUpTable<PointType>::getPtScore(const IndexPoint &pt) const
 {
   if (pt.x_idx_ < 0 || pt.y_idx_ < 0 || pt.x_idx_ >= cell_count_row_ ||
       pt.y_idx_ >= cell_count_col_) {

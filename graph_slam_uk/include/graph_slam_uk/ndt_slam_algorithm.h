@@ -2,14 +2,13 @@
 #define GRAPH_SLAM_UK_GRAPH_SLAM2D_ALG
 
 #include <Eigen/Dense>
-#include <dynamic_slam_utils/eigen_tools.h>
-#include <graph_slam_uk/graph_slam_interfaces.h>
-#include <graph_slam_uk/ndt_scanmatcher.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
 #include <graph_slam_uk/ndt_grid2d_holder.h>
-#include <dynamic_slam_utils/covariance_wrapper.h>
+#include <graph_slam_uk/utils/covariance_wrapper.h>
 #include <opencv/cv.h>
 
-#include <ndt_scanmatching2d/d2d_ndt.h>
+#include <graph_slam_uk/registration/d2d_ndt.h>
 
 namespace slamuk
 {

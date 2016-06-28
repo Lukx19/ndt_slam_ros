@@ -1,13 +1,13 @@
-#ifndef NDT_SCANMATCHING2D_CORRELATIVE_ESTIMATION
-#define NDT_SCANMATCHING2D_CORRELATIVE_ESTIMATION
+#ifndef GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION
+#define GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION
 
 #include <ros/ros.h>
 #include <pcl/registration/registration.h>
 #include <pcl/filters/voxel_grid_covariance.h>
 #include <Eigen/Dense>
-#include <dynamic_slam_utils/eigen_tools.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
 #include <pcl/common/time.h>
-#include <ndt_scanmatching2d/correlative_estimation_tools.h>
+#include <graph_slam_uk/registration/correlative_estimation_tools.h>
 
 namespace pcl
 {
@@ -197,10 +197,10 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
     converged_ = false;
     return;
   }
-  Eigen::Vector3f best_trans=  search_voxels.back().transform_;
+  Eigen::Vector3f best_trans = search_voxels.back().transform_;
   ROS_DEBUG_STREAM(
       "[CorrelativeEstimation]: final_delta_trans:" << best_trans.transpose());
-  //ROS_DEBUG_STREAM("\n" << coarse_lookup_);
+  // ROS_DEBUG_STREAM("\n" << coarse_lookup_);
 
   // output data
   converged_ = true;

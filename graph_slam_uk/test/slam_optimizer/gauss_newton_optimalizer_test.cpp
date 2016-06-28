@@ -12,9 +12,9 @@
 
 #include <Eigen/Dense>
 
-#include <dynamic_slam_utils/eigen_tools.h>
-#include <graph_slam_uk/gauss_newton_optimalizer2d.h>
-#include <graph_slam_uk/pcl_ndt_scanmatcher.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/slam_optimizer/gauss_newton_optimalizer2d.h>
+#include <graph_slam_uk/slam_optimizer/ndt_scanmatcher.h>
 
 using namespace pcl;
 
@@ -23,8 +23,8 @@ typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 size_t idx = 0;
-slamuk::PclNdtScanmatcher matcher;
-slamuk::GaussNewtonOptimalize2d < pcl_t::Ptr > graph(matcher);
+slamuk::NdtScanmatcher matcher;
+slamuk::GaussNewtonOptimalize2d<pcl_t::Ptr> graph(matcher);
 
 std::vector<std::string> split(std::string data, std::string token)
 {
@@ -101,16 +101,18 @@ void preparePoseData(std::string folder)
 
 void test()
 {
-  graph.addPose(real_poses[0],scans[0]);
-  for(size_t i = 1; i < real_poses.size();++i){
-    auto real_trans = eigt::transBtwPoses(real_poses[i-1], real_poses[i]);
+  graph.addPose(real_poses[0], scans[0]);
+  for (size_t i = 1; i < real_poses.size(); ++i) {
+    auto real_trans = eigt::transBtwPoses(real_poses[i - 1], real_poses[i]);
     slamuk::MatchResult res;
-    //res =matcher.match(scans[i], scans[i-1],real_trans.matrix());
-    graph.addPose(real_poses[i],scans[i]);
-    //std::cout<<res.inform_.inverse()<<std::endl;
-    graph.addLastConstrain(eigt::getPoseFromTransform(real_trans),Eigen::Matrix3d::Identity());
-    std::cout<<"Added nodes: "<<i-1<<":"<<i<<std::endl;
-    std::cout<<"Real displacement: "<<eigt::getDisplacement(real_trans)<<std::endl;
+    // res =matcher.match(scans[i], scans[i-1],real_trans.matrix());
+    graph.addPose(real_poses[i], scans[i]);
+    // std::cout<<res.inform_.inverse()<<std::endl;
+    graph.addLastConstrain(eigt::getPoseFromTransform(real_trans),
+                           Eigen::Matrix3d::Identity());
+    std::cout << "Added nodes: " << i - 1 << ":" << i << std::endl;
+    std::cout << "Real displacement: " << eigt::getDisplacement(real_trans)
+              << std::endl;
     graph.tryLoopClose();
     graph.getGraphSerialized(std::cout);
   }

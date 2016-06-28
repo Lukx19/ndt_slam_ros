@@ -1,5 +1,5 @@
-#ifndef NDT_GRID2D_NDT_CELL2D
-#define NDT_GRID2D_NDT_CELL2D
+#ifndef GRAPH_SLAM_UK_NDT_CELL2D
+#define GRAPH_SLAM_UK_NDT_CELL2D
 
 #include <Eigen/Dense>
 

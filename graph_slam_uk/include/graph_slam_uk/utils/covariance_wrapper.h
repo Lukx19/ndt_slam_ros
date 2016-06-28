@@ -1,7 +1,7 @@
-#ifndef DYNAMIC_SLAM_UTILS_COVARIANCE_WRAPPER
-#define DYNAMIC_SLAM_UTILS_COVARIANCE_WRAPPER
+#ifndef GRAPH_SLAM_UK_COVARIANCE_WRAPPER
+#define GRAPH_SLAM_UK_COVARIANCE_WRAPPER
 
-#include <dynamic_slam_utils/eigen_tools.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
 namespace slamuk
 {
 class CovarianceWrapper

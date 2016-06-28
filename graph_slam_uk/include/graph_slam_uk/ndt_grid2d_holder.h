@@ -1,7 +1,7 @@
 #ifndef GRAPH_SLAM_UK_NDT_GRID2D_HOLDER
 #define GRAPH_SLAM_UK_NDT_GRID2D_HOLDER
 
-#include <ndt_grid2d/ndt_grid2d.h>
+#include <graph_slam_uk/ndt/ndt_grid2d.h>
 
 namespace slamuk
 {

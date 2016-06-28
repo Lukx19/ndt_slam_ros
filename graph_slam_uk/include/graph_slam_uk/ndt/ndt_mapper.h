@@ -1,13 +1,12 @@
-#ifndef NDT_GRID2D_NDT_MAPPER
-#define NDT_GRID2D_NDT_MAPPER
+#ifndef GRAPH_SLAM_UK_NDT_MAPPER
+#define GRAPH_SLAM_UK_NDT_MAPPER
 
 #include <map>
 #include <memory>
 #include <Eigen/Dense>
 #include <opencv/cv.h>
-#include <dynamic_slam_utils/eigen_tools.h>
-#include <>
-//#include <ndt_grid2d/types.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/ndt/ndt_grid2d_interface.h>
 
 /*
 INDTGrid2D needs to have implemented:

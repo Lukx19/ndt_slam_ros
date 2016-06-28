@@ -1,5 +1,5 @@
-#ifndef EIGEN_TOOLS
-#define EIGEN_TOOLS
+#ifndef GRAPH_SLAM_UK_EIGEN_TOOLS
+#define GRAPH_SLAM_UK_EIGEN_TOOLS
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -62,7 +62,6 @@ eigt::transform2d_t<T> getTransFromPose(const pose2d_t<T> &trans);
 
 template <typename T = double>
 T normalizeAngle(T angle);
-
 }
 // ************************* IMPLEMENTATION****************************
 template <typename T>
@@ -87,7 +86,8 @@ eigt::pose2d_t<T> eigt::transformPose(const pose2d_t<T> &pose,
   Eigen::Rotation2D<T> rot(pose(2));
   pose2d_t<T> res_pose;
   pose2d_t<T> inc = getPoseFromTransform(trans);
-  res_pose.head(2) = pose.head(2) + rot.toRotationMatrix().transpose() * inc.head(2);
+  res_pose.head(2) =
+      pose.head(2) + rot.toRotationMatrix().transpose() * inc.head(2);
   res_pose(2) = normalizeAngle(pose(2) + inc(2));
   return res_pose;
 }
@@ -156,7 +156,7 @@ template <typename T>
 T eigt::normalizeAngle(T angle)
 {
   return atan2(sin(angle), cos(angle));
-  //return angle - 2 * M_PI *std::floor((angle + M_PI) / (2 * M_PI));
+  // return angle - 2 * M_PI *std::floor((angle + M_PI) / (2 * M_PI));
 }
 
 #endif

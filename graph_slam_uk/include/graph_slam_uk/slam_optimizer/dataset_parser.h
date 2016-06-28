@@ -2,7 +2,7 @@
 #define GRAPH_SLAM_UK_DATASET_PARSER
 
 #include <vector>
-#include <graph_slam_uk/graph_slam_interfaces.h>
+#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
 
 namespace slamuk
 {

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include <graph_slam_uk/pose_graph.h>
-#include <graph_slam_uk/slam2d_policy.h>
+#include <graph_slam_uk/slam_optimizer/pose_graph.h>
+#include <graph_slam_uk/slam_optimizer/slam2d_policy.h>
 using namespace slamuk;
 
 typedef Slam2d_Policy P;
@@ -17,7 +17,7 @@ void prepareGraph(graph_t &graph)
   P::Pose p;
   P::InformMatrix inform;
   for (size_t i = 0; i < 20; ++i) {
-    graph.addNode(node_t(p,obj));
+    graph.addNode(node_t(p, obj));
   }
   for (size_t i = 0; i < 19; ++i) {
     graph.addEdge(edge_t(&graph.getNode(i), &graph.getNode(i + 1), p, inform));
@@ -29,9 +29,9 @@ void prepareGraphIncrementaly(graph_t &graph)
   obj_t obj;
   P::Pose p;
   P::InformMatrix inform;
-  graph.addNode(node_t(p,obj));
-  for(size_t i =0; i < 19;++i){
-    graph.addNode(node_t(p,obj));
+  graph.addNode(node_t(p, obj));
+  for (size_t i = 0; i < 19; ++i) {
+    graph.addNode(node_t(p, obj));
     graph.addEdge(edge_t(&graph.getNode(i), &graph.getNode(i + 1), p, inform));
   }
 }
@@ -54,8 +54,8 @@ TEST(PoseGraph, addingNodesAndEdges)
     P::InformMatrix inform;
     obj_t obj;
     for (size_t i = 0; i < 20; ++i) {
-      size_t id = graph.addNode(node_t(p,obj));
-      //size_t id = graph.addNode(node_t(p,obj));
+      size_t id = graph.addNode(node_t(p, obj));
+      // size_t id = graph.addNode(node_t(p,obj));
       EXPECT_TRUE(id == i);
     }
     for (size_t i = 0; i < 19; ++i) {
@@ -82,12 +82,12 @@ TEST(PoseGraph, removingEdgesAndAddBack)
     EXPECT_TRUE(graph.removeEdge(11));
     EXPECT_FALSE(graph.removeEdge(200));
     EXPECT_FALSE(graph.removeEdge(10));
-    EXPECT_EQ(11,graph.addEdge(edge_t(&graph.getNode(1), &graph.getNode(2), p,
-                                     inform)));
-    EXPECT_EQ(10,graph.addEdge(edge_t(&graph.getNode(1), &graph.getNode(2), p,
-                                     inform)));
-    EXPECT_EQ(19,graph.addEdge(edge_t(&graph.getNode(1), &graph.getNode(2), p,
-                                     inform)));
+    EXPECT_EQ(11, graph.addEdge(
+                      edge_t(&graph.getNode(1), &graph.getNode(2), p, inform)));
+    EXPECT_EQ(10, graph.addEdge(
+                      edge_t(&graph.getNode(1), &graph.getNode(2), p, inform)));
+    EXPECT_EQ(19, graph.addEdge(
+                      edge_t(&graph.getNode(1), &graph.getNode(2), p, inform)));
   } catch (...) {
     ADD_FAILURE() << "Uncaught exception";
   }
@@ -95,22 +95,22 @@ TEST(PoseGraph, removingEdgesAndAddBack)
 
 TEST(PoseGraph, checkCorrectEdgeRoutes)
 {
-  try{
+  try {
     P::Pose p;
     P::InformMatrix inform;
     graph_t graph;
     prepareGraphIncrementaly(graph);
-    for(size_t i = 0; i< 19;++i){
-      EXPECT_EQ(i,graph.getEdge(i).getFrom()->getId());
-      EXPECT_EQ(i+1,graph.getEdge(i).getTo()->getId());
+    for (size_t i = 0; i < 19; ++i) {
+      EXPECT_EQ(i, graph.getEdge(i).getFrom()->getId());
+      EXPECT_EQ(i + 1, graph.getEdge(i).getTo()->getId());
     }
-    size_t i =0;
-    for (auto it = graph.cbeginEdge(); it != graph.cendEdge(); ++it){
-      EXPECT_EQ(i,it->getFrom()->getId());
-      EXPECT_EQ(i+1,it->getTo()->getId());
+    size_t i = 0;
+    for (auto it = graph.cbeginEdge(); it != graph.cendEdge(); ++it) {
+      EXPECT_EQ(i, it->getFrom()->getId());
+      EXPECT_EQ(i + 1, it->getTo()->getId());
       ++i;
     }
-  }catch (...) {
+  } catch (...) {
     ADD_FAILURE() << "Uncaught exception";
   }
 }
@@ -120,24 +120,25 @@ TEST(PoseGraph, iterators)
   graph_t graph;
   prepareGraphIncrementaly(graph);
   size_t i = 0;
-  std::vector<size_t> real_idx = {0,1,2,3,5,6,9,10,11,12,13,14,15,16};
+  std::vector<size_t> real_idx = {0,  1,  2,  3,  5,  6,  9,
+                                  10, 11, 12, 13, 14, 15, 16};
   EXPECT_TRUE(graph.removeEdge(4));
   EXPECT_TRUE(graph.removeEdge(7));
   EXPECT_TRUE(graph.removeEdge(8));
   EXPECT_TRUE(graph.removeEdge(17));
   EXPECT_TRUE(graph.removeEdge(18));
-  for (auto it = graph.cbeginEdge(); it != graph.cendEdge(); ++it){
-      EXPECT_EQ(real_idx[i],it->getFrom()->getId());
-      ++i;
-    }
-  i =0;
-  for (auto it = graph.beginEdge(); it != graph.endEdge(); ++it){
-      EXPECT_EQ(real_idx[i],it->getFrom()->getId());
-      ++i;
-    }
-  for (auto it = graph.beginEdge(); it != graph.endEdge(); ++it){
-      it->setId(9999);
-      EXPECT_EQ(9999,it->getId());
+  for (auto it = graph.cbeginEdge(); it != graph.cendEdge(); ++it) {
+    EXPECT_EQ(real_idx[i], it->getFrom()->getId());
+    ++i;
+  }
+  i = 0;
+  for (auto it = graph.beginEdge(); it != graph.endEdge(); ++it) {
+    EXPECT_EQ(real_idx[i], it->getFrom()->getId());
+    ++i;
+  }
+  for (auto it = graph.beginEdge(); it != graph.endEdge(); ++it) {
+    it->setId(9999);
+    EXPECT_EQ(9999, it->getId());
   }
 }
 
@@ -150,26 +151,26 @@ TEST(PoseGraph, inputOutputEdges)
   prepareGraphIncrementaly(graph);
   graph.addEdge(edge_t(&graph.getNode(1), &graph.getNode(3), p, inform));
   graph.addEdge(edge_t(&graph.getNode(3), &graph.getNode(1), p, inform));
-  //1->2->3->4
-  //1->3
-  //3->1
-  EXPECT_EQ(2,graph.getNode(3).getEdgesIn().size());
-  EXPECT_EQ(2,graph.getNode(3).getEdgesOut().size());
+  // 1->2->3->4
+  // 1->3
+  // 3->1
+  EXPECT_EQ(2, graph.getNode(3).getEdgesIn().size());
+  EXPECT_EQ(2, graph.getNode(3).getEdgesOut().size());
 
-  EXPECT_EQ(1,graph.getNode(1).getEdgesOut()[0]->getId());
-  EXPECT_EQ(2,graph.getNode(1).getEdgesOut()[0]->getTo()->getId());
-  EXPECT_EQ(1,graph.getNode(1).getEdgesOut()[0]->getFrom()->getId());
+  EXPECT_EQ(1, graph.getNode(1).getEdgesOut()[0]->getId());
+  EXPECT_EQ(2, graph.getNode(1).getEdgesOut()[0]->getTo()->getId());
+  EXPECT_EQ(1, graph.getNode(1).getEdgesOut()[0]->getFrom()->getId());
 
-  EXPECT_EQ(0,graph.getNode(1).getEdgesIn()[0]->getId());
-  EXPECT_EQ(0,graph.getNode(1).getEdgesIn()[0]->getFrom()->getId());
-  EXPECT_EQ(1,graph.getNode(1).getEdgesIn()[0]->getTo()->getId());
+  EXPECT_EQ(0, graph.getNode(1).getEdgesIn()[0]->getId());
+  EXPECT_EQ(0, graph.getNode(1).getEdgesIn()[0]->getFrom()->getId());
+  EXPECT_EQ(1, graph.getNode(1).getEdgesIn()[0]->getTo()->getId());
 
-  EXPECT_EQ(3,graph.getNode(3).getEdgesOut()[0]->getFrom()->getId());
-  EXPECT_EQ(4,graph.getNode(3).getEdgesOut()[0]->getTo()->getId());
-  EXPECT_EQ(1,graph.getNode(3).getEdgesOut()[1]->getTo()->getId());
+  EXPECT_EQ(3, graph.getNode(3).getEdgesOut()[0]->getFrom()->getId());
+  EXPECT_EQ(4, graph.getNode(3).getEdgesOut()[0]->getTo()->getId());
+  EXPECT_EQ(1, graph.getNode(3).getEdgesOut()[1]->getTo()->getId());
 
-  EXPECT_EQ(2,graph.getNode(3).getEdgesIn()[0]->getFrom()->getId());
-  EXPECT_EQ(1,graph.getNode(3).getEdgesIn()[1]->getFrom()->getId());
+  EXPECT_EQ(2, graph.getNode(3).getEdgesIn()[0]->getFrom()->getId());
+  EXPECT_EQ(1, graph.getNode(3).getEdgesIn()[1]->getFrom()->getId());
 }
 
 // Run all the tests that were declared with TEST()
