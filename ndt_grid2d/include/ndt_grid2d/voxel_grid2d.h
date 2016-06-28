@@ -46,7 +46,7 @@ public:
   bool isInside(const Point& pt);
 
   // CellVector getNeighbors(size_t row, size_t col, size_t radius) const;
-  // return all initialized neighbours in radius including cell where pt belongs
+  // return all initialized neighbors in radius including cell where pt belongs
   CellPtrVector getNeighbors(const Point& pt, size_t radius) const;
 
   bool cellExists(const Point& pt) const;
@@ -57,21 +57,33 @@ public:
   CellPtrVector getValidCellsPtr() const;
   // enlarges grid in all directions to size based on parameters. If parameters
   // are smaller than current state no enlarging or resizing is done.
-  void enlarge(float minx, float miny, float maxx, float maxy){
+  void enlarge(float minx, float miny, float maxx, float maxy)
+  {
     enlarge(calcIncLeft(minx), calcIncRight(maxx), calcIncUp(maxy),
             calcIncDown(miny));
   }
-  // return all cells laying on the ray. Uninitalized cells are created with
+  // return all cells laying on the ray. Uninitialized cells are created with
   // default constructor
   CellPtrVector rayTrace(const Point& start, const Point& end);
   // starts at 0,0
-  CellPtrVector rayTrace(const Point& end){
-    return rayTrace(Point(0,0),end);
+  CellPtrVector rayTrace(const Point& end)
+  {
+    return rayTrace(Point(0, 0), end);
   }
-  // [1,1] translate one cell right and one cell up
-  // [-1,-1] translate one cell left and one cell down
-  // discard = false will resize grid
+  /**
+   * @brief      Translates grid
+   *
+   * @param[in]  translation  Translation of grid. [1,1] translate one cell
+   *                          right and one cell up [-1,-1] translate one cell
+   *                          left.
+   * @param[in]  discard      True will not resize grid
+   */
   void translate(const Eigen::Vector2i& translation, bool discard = true);
+
+  /**
+   * @brief      Removes all valid cells from structure. All pointers, iterators
+   *             are invalidated. Allocated capacity of the grid stays the same.
+   */
   void clear();
 
   /////////////////Parameters
@@ -81,7 +93,8 @@ public:
     cell_size_half_ = cell_size / 2;
   }
 
-  float getCellSize()const{
+  float getCellSize() const
+  {
     return cell_size_;
   }
 
@@ -123,15 +136,15 @@ protected:
   size_t valid_cells_;
   CellDataVector cells_;
 
-  size_t calcIndex(const Point & pt) const;
-  size_t calcIndex(const std::pair<size_t, size_t> & coords) const;
-  std::pair<size_t,size_t> calcCoordinates(const Point& pt) const;
+  size_t calcIndex(const Point& pt) const;
+  size_t calcIndex(const std::pair<size_t, size_t>& coords) const;
+  std::pair<size_t, size_t> calcCoordinates(const Point& pt) const;
 
-  void enlargeToFit(const Point & pt);
+  void enlargeToFit(const Point& pt);
   size_t calcIncLeft(float pt) const;
   size_t calcIncRight(float pt) const;
   size_t calcIncUp(float pt) const;
-  size_t calcIncDown(float pt)const;
+  size_t calcIncDown(float pt) const;
   void enlarge(size_t left, size_t right, size_t up, size_t down,
                long move_horizontal = 0, long move_vertival = 0);
   void moveLeft(size_t move);
@@ -181,14 +194,13 @@ VoxelGrid2D<CellType>& VoxelGrid2D<CellType>::operator=(const VoxelGrid2D& other
 template <typename CellType>
 VoxelGrid2D<CellType> VoxelGrid2D<CellType>::clone() const
 {
-  VoxelGrid2D new_grid
-  new_grid.setCellSize(cell_size_);
+  VoxelGrid2D new_grid new_grid.setCellSize(cell_size_);
   return new_grid;
 }
 
 template <typename CellType>
-void VoxelGrid2D<CellType>::addCell(const Point& position,
-                                    const CellType& cell, bool merging)
+void VoxelGrid2D<CellType>::addCell(const Point& position, const CellType& cell,
+                                    bool merging)
 {
   // resizing to fit new cell
   enlargeToFit(position);
@@ -208,7 +220,7 @@ void VoxelGrid2D<CellType>::addCell(const Point& position,
 }
 
 template <typename CellType>
-void VoxelGrid2D<CellType>::addCell(const Point& position, CellType && cell,
+void VoxelGrid2D<CellType>::addCell(const Point& position, CellType&& cell,
                                     bool merging)
 {
   // resizing to fit new cell
@@ -231,10 +243,10 @@ void VoxelGrid2D<CellType>::addCell(const Point& position, CellType && cell,
 template <typename CellType>
 bool VoxelGrid2D<CellType>::removeCell(const Point& posistion)
 {
-  if(!isInside(posistion))
+  if (!isInside(posistion))
     return false;
   size_t idx = calcIndex(posistion);
-  if(cells_[idx].get() != nullptr){
+  if (cells_[idx].get() != nullptr) {
     --valid_cells_;
   }
   cells_[idx].reset(nullptr);
@@ -245,7 +257,7 @@ bool VoxelGrid2D<CellType>::isInside(const Point& pt)
 {
   if (pt(0) >= -width_left_ * cell_size_ - cell_size_half_ &&
       pt(0) <= width_right_ * cell_size_ + cell_size_half_ &&
-      pt(1) >= -height_down_ * cell_size_ - cell_size_half_&&
+      pt(1) >= -height_down_ * cell_size_ - cell_size_half_ &&
       pt(1) <= height_up_ * cell_size_ + cell_size_half_)
     return true;
   else
@@ -256,30 +268,29 @@ template <typename CellType>
 typename VoxelGrid2D<CellType>::CellPtrVector
 VoxelGrid2D<CellType>::getNeighbors(const Point& pt, size_t radius) const
 {
-  typedef std::pair<size_t,size_t> Coordinates;
+  typedef std::pair<size_t, size_t> Coordinates;
   CellPtrVector res;
-  if(!isInside(pt))
+  if (!isInside(pt))
     return res;
   Coordinates win_center = calcCoordinates(pt);
   long left = static_cast<long>(win_center.first) - static_cast<long>(radius);
-  if(left <  0)
+  if (left < 0)
     left = 0;
   long up = static_cast<long>(win_center.second) - static_cast<long>(radius);
-  if(up < 0)
-    up  = 0;
+  if (up < 0)
+    up = 0;
   size_t right = win_center.first + radius;
-  if(right > width()-1)
-    right = width()-1;
+  if (right > width() - 1)
+    right = width() - 1;
   size_t down = win_center.first + radius;
-  if(down > height())
+  if (down > height())
     down = height();
   size_t left_unsig = static_cast<size_t>(left);
   size_t up_unsig = static_cast<size_t>(up);
-  for(size_t row = up_unsig; row < down; ++row)
-  {
-    for(size_t col = left_unsig; col < right; ++col){
-      size_t idx = calcIndex(std::make_pair(col,row));
-      if(cells_[idx].get()!= nullptr){
+  for (size_t row = up_unsig; row < down; ++row) {
+    for (size_t col = left_unsig; col < right; ++col) {
+      size_t idx = calcIndex(std::make_pair(col, row));
+      if (cells_[idx].get() != nullptr) {
         res.push_back(cells_[idx].get());
       }
     }
@@ -290,7 +301,7 @@ VoxelGrid2D<CellType>::getNeighbors(const Point& pt, size_t radius) const
 template <typename CellType>
 bool VoxelGrid2D<CellType>::cellExists(const Point& pt) const
 {
-  if(!isInside(pt))
+  if (!isInside(pt))
     return false;
   if (cells_[calcIndex(pt)].get() == nullptr)
     return false;
@@ -312,8 +323,8 @@ VoxelGrid2D<CellType>::getValidCells() const
 {
   CellVector good_cells;
   good_cells.resize(valid_cells_);
-  for(auto & cell : cells_){
-    if(cell.get() != nullptr){
+  for (auto& cell : cells_) {
+    if (cell.get() != nullptr) {
       good_cells.push_back(*cell);
     }
   }
@@ -326,15 +337,15 @@ VoxelGrid2D<CellType>::getValidCellsPtr() const
 {
   CellPtrVector good_cells;
   good_cells.resize(valid_cells_);
-  for(auto & cell : cells_){
-    if(cell.get() != nullptr){
+  for (auto& cell : cells_) {
+    if (cell.get() != nullptr) {
       good_cells.push_back(cell.get());
     }
   }
   return good_cells;
 }
 
-// return all cells laying on the ray. Uninitalized cells are created with
+// return all cells laying on the ray. Uninitialized cells are created with
 // default constructor
 
 template <typename CellType>
@@ -345,14 +356,14 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   auto idx1 = calcCoordinates(start);
   auto idx2 = calcCoordinates(end);
   Point delta;
-  delta(0) = (end(0)-start(0))/ (idx2.first - idx1.first);
-  delta(1) = (end(1)-start(1))/ (idx2.second - idx1.second);
+  delta(0) = (end(0) - start(0)) / (idx2.first - idx1.first);
+  delta(1) = (end(1) - start(1)) / (idx2.second - idx1.second);
   Point p = start;
-  p+=delta;
+  p += delta;
   size_t idx_old = calcIndex(start);
-  size_t idx_current =  calcIndex(p);
+  size_t idx_current = calcIndex(p);
   size_t idx_finish = calcIndex(end);
-  // add start cell as one of raytraced cell
+  // add start cell as one of ray-traced cell
   if (cells_[idx_old].get() == nullptr) {
     cells_[idx_old].reset(new CellType());
     res.push_back(cells_[idx_old].get());
@@ -365,13 +376,12 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
       }
       res.push_back(cells_[idx_current].get());
     }
-    p+=delta;
+    p += delta;
     idx_old = idx_current;
     idx_current = calcIndex(p);
   }
   return res;
 }
-
 
 // [1,1] translate one cell right and one cell up
 // [-1,-1] translate one cell left and one cell down
@@ -391,21 +401,22 @@ void VoxelGrid2D<CellType>::translate(const Eigen::Vector2i& translation,
     down = static_cast<size_t>(translation(1) * -1);
   else
     up = static_cast<size_t>(translation(1));
-  if (discard){
+  if (discard) {
     moveLeft(left);
     moveRight(right);
     moveUp(up);
     moveDown(down);
-  }else{
-    enlarge(left,right,up,down,translation(0),translation(1));
+  } else {
+    enlarge(left, right, up, down, translation(0), translation(1));
   }
 }
 
 template <typename CellType>
 void VoxelGrid2D<CellType>::clear()
 {
-  cells_.clear();
-  width_right_=width_left_ = height_down_ = height_up_ = 0;
+  for (auto&& cell : cells_) {
+    cell.reset(nullptr);
+  }
 }
 
 // /////////////////PROTECTED
@@ -417,9 +428,11 @@ size_t VoxelGrid2D<CellType>::calcIndex(const Point& pt) const
 }
 
 template <typename CellType>
-size_t VoxelGrid2D<CellType>::calcIndex(const std::pair<size_t, size_t> & coords) const{
+size_t
+VoxelGrid2D<CellType>::calcIndex(const std::pair<size_t, size_t>& coords) const
+{
   // row * row_width + coll
-  return  coords.second * width() + coords.first;
+  return coords.second * width() + coords.first;
 }
 
 template <typename CellType>
@@ -437,43 +450,48 @@ VoxelGrid2D<CellType>::calcCoordinates(const Point& pt) const
 }
 
 template <typename CellType>
-void VoxelGrid2D<CellType>::enlargeToFit(const Point & pt)
+void VoxelGrid2D<CellType>::enlargeToFit(const Point& pt)
 {
   // keep in sync with calculation in isInside. Mostly operator< and widths
   // calculations
-  if(isInside(pt))
+  if (isInside(pt))
     return;
-  enlarge(calcIncLeft(pt(0)),calcIncRight(0),calcIncUp(pt(1)), calcIncDown(pt(1)));
+  enlarge(calcIncLeft(pt(0)), calcIncRight(0), calcIncUp(pt(1)),
+          calcIncDown(pt(1)));
 }
 
 template <typename CellType>
-size_t VoxelGrid2D<CellType>::calcIncLeft(float pt) const{
+size_t VoxelGrid2D<CellType>::calcIncLeft(float pt) const
+{
   float minx = -width_left_ * cell_size_ - cell_size_half_;
-  if(pt < minx)
+  if (pt < minx)
     return static_cast<size_t>(std::ceil((minx - pt) / cell_size_));
   return 0;
 }
 
 template <typename CellType>
-size_t VoxelGrid2D<CellType>::calcIncRight(float pt) const{
+size_t VoxelGrid2D<CellType>::calcIncRight(float pt) const
+{
   float maxx = width_right_ * cell_size_ + cell_size_half_;
-  if(pt > maxx)
+  if (pt > maxx)
     return static_cast<size_t>(std::ceil((pt - maxx) / cell_size_));
   return 0;
 }
 
 template <typename CellType>
-size_t VoxelGrid2D<CellType>::calcIncUp(float pt) const{
+size_t VoxelGrid2D<CellType>::calcIncUp(float pt) const
+{
   float miny = -height_down_ * cell_size_ - cell_size_half_;
-  if(pt < miny)
+  if (pt < miny)
     return static_cast<size_t>(std::ceil((miny - pt) / cell_size_));
   return 0;
 }
 
 template <typename CellType>
-size_t VoxelGrid2D<CellType>::calcIncDown(float pt) const{
+size_t VoxelGrid2D<CellType>::calcIncDown(float pt) const
+{
   float maxy = height_up_ * cell_size_ + cell_size_half_;
-  if(pt > maxy)
+  if (pt > maxy)
     return static_cast<size_t>(std::ceil((pt - maxy) / cell_size_));
   return 0;
 }
@@ -484,29 +502,30 @@ void VoxelGrid2D<CellType>::enlarge(size_t left, size_t right, size_t up,
                                     size_t down, long move_horizontal,
                                     long move_vertival)
 {
-  if(left+right+up+down == 0)
+  if (left + right + up + down == 0)
     return;
   CellDataVector large_grid;
-  size_t new_size = (width()+left+right) * (height()+up+down);
+  size_t new_size = (width() + left + right) * (height() + up + down);
   large_grid.resize(new_size);
-  for(size_t i = 0 ;i < new_size; ++i){
+  for (size_t i = 0; i < new_size; ++i) {
     large_grid.emplace_back(nullptr);
   }
-  long index_inc = (up+move_vertival)*(width()+left+right) + (left + move_horizontal);
-  for(size_t i = 0; i < cells_.size(); ++i){
-    large_grid[i+index_inc] = std::move(cells_[i]);
+  long index_inc = (up + move_vertival) * (width() + left + right) +
+                   (left + move_horizontal);
+  for (size_t i = 0; i < cells_.size(); ++i) {
+    large_grid[i + index_inc] = std::move(cells_[i]);
   }
   cells_ = std::move(large_grid);
-  height_up_+=up;
-  height_down_+=down;
-  width_left_+=left;
-  width_right_+=right;
+  height_up_ += up;
+  height_down_ += down;
+  width_left_ += left;
+  width_right_ += right;
 }
 
 template <typename CellType>
 void VoxelGrid2D<CellType>::moveLeft(size_t move)
 {
-  if(move == 0)
+  if (move == 0)
     return;
   size_t width = this->width();
   if (move > width)
@@ -532,7 +551,7 @@ void VoxelGrid2D<CellType>::moveLeft(size_t move)
 template <typename CellType>
 void VoxelGrid2D<CellType>::moveRight(size_t move)
 {
-  if(move == 0)
+  if (move == 0)
     return;
   size_t width = this->width();
   if (move > width)
@@ -558,7 +577,7 @@ void VoxelGrid2D<CellType>::moveRight(size_t move)
 template <typename CellType>
 void VoxelGrid2D<CellType>::moveUp(size_t move)
 {
-  if(move == 0)
+  if (move == 0)
     return;
   size_t width = this->width();
   if (move > this->height()) {

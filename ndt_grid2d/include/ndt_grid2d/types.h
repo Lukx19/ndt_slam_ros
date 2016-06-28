@@ -14,7 +14,7 @@ struct OccupancyGrid
   float resolution_;  // [m/cell]
   std::vector<int8_t> cells_;
 };
-} // end of namespace slamuk
+
+}  // end of namespace slamuk
 
 #endif
-
