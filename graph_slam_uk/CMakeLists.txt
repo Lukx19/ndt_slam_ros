@@ -15,9 +15,8 @@ find_package(catkin REQUIRED COMPONENTS
     nav_msgs
     pcl_ros
     geometry_msgs
-    dynamic_slam_utils
-    ndt_scanmatching2d
     tf_conversions
+    pcl_ros
 )
 
 find_package(PCL 1.7 REQUIRED)
@@ -25,7 +24,8 @@ find_package(Boost REQUIRED COMPONENTS program_options system)
 find_package(Eigen3 REQUIRED)
 # g2o #######################
 find_package(G2O REQUIRED)
-find_package(OpenMP)
+find_package(OpenMP REQUIRED)
+find_package(OpenCV REQUIRED )
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -98,8 +98,8 @@ find_package(OpenMP)
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES graph_slam
-  CATKIN_DEPENDS dynamic_slam_utils ndt_scanmatching2d
-  DEPENDS eigen boost pcl
+#  CATKIN_DEPENDS
+  DEPENDS eigen boost pcl opencv
 )
 
 ###########
@@ -173,8 +173,8 @@ target_link_libraries(graph_slam2d_g2o_parser
 
 add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
-  src/rrr_clusterizer.cpp
-  src/rrr_g20_wrapper.cpp
+  src/slam_optimizer/rrr_clusterizer.cpp
+  src/slam_optimizer/rrr_g20_wrapper.cpp
   )
 # add_dependencies(graph_slam2d ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(graph_slam2d
@@ -183,14 +183,15 @@ target_link_libraries(graph_slam2d
    ${Boost_LIBRARIES}
    ${G2O_LIBRARIES}
    ${CSPARSE_LIBRARY}
+   ${OpenCV_LIBS}
 )
 
-add_executable(gauss_newton_optimalizer_test test/gauss_newton_optimalizer_test.cpp)
-target_link_libraries(gauss_newton_optimalizer_test
-   ${catkin_LIBRARIES}
-   ${PCL_LIBRARIES}
-   ${Boost_LIBRARIES}
-)
+add_executable(ndt2d_visual src/registration/ndt2d_visual.cpp)
+target_link_libraries (ndt2d_visual
+  ${PCL_LIBRARIES}
+  ${catkin_LIBRARIES}
+  )
+
 #############
 ## Install ##
 #############
@@ -233,6 +234,22 @@ target_link_libraries(gauss_newton_optimalizer_test
 if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(${PROJECT_NAME}-graph-test
     test/pose_graph_test.cpp
+    )
+
+  catkin_add_gtest(${PROJECT_NAME}-eigen-tools-test
+    test/utils/eigen_tools_test.cpp)
+
+  catkin_add_gtest(${PROJECT_NAME}-ndt2d-test
+    test/registration/ndt2d_test.cpp
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test
+    )
+  if(TARGET ${PROJECT_NAME}-ndt2d-test)
+   target_link_libraries(${PROJECT_NAME}-ndt2d-test
+    ${catkin_LIBRARIES}
+    ${PCL_COMMON_LIBRARIES}
+    ${PCL_IO_LIBRARIES}
+    ${PCL_REGISTRATION_LIBRARIES}
+    ${Boost_LIBRARIES}
     )
 endif()
 ## Add gtest based cpp test target and link libraries
