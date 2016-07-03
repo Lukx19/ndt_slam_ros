@@ -5,24 +5,38 @@
 
 namespace slamuk
 {
-class NDTGrid2DHolder : public DataHolder<NDTGrid2D>
+template <typename CellType, typename PointType>
+class NDTGrid2DHolder
 {
+  typedef NDTGrid2D<CellType, PointType> Grid;
+  typedef typename Grid::Ptr GridPtr;
+  typedef typename Grid::ConstPtr GridConstPtr;
+
 public:
-  explicit NDTGrid2DHolder(NDTGrid2D* data) : data_(data)
+  explicit NDTGrid2DHolder(const GridPtr &data) : data_(data)
   {
   }
-  Eigen::Vector2d getCentroid() override
+  Eigen::Vector2d getCentroid() const
   {
     return data_->getCentroid();
   }
-  NDTGrid2D* getDataPointer() override
+  double getRadius() const
+  {
+    return data_->getRadius();
+  }
+  const GridPtr &getData() const
   {
     return data_;
   }
 
+  void updatePosition(const Eigen::Vector3d &new_pose)
+  {
+    data_->setOrigin(new_pose);
+  }
+
 private:
-  NDTGrid2D* data_;
-}
+  GridPtr data_;
+};
 }
 
 #endif

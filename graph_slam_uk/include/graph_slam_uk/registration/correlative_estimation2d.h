@@ -142,7 +142,10 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   search_voxels.reserve(elements);
 
   // preparre storage for thrread based result voxels
-  std::vector<ml_corr::SearchVoxel> search_voxels_thread[threads];
+  std::vector<std::vector<ml_corr::SearchVoxel>> search_voxels_thread(threads);
+  for (size_t i = 0; i < threads; ++i) {
+    search_voxels_thread.push_back(std::vector<ml_corr::SearchVoxel>());
+  }
 
   // prepare all rotations
   std::vector<float> rotations;

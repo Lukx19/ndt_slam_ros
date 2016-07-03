@@ -39,7 +39,7 @@ public:
   }
   int8_t getOccupancy() const
   {
-    if (occup_ > Policy::max_occupancy)
+    if (occup_ > Policy::max_occupancy_)
       return 100;
     if (occup_ < 0)
       return 0;
@@ -104,8 +104,8 @@ NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
     float occup_addition =
         static_cast<float>(other.points_) * Policy::log_like_occ_;
     updateOccupancy(occup_addition);
-    if (points_ > Policy::max_points)
-      points_ = Policy::max_points;
+    if (points_ > Policy::max_points_)
+      points_ = Policy::max_points_;
     if (occup_ < 0)
       gaussian_ = false;
     else
@@ -168,7 +168,7 @@ void NDTCell<Policy>::computeGaussian()
 
     points_ += points_vec_.size();
     // restrict number of points in cell
-    if (Policy::max_points > 0 && Policy::max_points_ < points_) {
+    if (Policy::max_points_ > 0 && Policy::max_points_ < points_) {
       mean_sum_comb *= (static_cast<double>(Policy::max_points_) /
                         static_cast<double>(points_));
       cov_sum_comb *= (static_cast<double>(Policy::max_points_ - 1) /

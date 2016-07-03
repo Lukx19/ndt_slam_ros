@@ -17,6 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
     geometry_msgs
     tf_conversions
     pcl_ros
+    message_generation
 )
 
 find_package(PCL 1.7 REQUIRED)
@@ -60,11 +61,11 @@ find_package(OpenCV REQUIRED )
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  NDTMapMsg.msg
+  NDTCellMsg.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -81,10 +82,11 @@ find_package(OpenCV REQUIRED )
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs
+)
 
 ###################################
 ## catkin specific configuration ##
@@ -98,8 +100,8 @@ find_package(OpenCV REQUIRED )
 catkin_package(
   INCLUDE_DIRS include
 #  LIBRARIES graph_slam
-#  CATKIN_DEPENDS
-  DEPENDS eigen boost pcl opencv
+  CATKIN_DEPENDS message_runtime
+  DEPENDS eigen boost libpcl-all-dev opencv2
 )
 
 ###########
@@ -165,7 +167,7 @@ add_definitions(
 )
 link_libraries(${G2O_LIBRARIES})
 
-add_executable(graph_slam2d_g2o_parser src/parser2d.cpp)
+add_executable(graph_slam2d_g2o_parser src/slam_optimizer/parser2d.cpp)
 target_link_libraries(graph_slam2d_g2o_parser
     ${catkin_LIBRARIES}
     ${PCL_COMMON_LIBRARIES}
@@ -176,7 +178,8 @@ add_executable(graph_slam2d
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
   )
-# add_dependencies(graph_slam2d ${${PROJECT_NAME}_EXPORTED_TARGETS})
+add_dependencies(graph_slam2d ${PROJECT_NAME}_generate_messages_cpp)
+  #${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(graph_slam2d
    ${catkin_LIBRARIES}
    ${PCL_LIBRARIES}
@@ -207,18 +210,18 @@ target_link_libraries (ndt2d_visual
 # )
 
 ## Mark executables and/or libraries for installation
-# install(TARGETS graph_slam graph_slam_node
+#install(TARGETS ${PROJECT_NAME}
 #   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 #   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+#)
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
+install(DIRECTORY include/${PROJECT_NAME}/
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+   FILES_MATCHING PATTERN "*.h"
 #   PATTERN ".svn" EXCLUDE
-# )
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
@@ -233,7 +236,7 @@ target_link_libraries (ndt2d_visual
 
 if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(${PROJECT_NAME}-graph-test
-    test/pose_graph_test.cpp
+    test/slam_optimizer/pose_graph_test.cpp
     )
 
   catkin_add_gtest(${PROJECT_NAME}-eigen-tools-test
@@ -251,6 +254,7 @@ if(CATKIN_ENABLE_TESTING)
     ${PCL_REGISTRATION_LIBRARIES}
     ${Boost_LIBRARIES}
     )
+  endif()
 endif()
 ## Add gtest based cpp test target and link libraries
 # catkin_add_gtest(${PROJECT_NAME}-test test/test_graph_slam.cpp)

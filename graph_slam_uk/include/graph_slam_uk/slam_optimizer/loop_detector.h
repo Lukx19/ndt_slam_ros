@@ -187,8 +187,6 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
   // repeat while some nodes are unvisited
   while (graph_->nodeCount() != nodes_visited) {
     size_t curr_node_id = fringe.top().node_id_;
-    // std::cout<<"on top of fringe: "<<curr_node_id<<"hops:
-    // "<<fringe.top().hop_<<std::endl;
     // enough overlap
     if (isCloseMatch(fringe.top())) {
       if (far_enough) {
@@ -306,25 +304,10 @@ const internal::ScanInfo &LoopDetector<P, T>::calcScanParams(Id node_id)
     return laser_range_[node_id];
   }
   internal::ScanInfo res;
-  std::vector<float> ranges_horizontal;
-  std::vector<float> ranges_vertical;
-  auto pcl = graph_->getNode(node_id).getDataObj();
-  for (auto &pt : pcl->points) {
-    ranges_vertical.push_back(std::abs(pt.data[0]));
-    ranges_horizontal.push_back(std::abs(pt.data[1]));
-  }
-  // sort lengths 0,1,....n
-  std::sort(ranges_horizontal.begin(), ranges_horizontal.end());
-  std::sort(ranges_vertical.begin(), ranges_vertical.end());
-  // reject 1/3 of the most distante points
-  size_t idy = (ranges_vertical.size() / 3) * 2;
-  size_t idx = (ranges_horizontal.size() / 3) * 2;
-  res.radius_ = std::max(std::abs(ranges_vertical[idy]),
-                         std::abs(ranges_horizontal[idx]));
+  auto data = graph_->getNode(node_id).getDataObj();
+  res.radius_ = data.getRadius();
   // compute centroid
-  Eigen::Vector4f centroid;
-  pcl::compute3DCentroid(*pcl, centroid);
-  res.centroid_ = centroid.head(2).cast<double>();
+  res.centroid_ = data.getCentroid();
   res.is_ready_ = true;
   laser_range_[node_id] = res;
   // std::cout<<"calc laser range for node:"<<node_id<<"
@@ -352,7 +335,7 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
   // std::cout<<separation.transpose()<<std::endl;
   Eigen::Matrix2d icov = edge.cov_.inverse().block(0, 0, 2, 2);
   double m = (separation.transpose() * icov).dot(separation);
-  double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
+  // double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
   // std::cout<<"distance_raw:"<<delta_c.norm() - b_params.radius_ -
   // a_params.radius_<<std::endl;
   std::cout << "distance:" << m << std::endl;

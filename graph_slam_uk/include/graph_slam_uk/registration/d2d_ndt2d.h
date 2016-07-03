@@ -6,6 +6,9 @@
 #include <pcl/filters/voxel_grid_covariance.h>
 #include <Eigen/Dense>
 #include <pcl/common/time.h>
+#include <graph_slam_uk/ndt/cell_policy2d.h>
+#include <graph_slam_uk/ndt/ndt_cell.h>
+#include <graph_slam_uk/ndt/ndt_grid2d.h>
 
 namespace pcl
 {
@@ -110,7 +113,8 @@ struct JacobianHessianDerivatives
 };
 }  // end of namespace d2d_ndt2d
 
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget,
+          typename CellType = slamuk::NDTCell<slamuk::CellPolicy2d>>
 class D2DNormalDistributionsTransform2D
     : public Registration<PointSource, PointTarget>
 {
@@ -130,19 +134,21 @@ protected:
 
   /** \brief Typename of searchable voxel grid containing mean and covariance.
    */
-  typedef VoxelGridCovariance<PointTarget> TargetGrid;
-  typedef VoxelGridCovariance<PointSource> SourceGrid;
+  typedef slamuk::NDTGrid2D<CellType, PointTarget> GridTarget;
+  typedef slamuk::NDTGrid2D<CellType, PointSource> GridSource;
+  typedef typename GridTarget::ConstPtr GridTargetConstPtr;
+  typedef typename GridSource::ConstPtr GridSourceConstPtr;
 
-  /** \brief Typename of const pointer to searchable voxel grid. */
-  typedef const TargetGrid *TargetGridConstPtr;
-  /** \brief Typename of const pointer to searchable voxel grid leaf. */
-  typedef typename TargetGrid::LeafConstPtr TargetGridLeafConstPtr;
+  // /** \brief Typename of const pointer to searchable voxel grid. */
+  // typedef const GridTarget *TargetGridConstPtr;
+  // * \brief Typename of const pointer to searchable voxel grid leaf.
+  // typedef typename GridTarget::LeafConstPtr TargetGridLeafConstPtr;
 
 public:
   typedef boost::shared_ptr<
-      D2DNormalDistributionsTransform2D<PointSource, PointTarget>> Ptr;
+      D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>> Ptr;
   typedef boost::shared_ptr<const D2DNormalDistributionsTransform2D<
-      PointSource, PointTarget>> ConstPtr;
+      PointSource, PointTarget, CellType>> ConstPtr;
   typedef Eigen::Vector3d VectorTrans;
   /** \brief Constructor.
     * Sets \ref outlier_ratio_ to 0.35, \ref step_size_ to 0.05 and \ref
@@ -173,29 +179,14 @@ public:
     */
   inline void setCellSize(float cell_size)
   {
-    // Prevents unnessary voxel initiations
     if (initCellSizes(cell_size)) {
-      // if (input_)
-      // initGrid();
       initParams();
     }
   }
 
-  void setCellSize(const std::vector<float> &cell_sizes)
+  inline float getCellSize() const
   {
-    layer_count_ = cell_sizes.size();
-    cell_sizes_ = cell_sizes;
-    std::sort(cell_sizes_.begin(), cell_sizes_.end());
-    std::reverse(cell_sizes_.begin(), cell_sizes_.end());
-    initParams();
-  }
-
-  /** \brief Get voxel grid resolution.
-    * \return calculated resolutions of each cell
-    */
-  inline std::vector<float> getCellSizes() const
-  {
-    return (cell_sizes_);
+    return (cell_sizes_.back());
   }
 
   /** \brief Get the newton line search maximum step length.
@@ -256,6 +247,27 @@ public:
   {
     return inform_matrix_;
   }
+  virtual void setInputSource(const PclSourceConstPtr &cloud)
+  {
+    dynamic_cast<Registration<PointSource, PointTarget> *>(this)
+        ->setInputSource(cloud);
+  }
+
+  using Registration<PointSource, PointTarget>::setInputSource;
+  virtual void setInputSource(const GridSourceConstPtr &grid)
+  {
+    source_grid_ = grid;
+    source_grid_updated_ = true;
+    setCellSize(source_grid_->getCellSize());
+  }
+
+  using Registration<PointSource, PointTarget>::setInputTarget;
+  virtual void setInputTarget(const GridTargetConstPtr &grid)
+  {
+    target_grid_ = grid;
+    target_grid_updated_ = true;
+    setCellSize(target_grid_->getCellSize());
+  }
 
 protected:
   using Registration<PointSource, PointTarget>::reg_name_;
@@ -273,6 +285,8 @@ protected:
   using Registration<PointSource, PointTarget>::corr_dist_threshold_;
   using Registration<PointSource, PointTarget>::inlier_threshold_;
   using Registration<PointSource, PointTarget>::update_visualizer_;
+  using Registration<PointSource, PointTarget>::target_cloud_updated_;
+  using Registration<PointSource, PointTarget>::source_cloud_updated_;
 
   /** \brief The side length of voxels. */
   std::vector<float> cell_sizes_;
@@ -285,7 +299,7 @@ protected:
   double outlier_ratio_;
 
   /** \brief The normalization constants used fit the point distribution to a
-   * normal d  // std::vector<TargetGrid> target_cells_;istribution, Equation
+   * normal d  // std::vector<GridTarget> target_cells_;istribution, Equation
    * 6.8 [Magnusson 2009]. */
   std::vector<d2d_ndt2d::FittingParams> params_;
 
@@ -297,6 +311,10 @@ protected:
   Eigen::Matrix3d inform_matrix_;
 
   size_t layer_count_;
+  bool target_grid_updated_;
+  bool source_grid_updated_;
+  GridSourceConstPtr source_grid_;
+  GridTargetConstPtr target_grid_;
 
   /** \brief Initialize fitting parameters for normal distrubution in cells for
    * every resolution.
@@ -319,6 +337,10 @@ protected:
   */
   virtual inline bool initCellSizes(float base_size)
   {
+    if (cell_sizes_.size() > 0 && cell_sizes_.back() == base_size &&
+        cell_sizes_.size() == layer_count_)
+      return false;
+
     cell_sizes_.clear();
     for (int i = layer_count_ - 1; i >= 0; --i) {
       cell_sizes_.push_back(base_size * std::pow(2, i));
@@ -329,51 +351,54 @@ protected:
   /** \brief Estimate the transformation and returns the transformed source
    * (input) as output.
     * \param[out] output the resultant input transfomed point cloud dataset
+    * \param[in] guess the initial gross estimation of the transformation
+    */
+  virtual void computeTransformation(PclSource &output,
+                                     const Eigen::Matrix4f &guess);
+
+  /** \brief Estimate the transformation and returns the transformed source
+   * (input) as output.
+    * \param[out] output the resultant input transfomed point cloud dataset
     */
   virtual void computeTransformation(PclSource &output)
   {
     computeTransformation(output, Eigen::Matrix4f::Identity());
   }
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    * \param[in] guess the initial gross estimation of the transformation
-    */
-  virtual void computeTransformation(PclSource &output,
-                                     const Eigen::Matrix4f &guess);
-
-  virtual bool computeSingleGrid(SourceGrid &source_grid,
+  virtual bool computeSingleGrid(const GridSource &source_grid,
                                  const Eigen::Matrix4f &guess,
-                                 TargetGrid &target_grid,
+                                 const GridTarget &target_grid,
                                  const d2d_ndt2d::FittingParams &param,
                                  Eigen::Matrix4f &trans);
 
-  virtual d2d_ndt2d::ScoreAndDerivatives<3, double> calcScore(
-      const d2d_ndt2d::FittingParams &param, SourceGrid &sourceNDT,
-      const Eigen::Vector3d &trans, TargetGrid &targetNDT, bool calc_hessian);
+  virtual d2d_ndt2d::ScoreAndDerivatives<3, double>
+  calcScore(const d2d_ndt2d::FittingParams &param, const GridSource &sourceNDT,
+            const Eigen::Vector3d &trans, const GridTarget &targetNDT,
+            bool calc_hessian);
 
   virtual void computeDerivatives(const Eigen::Vector3d &x,
                                   const Eigen::Matrix3d &cov,
                                   d2d_ndt2d::JacobianHessianDerivatives &data,
                                   bool calc_hessian);
 
-  virtual d2d_ndt2d::ScoreAndDerivatives<3, double> calcSourceCellScore(
-      const Eigen::Vector3d &mean_source, const Eigen::Matrix3d &cov_source,
-      const typename TargetGrid::Leaf *cell_t,
-      const d2d_ndt2d::JacobianHessianDerivatives &deriv,
-      const d2d_ndt2d::FittingParams &param, bool calc_hessian);
+  virtual d2d_ndt2d::ScoreAndDerivatives<3, double>
+  calcSourceCellScore(const Eigen::Vector3d &mean_source,
+                      const Eigen::Matrix3d &cov_source, const CellType *cell_t,
+                      const d2d_ndt2d::JacobianHessianDerivatives &deriv,
+                      const d2d_ndt2d::FittingParams &param, bool calc_hessian);
 
   // linear search methods//////////////////////////////////////////
   virtual double computeStepLengthMT(
       const Eigen::Matrix<double, 3, 1> &x,
       Eigen::Matrix<double, 3, 1> &step_dir, double step_init, double step_max,
-      double step_min, SourceGrid &source_grid,
+      double step_min, const GridSource &source_grid,
       const d2d_ndt2d::ScoreAndDerivatives<3, double> &score,
-      TargetGrid &target_grid, const d2d_ndt2d::FittingParams &param);
+      const GridTarget &target_grid, const d2d_ndt2d::FittingParams &param);
+
   bool updateIntervalMT(double &a_l, double &f_l, double &g_l, double &a_u,
                         double &f_u, double &g_u, double a_t, double f_t,
                         double g_t) const;
+
   double trialValueSelectionMT(double a_l, double f_l, double g_l, double a_u,
                                double f_u, double g_u, double a_t, double f_t,
                                double g_t) const;
@@ -420,53 +445,89 @@ protected:
   Eigen::Vector3d matToVec(const Eigen::Matrix<T, 4, 4> &trans) const;
 };
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget>::D2DNormalDistributionsTransform2D()
-  : step_size_(0.1), outlier_ratio_(0.55), trans_probability_(), layer_count_(4)
+template <typename PointSource, typename PointTarget, typename CellType>
+D2DNormalDistributionsTransform2D<PointSource, PointTarget,
+                                  CellType>::D2DNormalDistributionsTransform2D()
+  : step_size_(0.1)
+  , outlier_ratio_(0.55)
+  , trans_probability_()
+  , layer_count_(4)
+  , target_grid_updated_(false)
+  , source_grid_updated_(false)
 {
   nr_iterations_ = 0;
   max_iterations_ = 35;
   transformation_epsilon_ = 0.1;
   converged_ = false;
+  target_cloud_updated_ = false;
+  source_cloud_updated_ = false;
   initCellSizes(0.25);
   initParams();
 }
 
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-void D2DNormalDistributionsTransform2D<PointSource, PointTarget>::
+template <typename PointSource, typename PointTarget, typename CellType>
+void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
 {
   ROS_DEBUG_STREAM("[D2D_NDT2D]: guess:" << matToVec(guess).transpose());
   Eigen::Matrix4f trans = guess;
-  for (size_t i = 0; i < cell_sizes_.size(); ++i) {
-    TargetGrid target_grid;
-    SourceGrid source_grid;
-    target_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
-    source_grid.setLeafSize(cell_sizes_[i], cell_sizes_[i], cell_sizes_[i]);
-    target_grid.setInputCloud(target_);
-    source_grid.setInputCloud(input_);
-    target_grid.filter(true);
-    source_grid.filter(true);
-    if (!computeSingleGrid(source_grid, trans, target_grid, params_[i],
+  GridTargetConstPtr base_target;
+  GridSourceConstPtr base_source;
+  converged_ = false;
+  // calculate base grids for source and target grids
+  if (!target_grid_updated_) {
+    if (target_cloud_updated_) {
+      GridTarget *tmp = new GridTarget();
+      tmp->setCellSize(cell_sizes_.back());
+      tmp->initializeSimple(*target_);
+      base_target = GridTargetConstPtr(tmp);
+    } else {
+      ROS_ERROR_STREAM("[D2D_NDT2D]: target cloud or grid not set");
+      return;
+    }
+  } else {
+    base_target = target_grid_;
+  }
+
+  if (!source_grid_updated_) {
+    if (source_cloud_updated_) {
+      GridSource *tmp = new GridSource();
+      tmp->setCellSize(cell_sizes_.back());
+      tmp->initializeSimple(*input_);
+      base_source = GridSourceConstPtr(tmp);
+    } else {
+      ROS_ERROR_STREAM("[D2D_NDT2D]: source cloud or grid not set");
+      return;
+    }
+  } else {
+    base_source = source_grid_;
+  }
+  for (size_t i = 0; i < layer_count_; ++i) {
+    size_t multiple = layer_count_ - i;
+    if (!computeSingleGrid(base_source->createCoarserGrid(multiple), trans,
+                           base_target->createCoarserGrid(multiple), params_[i],
                            trans)) {
       converged_ = false;
       return;
     }
   }
   ROS_DEBUG_STREAM("[D2D_NDT2D]: final trans:" << matToVec(trans).transpose());
-  transformPointCloud(*input_, output, trans);
+  // return transformed pcl only if source pcl was inputed
+  if (!source_grid_updated_)
+    transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;
   converged_ = true;
 }
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-bool
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
-    SourceGrid &source_grid, const Eigen::Matrix4f &guess,
-    TargetGrid &target_grid, const d2d_ndt2d::FittingParams &param,
-    Eigen::Matrix4f &trans)
+template <typename PointSource, typename PointTarget, typename CellType>
+bool D2DNormalDistributionsTransform2D<
+    PointSource, PointTarget,
+    CellType>::computeSingleGrid(const GridSource &source_grid,
+                                 const Eigen::Matrix4f &guess,
+                                 const GridTarget &target_grid,
+                                 const d2d_ndt2d::FittingParams &param,
+                                 Eigen::Matrix4f &trans)
 {
   nr_iterations_ = 0;
   converged_ = false;
@@ -541,16 +602,15 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeSingleGrid(
   return true;
 }
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 d2d_ndt2d::ScoreAndDerivatives<3, double>
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
-    const d2d_ndt2d::FittingParams &param, SourceGrid &sourceNDT,
-    const Eigen::Vector3d &trans, TargetGrid &targetNDT, bool calc_hessian)
+D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore(
+    const d2d_ndt2d::FittingParams &param, const GridSource &sourceNDT,
+    const Eigen::Vector3d &trans, const GridTarget &targetNDT,
+    bool calc_hessian)
 {
-  typedef std::vector<typename TargetGrid::LeafConstPtr> NeighborsVector;
-  typedef std::map<size_t, typename VoxelGridCovariance<PointSource>::Leaf>
-      SourceMap;
-  typedef std::vector<typename VoxelGridCovariance<PointSource>::Leaf> SourceVec;
+  typedef typename GridSource::CellPtrVector SourceVec;
+  typedef typename GridTarget::CellPtrVector TargetVec;
   typedef d2d_ndt2d::ScoreAndDerivatives<3, double> ReturnVals;
 
   ReturnVals res;
@@ -558,13 +618,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
   Eigen::Transform<double, 3, Eigen::Affine, Eigen::ColMajor> trans_mat;
   trans_mat.matrix() = vecToMat<double>(trans);
 
-  const SourceMap &source_map = sourceNDT.getLeaves();
-  SourceVec source_cells;
-  source_cells.reserve(source_map.size());
-  for (typename SourceMap::const_iterator source_cell = source_map.cbegin();
-       source_cell != source_map.cend(); ++source_cell) {
-    source_cells.push_back(source_cell->second);
-  }
+  SourceVec source_cells = sourceNDT.getGaussianCells();
 
   std::vector<ReturnVals> omp_ret;
   omp_ret.resize(4);
@@ -579,31 +633,27 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
       int thread_id = omp_get_thread_num();
       Eigen::Vector3d mean_source;
       Eigen::Matrix3d cov_source;
-
+      ReturnVals local_ret;
       // TRANSFORMATION OF SOURCE GRID
-      mean_source = trans_mat * source_cells[cell_id].getMean();
-      cov_source = trans_mat.rotation() * source_cells[cell_id].getCov() *
-                   trans_mat.rotation().transpose();
+      Eigen::Vector3d cell_mean;
+      Eigen::Matrix3d cell_cov;
+      cell_mean.head(2) = source_cells[cell_id]->getMean();
+      cell_cov.block(0, 0, 2, 2) = source_cells[cell_id]->getCov();
+      mean_source = trans_mat * cell_mean;
+      cov_source =
+          trans_mat.rotation() * cell_cov * trans_mat.rotation().transpose();
       // compute derivatives of score function
       d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
       computeDerivatives(mean_source, cov_source, partial_derivatives,
                          calc_hessian);
 
-      PointTarget pt;
-      NeighborsVector neighborhood;
-      std::vector<float> distances;
-      pt.x = mean_source(0);
-      pt.y = mean_source(1);
-      pt.z = mean_source(2);
-      // select target cells which are 2 hops in k-d tree away from source cell
-      targetNDT.nearestKSearch(pt, 2, neighborhood, distances);
-      for (typename NeighborsVector::iterator target_cell =
-               neighborhood.begin();
-           target_cell != neighborhood.end(); target_cell++) {
-        omp_ret[thread_id] +=
-            calcSourceCellScore(mean_source, cov_source, *target_cell,
+      TargetVec neighbours = targetNDT.getNeighbors(mean_source.head(2), 2);
+      for (size_t i = 0; i < neighbours.size(); ++i) {
+        local_ret +=
+            calcSourceCellScore(mean_source, cov_source, neighbours[i],
                                 partial_derivatives, param, calc_hessian);
       }
+      omp_ret[thread_id] += local_ret;
     }
   }
   for (size_t i = 0; i < omp_ret.size(); ++i) {
@@ -613,11 +663,11 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcScore(
 }
 
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-void
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeDerivatives(
-    const Eigen::Vector3d &x, const Eigen::Matrix3d &cov,
-    d2d_ndt2d::JacobianHessianDerivatives &data, bool calc_hessian)
+template <typename PointSource, typename PointTarget, typename CellType>
+void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    computeDerivatives(const Eigen::Vector3d &x, const Eigen::Matrix3d &cov,
+                       d2d_ndt2d::JacobianHessianDerivatives &data,
+                       bool calc_hessian)
 {
   data.setZero();
   data.Jest.block<2, 2>(0, 0).setIdentity();
@@ -637,13 +687,15 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeDerivatives(
   }
 }
 ////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 d2d_ndt2d::ScoreAndDerivatives<3, double>
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore(
-    const Eigen::Vector3d &mean_source, const Eigen::Matrix3d &cov_source,
-    const typename TargetGrid::Leaf *cell_t,
-    const d2d_ndt2d::JacobianHessianDerivatives &deriv,
-    const d2d_ndt2d::FittingParams &param, bool calc_hessian)
+D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    calcSourceCellScore(const Eigen::Vector3d &mean_source,
+                        const Eigen::Matrix3d &cov_source,
+                        const CellType *cell_t,
+                        const d2d_ndt2d::JacobianHessianDerivatives &deriv,
+                        const d2d_ndt2d::FittingParams &param,
+                        bool calc_hessian)
 {
   d2d_ndt2d::ScoreAndDerivatives<3, double> res;
 
@@ -669,8 +721,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore
   TMP1.setZero();
   xtB.setZero();
 
-  diff_mean = (mean_source - cell_t->getMean());
-  cov_sum = (cell_t->getCov() + cov_source);
+  diff_mean.head(2) = (mean_source.head(2) - cell_t->getMean());
+  cov_sum.block(0, 0, 2, 2) = (cell_t->getCov() + cov_source.block(0, 0, 2, 2));
   cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
   if (!exists) {
     return res.Zero();
@@ -711,13 +763,15 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::calcSourceCellScore
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-double
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeStepLengthMT(
-    const Eigen::Matrix<double, 3, 1> &x, Eigen::Matrix<double, 3, 1> &step_dir,
-    double step_init, double step_max, double step_min, SourceGrid &source_grid,
-    const d2d_ndt2d::ScoreAndDerivatives<3, double> &score,
-    TargetGrid &target_grid, const d2d_ndt2d::FittingParams &param)
+template <typename PointSource, typename PointTarget, typename CellType>
+double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    computeStepLengthMT(const Eigen::Matrix<double, 3, 1> &x,
+                        Eigen::Matrix<double, 3, 1> &step_dir, double step_init,
+                        double step_max, double step_min,
+                        const GridSource &source_grid,
+                        const d2d_ndt2d::ScoreAndDerivatives<3, double> &score,
+                        const GridTarget &target_grid,
+                        const d2d_ndt2d::FittingParams &param)
 {
   Eigen::Matrix4f transformation;
   PclSource trans_cloud;
@@ -862,11 +916,12 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::computeStepLengthMT
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
-bool
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::updateIntervalMT(
-    double &a_l, double &f_l, double &g_l, double &a_u, double &f_u,
-    double &g_u, double a_t, double f_t, double g_t) const
+template <typename PointSource, typename PointTarget, typename CellType>
+bool D2DNormalDistributionsTransform2D<
+    PointSource, PointTarget,
+    CellType>::updateIntervalMT(double &a_l, double &f_l, double &g_l,
+                                double &a_u, double &f_u, double &g_u,
+                                double a_t, double f_t, double g_t) const
 {
   // Case U1 in Update Algorithm and Case a in Modified Update Algorithm [More,
   // Thuente 1994]
@@ -902,13 +957,12 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget>::updateIntervalMT(
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 double D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget>::trialValueSelectionMT(double a_l, double f_l,
-                                                     double g_l, double a_u,
-                                                     double f_u, double g_u,
-                                                     double a_t, double f_t,
-                                                     double g_t) const
+    PointSource, PointTarget,
+    CellType>::trialValueSelectionMT(double a_l, double f_l, double g_l,
+                                     double a_u, double f_u, double g_u,
+                                     double a_t, double f_t, double g_t) const
 {
   // Case 1 in Trial Value Selection [More, Thuente 1994]
   if (f_t > f_l) {
@@ -988,10 +1042,11 @@ double D2DNormalDistributionsTransform2D<
   }
 }
 
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 template <typename T>
-Eigen::Matrix<T, 4, 4> D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget>::vecToMat(const Eigen::Vector3d &trans) const
+Eigen::Matrix<T, 4, 4>
+D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::vecToMat(
+    const Eigen::Vector3d &trans) const
 {
   Eigen::Matrix<T, 4, 4> trans_mat = Eigen::Matrix<T, 4, 4>::Identity();
 
@@ -1005,10 +1060,10 @@ Eigen::Matrix<T, 4, 4> D2DNormalDistributionsTransform2D<
   return trans_mat;
 }
 
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 template <typename T>
 Eigen::Vector3d
-D2DNormalDistributionsTransform2D<PointSource, PointTarget>::matToVec(
+D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::matToVec(
     const Eigen::Matrix<T, 4, 4> &trans) const
 {
   Eigen::Vector3d vec;

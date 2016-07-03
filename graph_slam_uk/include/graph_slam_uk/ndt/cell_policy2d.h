@@ -3,6 +3,8 @@
 
 #include <Eigen/Dense>
 
+namespace slamuk
+{
 class CellPolicy2d
 {
 public:
@@ -10,11 +12,13 @@ public:
   typedef Eigen::Matrix2d Matrix;
   typedef Eigen::Matrix3d Transform;
 
-  size_t dim_ = 2;
-  size_t max_points_ = 1e9;
-  float max_occupancy_ = 255.0f;
-  float sensor_noise_ = 0.01f;
-  double log_like_occ_ = std::log(0.6f / (1.0f - 0.6f));
+  static const size_t dim_ = 2;
+  static const size_t max_points_ = 1e9;
+  static constexpr float max_occupancy_ = 255.0f;
+  static constexpr float sensor_noise_ = 0.01f;
+  // std::log(0.6f / (1.0f - 0.6f));
+  static constexpr double log_like_occ_ = 0.405465108;
 };
+}
 
 #endif

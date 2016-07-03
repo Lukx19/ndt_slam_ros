@@ -33,8 +33,8 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
                                  const FrameType &target,
                                  const Eigen::Matrix3d &initial_guess)
 {
-  matcher.setInputSource(source);
-  matcher.setInputTarget(target);
+  matcher.setInputSource(source.getData());
+  matcher.setInputTarget(target.getData());
   // Set initial alignment estimate found using robot odometry.
   Eigen::Matrix<double, 4, 4> init_guess =
       eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess));

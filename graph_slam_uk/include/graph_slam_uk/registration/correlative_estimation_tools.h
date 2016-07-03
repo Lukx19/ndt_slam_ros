@@ -18,6 +18,9 @@ struct SearchVoxel
   Eigen::Vector3f transform_;
   double score_;
 
+  SearchVoxel() : transform_(0, 0, 0), score_(0)
+  {
+  }
   bool operator<(const SearchVoxel &rhs) const
   {
     return score_ < rhs.score_;

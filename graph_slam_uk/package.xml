@@ -49,6 +49,7 @@
   <test_depend>python-mock</test_depend> -->
 
   <buildtool_depend>catkin</buildtool_depend>
+
   <depend>roslaunch</depend>
   <depend>tf</depend>
   <depend>tf_conversions</depend>
@@ -60,11 +61,11 @@
   <depend>sensor_msgs</depend>
 
   <build_depend>roscpp</build_depend>
-  <build_depend>dynamic_slam_utils</build_depend>
-  <build_depend>ndt_scanmatching2d</build_depend>
+  <build_depend>message_generation</build_depend>
+
   <exec_depend>roscpp</exec_depend>
-  <exec_depend>dynamic_slam_utils</exec_depend>
-  <exec_depend>ndt_scanmatching2d</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+
   <doc_depend>doxygen</doc_depend>
 
 

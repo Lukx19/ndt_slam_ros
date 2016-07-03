@@ -66,19 +66,18 @@ public:
   bool success_;
   double score_;
 
-
   MatchResult() : success_(false), score_(0.0)
   {
     transform_.setIdentity();
   }
 
   MatchResult(bool success, double score, const transform_t &trans)
-    : transform_(trans),success_(success), score_(score)
+    : transform_(trans), success_(success), score_(score)
   {
   }
 };
 
-template<typename FrameType>
+template <typename FrameType>
 class IScanmatcher2d
 {
 public:

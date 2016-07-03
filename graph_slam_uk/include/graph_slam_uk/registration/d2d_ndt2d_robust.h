@@ -7,9 +7,14 @@
 #include <pcl/registration/registration.h>
 #include <pcl/registration/icp.h>
 
+#include <graph_slam_uk/ndt/cell_policy2d.h>
+#include <graph_slam_uk/ndt/ndt_cell.h>
+#include <graph_slam_uk/ndt/ndt_grid2d.h>
+
 namespace pcl
 {
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget,
+          typename CellType = slamuk::NDTCell<slamuk::CellPolicy2d>>
 class D2DNormalDistributionsTransform2DRobust
     : public Registration<PointSource, PointTarget>
 {
@@ -26,6 +31,11 @@ protected:
 
   typedef PointIndices::Ptr PointIndicesPtr;
   typedef PointIndices::ConstPtr PointIndicesConstPtr;
+
+  typedef slamuk::NDTGrid2D<CellType, PointTarget> GridTarget;
+  typedef slamuk::NDTGrid2D<CellType, PointSource> GridSource;
+  typedef typename GridTarget::ConstPtr GridTargetConstPtr;
+  typedef typename GridSource::ConstPtr GridSourceConstPtr;
 
 public:
   typedef boost::shared_ptr<
@@ -48,7 +58,6 @@ public:
   {
     d2d_.setInputSource(cloud);
     corr_est_.setInputSource(cloud);
-    icp_.setInputSource(cloud);
     Registration<PointSource, PointTarget>::setInputSource(cloud);
   }
 
@@ -57,7 +66,22 @@ public:
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
     d2d_.setInputTarget(cloud);
     corr_est_.setInputTarget(cloud);
-    icp_.setInputTarget(cloud);
+  }
+
+  virtual void setInputSource(const GridSourceConstPtr &grid)
+  {
+    d2d_.setInputSource(grid);
+    PclSourceConstPtr pcl = grid->getMeans().makeShared();
+    corr_est_.setInputSource(pcl);
+    Registration<PointSource, PointTarget>::setInputSource(pcl);
+  }
+
+  virtual void setInputTarget(const GridTargetConstPtr &grid)
+  {
+    PclTargetConstPtr pcl = grid->getMeans().makeShared();
+    Registration<PointSource, PointTarget>::setInputTarget(pcl);
+    d2d_.setInputTarget(grid);
+    corr_est_.setInputTarget(pcl);
   }
 
   inline void setNumLayers(size_t num)
@@ -186,18 +210,14 @@ protected:
 };
 
 //////////////////////////////IMPLEMENTATION
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 D2DNormalDistributionsTransform2DRobust<
-    PointSource, PointTarget>::D2DNormalDistributionsTransform2DRobust()
+    PointSource, PointTarget,
+    CellType>::D2DNormalDistributionsTransform2DRobust()
   : cell_size_(0.25), trans_probability_(0)
 {
   d2d_.setMaximumIterations(max_iterations_);
-  std::vector<float> cell_sizes;
-  cell_sizes.push_back(2);
-  cell_sizes.push_back(1);
-  cell_sizes.push_back(0.5);
-  cell_sizes.push_back(0.25);
-  d2d_.setCellSize(cell_sizes);
+  d2d_.setCellSize(0.25);
   d2d_.setMaximumIterations(10);
 
   // icp_.setMaxCorrespondenceDistance (0.5);
@@ -206,9 +226,11 @@ D2DNormalDistributionsTransform2DRobust<
   // icp_.setMaximumIterations (3);
 }
 //////////////////
-template <typename PointSource, typename PointTarget>
-void D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>::
-    computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
+template <typename PointSource, typename PointTarget, typename CellType>
+void D2DNormalDistributionsTransform2DRobust<
+    PointSource, PointTarget,
+    CellType>::computeTransformation(PclSource &output,
+                                     const Eigen::Matrix4f &guess)
 {
   // standard D2D match try for good guess estimations
   d2d_.align(output, guess);
@@ -257,9 +279,10 @@ void D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>::
 }
 
 /////////////////////
-template <typename PointSource, typename PointTarget>
+template <typename PointSource, typename PointTarget, typename CellType>
 double D2DNormalDistributionsTransform2DRobust<
-    PointSource, PointTarget>::proofTransform(const Eigen::Matrix4f &trans)
+    PointSource, PointTarget,
+    CellType>::proofTransform(const Eigen::Matrix4f &trans)
 {
   ml_corr::LookUpTable<PointTarget> proof_grid;
   proof_grid.initGrid(*target_, cell_size_, 0.5);

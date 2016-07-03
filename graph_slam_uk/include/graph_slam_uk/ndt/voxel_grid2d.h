@@ -43,7 +43,7 @@ public:
   void addCell(const Point& posistion, CellType&& cell, bool merging = true);
   bool removeCell(const Point& posistion);
   // CellType & getCell(size_t row, size_t col);
-  bool isInside(const Point& pt);
+  bool isInside(const Point& pt) const;
 
   // CellVector getNeighbors(size_t row, size_t col, size_t radius) const;
   // return all initialized neighbors in radius including cell where pt belongs
@@ -127,8 +127,12 @@ public:
   {
     return cells_.cend();
   }
+  size_t validCells() const
+  {
+    return valid_cells_;
+  }
 
-protected:
+private:
   float cell_size_;
   float cell_size_half_;
   // number of cells in all directions from centroid cell
@@ -176,9 +180,9 @@ VoxelGrid2D<CellType>::VoxelGrid2D(const VoxelGrid2D& other)
   , height_down_(other.height_down_)
 {
   cells_.resize(other.cells_.size());
-  for (const std::unique_ptr<CellType>& cell : other.cells) {
+  for (const std::unique_ptr<CellType>& cell : other.cells_) {
     CellType* new_cell = new CellType;
-    new_cell = cell;
+    *new_cell = *cell;
     cells_.emplace_back(new_cell);
   }
 }
@@ -194,7 +198,8 @@ VoxelGrid2D<CellType>& VoxelGrid2D<CellType>::operator=(const VoxelGrid2D& other
 template <typename CellType>
 VoxelGrid2D<CellType> VoxelGrid2D<CellType>::clone() const
 {
-  VoxelGrid2D new_grid new_grid.setCellSize(cell_size_);
+  VoxelGrid2D new_grid;
+  new_grid.setCellSize(cell_size_);
   return new_grid;
 }
 
@@ -253,7 +258,7 @@ bool VoxelGrid2D<CellType>::removeCell(const Point& posistion)
 }
 
 template <typename CellType>
-bool VoxelGrid2D<CellType>::isInside(const Point& pt)
+bool VoxelGrid2D<CellType>::isInside(const Point& pt) const
 {
   if (pt(0) >= -width_left_ * cell_size_ - cell_size_half_ &&
       pt(0) <= width_right_ * cell_size_ + cell_size_half_ &&

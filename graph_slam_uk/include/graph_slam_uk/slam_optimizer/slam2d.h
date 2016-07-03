@@ -7,6 +7,7 @@
 #include <graph_slam_uk/slam_optimizer/loop_detector.h>
 #include <graph_slam_uk/slam_optimizer/rrr_loop_proofer.h>
 #include <graph_slam_uk/slam_optimizer/rrr_g2o_wrapper.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
 
 #include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
@@ -16,7 +17,6 @@
 
 #include <deque>
 #include <map>
-#include <dynamic_slam_utils/eigen_tools.h>
 
 #include <iostream>
 
@@ -32,11 +32,10 @@ namespace slamuk
 template <typename T>
 class Slam2D : public IGraphOptimalizer2d<T>
 {
-  typedef Optimizer<Slam2d_Policy, T> optimizer_t;
-  typedef Graph<Slam2d_Policy, T> graph_t;
-  typedef LoopDetector<Slam2d_Policy, T> loop_detector_t;
-  typedef Node<Slam2d_Policy, T> node_t;
-  typedef Edge<Slam2d_Policy, T> edge_t;
+  typedef Graph<Slam2d_Policy, T> GraphType;
+  typedef LoopDetector<Slam2d_Policy, T> LoopDet;
+  typedef Node<Slam2d_Policy, T> NodeType;
+  typedef Edge<Slam2d_Policy, T> EdgeType;
   typedef Slam2d_Policy Policy;
   typedef g2o::BlockSolver<g2o::BlockSolverTraits<-1, -1>> SlamBlockSolver;
   typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType>
@@ -46,7 +45,7 @@ class Slam2D : public IGraphOptimalizer2d<T>
   typedef RRRLoopProofer<RRRG2OWrapper> LoopProofer;
 
 public:
-  explicit Slam2D(IScanmatcher2d &matcher)
+  explicit Slam2D(IScanmatcher2d<T> &matcher)
     : epsilon_(0.001)
     , iterations_(5)
     , last_node_id_(0)
@@ -107,8 +106,8 @@ protected:
   size_t prevlast_node_id_;
   size_t first_node_id_;
   bool first_node_added_;
-  graph_t graph_;
-  IScanmatcher2d *matcher_;
+  GraphType graph_;
+  IScanmatcher2d<T> *matcher_;
 
   std::unique_ptr<g2o::SparseOptimizer> g2o_opt_;  // needed for solving and
                                                    // graph manipulation
@@ -116,7 +115,7 @@ protected:
   std::unique_ptr<SlamBlockSolver> block_solver_;
   std::unique_ptr<g2o::OptimizationAlgorithmGaussNewton> solver_gauss_;
 
-  loop_detector_t loop_detector_;
+  LoopDet loop_detector_;
   RRRG2OWrapper g2o_rrr_wrapper_;
   LoopProofer loop_proofer_;
 
@@ -156,7 +155,7 @@ template <typename T>
 size_t Slam2D<T>::addPose(const Eigen::Vector3d &position, T &obj)
 {
   // add vertex to pose_graph
-  size_t id = graph_.addNode(node_t(position, obj));
+  size_t id = graph_.addNode(NodeType(position, obj));
   // add vertex to g2o
   VertexG2O::EstimateType xytheta(position(0), position(1), position(2));
   VertexG2O *pose = new g2o::VertexSE2;
@@ -183,11 +182,11 @@ size_t Slam2D<T>::addConstrain(size_t node_id_from, size_t node_id_to,
 {
   ROS_INFO_STREAM("Adding constrain betwen nodes:" << node_id_from << "->"
                                                    << node_id_to);
-  edge_t e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to), trans,
-           inform_mat);
+  EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to), trans,
+             inform_mat);
   size_t id = graph_.addEdge(std::move(e));
-  graph_.getEdge(id).setState(edge_t::State::ACTIVE);
-  // adding G2O edge
+  graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
+  // adding G2O edgeType
   EdgeG2O *edge_g2o = new EdgeG2O();
   edge_g2o->setMeasurement(EdgeG2O::Measurement(trans(0), trans(1), trans(2)));
   edge_g2o->setInformation(inform_mat);
@@ -216,7 +215,7 @@ bool Slam2D<T>::tryLoopClose()
 template <typename T>
 bool Slam2D<T>::tryLoopClose(size_t node_id)
 {
-  std::cout << "loop closing for node: " << node_id << std::endl;
+  std::cout << "loop closing for nodeType: " << node_id << std::endl;
   std::vector<LoopClosure<Slam2d_Policy>> loops =
       loop_detector_.genLoopClosures(node_id);
   // add to graph
@@ -224,16 +223,16 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   LoopProofer::VerticesPairSet good_loops;
   LoopProofer::VerticesPairSet bad_loops;
   for (auto &&constrain : loops) {
-    LoopProofer::VerticesPair edge;
-    edge.first = constrain.vertices_.first;
-    edge.second = constrain.vertices_.second;
-    std::cout << "potential loop: " << edge.first << "~>" << edge.second
+    LoopProofer::VerticesPair edgeType;
+    edgeType.first = constrain.vertices_.first;
+    edgeType.second = constrain.vertices_.second;
+    std::cout << "potential loop: " << edgeType.first << "~>" << edgeType.second
               << std::endl;
-    all_loops.insert(std::move(edge));
-    size_t id = addConstrain(edge.first, edge.second,
+    all_loops.insert(std::move(edgeType));
+    size_t id = addConstrain(edgeType.first, edgeType.second,
                              Policy::transMatToVec(constrain.t_),
                              constrain.information_);
-    graph_.getEdge(id).setType(edge_t::Type::LOOP);
+    graph_.getEdge(id).setType(EdgeType::Type::LOOP);
   }
   // proof found edges
   // bool has_added = loop_proofer_.optimizeInc(all_loops,bad_loops,good_loops);
@@ -241,13 +240,13 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   //  return false;
   // // remove all bad loop closures
   // for (auto &&id_pair : bad_loops) {
-  //   // get id of the removable edge
+  //   // get id of the removable edgeType
   //   size_t edge_id = nodes_to_edge_id_[id_pair];
   //   // remove from pose graph
   //   graph_.removeEdge(edge_id);
   //   auto all_edges = g2o_opt_->vertex(id_pair.first)->edges();
   //   auto edge_iter = std::find_if(all_edges.begin(), all_edges.end(),
-  //                                 [edge_id](g2o::HyperGraph::Edge *e) {
+  //                                 [edge_id](g2o::HyperGraph::EdgeType *e) {
   //     if (e->id() == edge_id)
   //       return true;
   //     else
@@ -257,7 +256,8 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   //   if (edge_iter != all_edges.end())
   //     g2o_opt_->removeEdge(*edge_iter);
   //   else
-  //     ROS_ERROR_STREAM("Loop closure proofer is rejecting edge not used in "
+  //     ROS_ERROR_STREAM("Loop closure proofer is rejecting edgeType not used
+  //     in "
   //                      "g2o graph");
   // }
   // return true;
@@ -340,10 +340,10 @@ void Slam2D<T>::initializeGrapFromOdom()
   Policy::Pose pose;
   pose << 0, 0, 0;
   graph_.getNode(first_node_id_).setPose(pose);
-  edge_t *next_e = nullptr;
+  EdgeType *next_e = nullptr;
   size_t next_nd;
-  for (edge_t *e : graph_.getNode(first_node_id_).getEdgesOut()) {
-    if (e->getType() == edge_t::Type::ODOM) {
+  for (EdgeType *e : graph_.getNode(first_node_id_).getEdgesOut()) {
+    if (e->getType() == EdgeType::Type::ODOM) {
       next_e = e;
       break;
     }
@@ -353,8 +353,8 @@ void Slam2D<T>::initializeGrapFromOdom()
     graph_.getNode(next_nd)
         .setPose(eigt::transformPose(pose, next_e->getTransMatrix()));
     next_e = nullptr;
-    for (edge_t *e : graph_.getNode(next_nd).getEdgesOut()) {
-      if (e->getType() == edge_t::Type::ODOM) {
+    for (EdgeType *e : graph_.getNode(next_nd).getEdgesOut()) {
+      if (e->getType() == EdgeType::Type::ODOM) {
         next_e = e;
         break;
       }
@@ -407,10 +407,10 @@ Slam2D<T>::createArrowMarkers(std::string frame_id) const
     marker.color.a = 1.0;
     std::array<float, 3> colors{{1, 0.8f, 1}};
     switch (it->getType()) {
-      case edge_t::Type::ODOM:
+      case EdgeType::Type::ODOM:
         colors = red;
         break;
-      case edge_t::Type::LOOP:
+      case EdgeType::Type::LOOP:
         colors = green;
         break;
     }
