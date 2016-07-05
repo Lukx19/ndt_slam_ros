@@ -242,10 +242,13 @@ if(CATKIN_ENABLE_TESTING)
   catkin_add_gtest(${PROJECT_NAME}-eigen-tools-test
     test/utils/eigen_tools_test.cpp)
 
-  catkin_add_gtest(${PROJECT_NAME}-ndt2d-test
-    test/registration/ndt2d_test.cpp
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test
-    )
+  catkin_add_gtest(${PROJECT_NAME}-voxel_grid2d-test
+    test/ndt/voxel_grid2d_test.cpp)
+
+  # catkin_add_gtest(${PROJECT_NAME}-ndt2d-test
+  #   test/registration/ndt2d_test.cpp
+  #   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/test
+  #   )
   if(TARGET ${PROJECT_NAME}-ndt2d-test)
    target_link_libraries(${PROJECT_NAME}-ndt2d-test
     ${catkin_LIBRARIES}
