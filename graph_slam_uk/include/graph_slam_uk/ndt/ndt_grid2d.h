@@ -115,10 +115,7 @@ public:
   {
     return origin_.head(2);
   }
-  NDTGridMsg serialize() const
-  {
-    return NDTGridMsg();
-  }
+  NDTGridMsg serialize() const;
 
 protected:
   Eigen::Vector3d origin_;  // x,y,theta in the world frame
@@ -126,6 +123,7 @@ protected:
   bool initialized_;
   double timestamp_;
   DataGrid grid_;
+  Eigen::Vector2d cumul_move_;
 
   void mergeIn(std::vector<CellType> &&cells, bool resize);
   void addPoint(const PointType &pt);
@@ -142,6 +140,8 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(double timestamp)
   , cell_size_(0.25)
   , initialized_(false)
   , timestamp_(timestamp)
+  , grid_()
+  , cumul_move_(0, 0)
 {
   grid_.setCellSize(cell_size_);
 }
@@ -306,7 +306,7 @@ NDTGrid2D<CellType, PointType>::getNeighbors(const Eigen::Vector2d &pt,
 {
   CellPtrVector neighbours = grid_.getNeighbors(pt, radius);
   CellPtrVector gaussians;
-  gaussians.resize(radius + 1 * 4);
+  gaussians.reserve(neighbours.size());
   for (CellType *cell : neighbours) {
     if (cell->hasGaussian())
       gaussians.push_back(cell);
@@ -407,10 +407,38 @@ void NDTGrid2D<CellType, PointType>::transform(const Eigen::Matrix3d &transform)
 template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::move(const Eigen::Vector2d &translation)
 {
-  // TODO TODO TODO change calculation. Take in respect real movement
-  // grid_.translate(translation,true);
-  // origin_(0) += translation(0)* cell_size_;
-  // origin_(1) += translation(1) * cell_size_;
+  cumul_move_ += translation;
+  Eigen::Vector2i move(0, 0);
+  if (std::abs(std::floor(cumul_move_(0) / cell_size_)) > 0) {
+    move(0) = std::floor(cumul_move_(0) / cell_size_);
+    cumul_move_(0) -= move(0);
+  }
+  if (std::abs(std::floor(cumul_move_(1) / cell_size_)) > 0) {
+    move(1) = std::floor(cumul_move_(1) / cell_size_);
+    cumul_move_(1) -= move(1);
+  }
+  // move underling voxel grid
+  grid_.translate(move, true);
+  // move origin of this grid
+  origin_(0) += move(0) * cell_size_;
+  origin_(1) += move(1) * cell_size_;
+  // applies transformation to all means of ndt cells
+  for (auto &&cell : getGaussianCells()) {
+    cell->getMean() += move.cast<double>();
+  }
+}
+
+template <typename CellType, typename PointType>
+NDTGridMsg NDTGrid2D<CellType, PointType>::serialize() const
+{
+  NDTGridMsg msg;
+  msg.origin_ << origin_(0), origin_(1), 0;
+  msg.size_ << grid_.width() * cell_size_, grid_.height() * cell_size_, 0;
+  msg.cell_sizes_ << cell_size_, cell_size_, 0;
+  for (auto &&cell : grid_.getValidCellsPtr) {
+    msg.cells_.push_back(cell->serialize());
+  }
+  return msg;
 }
 
 ////////////////////PROTECCTED////////////////

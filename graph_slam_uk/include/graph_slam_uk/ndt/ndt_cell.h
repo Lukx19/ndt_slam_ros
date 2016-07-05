@@ -2,6 +2,8 @@
 #define GRAPH_SLAM_UK_NDT_CELL2D
 
 #include <Eigen/Dense>
+#include <graph_slam_uk/ndt/output_msgs.h>
+#include <ostream>
 
 namespace slamuk
 {
@@ -26,6 +28,11 @@ public:
     return points_;
   }
   const Eigen::Vector2d &getMean() const
+  {
+    return mean_;
+  }
+
+  Eigen::Vector2d &getMean()
   {
     return mean_;
   }
@@ -55,13 +62,15 @@ public:
                        size_t new_points);
 
   void transform(const typename Policy::Transform &trans);
+  NDTCellMsg serialize() const;
+
+  template <typename Pol>
+  friend std::ostream &operator<<(std::ostream &os, const NDTCell<Pol> &cell);
 
 protected:
   Vector mean_;
   Matrix cov_;
   Matrix icov_;
-  Vector evals_;
-  Matrix evecs_;
   float occup_;
   size_t points_;
   bool gaussian_;
@@ -214,7 +223,32 @@ void NDTCell<Policy>::updateOccupancy(const Vector &start, const Vector &end,
 template <class Policy>
 void NDTCell<Policy>::transform(const typename Policy::Transform &trans)
 {
+  if (gaussian_) {
+    mean_ = trans * mean_;
+    cov_ = trans.rotation() * cov_ * trans.rotation().transpose();
+    rescaleCovar();
+  }
 }
+
+template <class Policy>
+NDTCellMsg NDTCell<Policy>::serialize() const
+{
+  NDTCellMsg msg;
+  msg.mean_ << mean_(0), mean_(1), 0;
+  msg.cov_.setIdentity();
+  msg.cov_.block(0, 0, 2, 2) = cov_;
+  msg.occupancy_ = occup_;
+  msg.points_ = points_;
+  return msg;
+}
+
+template <typename Policy>
+std::ostream &operator<<(std::ostream &os, const NDTCell<Policy> &cell)
+{
+  os << cell.getOccupancy();
+  return os;
+}
+
 // PROTECTED///////////
 
 template <class Policy>
@@ -232,10 +266,10 @@ template <class Policy>
 void NDTCell<Policy>::rescaleCovar()
 {
   Eigen::SelfAdjointEigenSolver<Matrix> solver(cov_);
-  evecs_ = solver.eigenvectors().real();
-  evals_ = solver.eigenvalues().real();
+  Matrix evecs = solver.eigenvectors().real();
+  Vector evals = solver.eigenvalues().real();
   double eval_factor = 100;
-  if (evals_.sum() <= 0) {
+  if (evals.sum() <= 0) {
     gaussian_ = false;
   } else {
     gaussian_ = true;
@@ -243,21 +277,21 @@ void NDTCell<Policy>::rescaleCovar()
     bool recalc = false;
     // guard against near singular matrices::
     int id_max;
-    double max_eval = evals_.maxCoeff(&id_max);
+    double max_eval = evals.maxCoeff(&id_max);
     // test if every eigenval is big enough
     for (int i = 0; i < Policy::dim_; ++i) {
-      if (max_eval > evals_(i) * eval_factor) {
-        evals_(i) = evals_(id_max) / eval_factor;
+      if (max_eval > evals(i) * eval_factor) {
+        evals(i) = evals(id_max) / eval_factor;
         recalc = true;
       }
     }
     Matrix lamda;
-    lamda = evals_.asDiagonal();
+    lamda = evals.asDiagonal();
     if (recalc) {
-      cov_ = evecs_ * lamda * (evecs_.transpose());
+      cov_ = evecs * lamda * (evecs.transpose());
     }
     // compute inverse covariance
-    icov_ = evecs_ * (lamda.inverse()) * (evecs_.transpose());
+    icov_ = evecs * (lamda.inverse()) * (evecs.transpose());
   }
 }
 
