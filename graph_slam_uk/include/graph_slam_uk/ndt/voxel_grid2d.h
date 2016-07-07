@@ -287,7 +287,8 @@ VoxelGrid2D<CellType>::getNeighbors(const Point& pt, size_t radius) const
   if (!isInside(pt))
     return res;
   if (radius == 0) {
-    res.push_back(cells_[calcIndex(pt)].get());
+    if (cellExists(pt))
+      res.push_back(cells_[calcIndex(pt)].get());
     return res;
   }
   Coordinates win_center = calcCoordinates(pt);

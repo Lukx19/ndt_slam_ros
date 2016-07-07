@@ -9,6 +9,7 @@
 #include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
+#include <graph_slam_uk/utils/covariance_inverse.h>
 
 namespace pcl
 {
@@ -247,25 +248,40 @@ public:
   {
     return inform_matrix_;
   }
-  virtual void setInputSource(const PclSourceConstPtr &cloud)
+
+  virtual void setInputTarget(const PclTargetConstPtr &cloud)
   {
-    dynamic_cast<Registration<PointSource, PointTarget> *>(this)
-        ->setInputSource(cloud);
+    Registration<PointSource, PointTarget>::setInputTarget(cloud);
+    GridSource *tmp = new GridSource();
+    tmp->setCellSize(cell_sizes_.back());
+    tmp->initializeSimple(*cloud);
+    target_grid_ = GridTargetConstPtr(tmp);
   }
 
-  using Registration<PointSource, PointTarget>::setInputSource;
+  virtual void setInputSource(const PclSourceConstPtr &cloud)
+  {
+    Registration<PointSource, PointTarget>::setInputSource(cloud);
+    GridSource *tmp = new GridSource();
+    tmp->setCellSize(cell_sizes_.back());
+    tmp->initializeSimple(*cloud);
+    source_grid_ = GridSourceConstPtr(tmp);
+  }
+
+  // using Registration<PointSource, PointTarget>::setInputSource;
   virtual void setInputSource(const GridSourceConstPtr &grid)
   {
     source_grid_ = grid;
-    source_grid_updated_ = true;
+    PclSourceConstPtr pcl = grid->getMeans().makeShared();
+    Registration<PointSource, PointTarget>::setInputSource(pcl);
     setCellSize(source_grid_->getCellSize());
   }
 
-  using Registration<PointSource, PointTarget>::setInputTarget;
+  // using Registration<PointSource, PointTarget>::setInputTarget;
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
     target_grid_ = grid;
-    target_grid_updated_ = true;
+    PclTargetConstPtr pcl = grid->getMeans().makeShared();
+    Registration<PointSource, PointTarget>::setInputTarget(pcl);
     setCellSize(target_grid_->getCellSize());
   }
 
@@ -472,50 +488,39 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 {
   ROS_DEBUG_STREAM("[D2D_NDT2D]: guess:" << matToVec(guess).transpose());
   Eigen::Matrix4f trans = guess;
-  GridTargetConstPtr base_target;
-  GridSourceConstPtr base_source;
   converged_ = false;
-  // calculate base grids for source and target grids
-  if (!target_grid_updated_) {
-    if (target_cloud_updated_) {
-      GridTarget *tmp = new GridTarget();
-      tmp->setCellSize(cell_sizes_.back());
-      tmp->initializeSimple(*target_);
-      base_target = GridTargetConstPtr(tmp);
-    } else {
-      ROS_ERROR_STREAM("[D2D_NDT2D]: target cloud or grid not set");
-      return;
-    }
-  } else {
-    base_target = target_grid_;
+  if (!target_grid_) {
+    ROS_ERROR_STREAM("[D2D_NDT2D]: target cloud or grid not set");
+    return;
   }
-
-  if (!source_grid_updated_) {
-    if (source_cloud_updated_) {
-      GridSource *tmp = new GridSource();
-      tmp->setCellSize(cell_sizes_.back());
-      tmp->initializeSimple(*input_);
-      base_source = GridSourceConstPtr(tmp);
-    } else {
-      ROS_ERROR_STREAM("[D2D_NDT2D]: source cloud or grid not set");
-      return;
-    }
-  } else {
-    base_source = source_grid_;
+  if (!source_grid_) {
+    ROS_ERROR_STREAM("[D2D_NDT2D]: source cloud or grid not set");
+    return;
   }
+  // for (size_t i = 0; i < layer_count_; ++i) {
+  //   if (!computeSingleGrid(source_grid_->createCoarserGrid(cell_sizes_[i]),
+  //                          trans,
+  //                          target_grid_->createCoarserGrid(cell_sizes_[i]),
+  //                          params_[i], trans)) {
+  //     converged_ = false;
+  //     return;
+  //   }
+  // }
+  //
   for (size_t i = 0; i < layer_count_; ++i) {
-    size_t multiple = layer_count_ - i;
-    if (!computeSingleGrid(base_source->createCoarserGrid(multiple), trans,
-                           base_target->createCoarserGrid(multiple), params_[i],
-                           trans)) {
+    GridTarget tg;
+    GridSource sc;
+    tg.setCellSize(cell_sizes_[i]);
+    sc.setCellSize(cell_sizes_[i]);
+    tg.initializeSimple(*target_);
+    sc.initializeSimple(*input_);
+    if (!computeSingleGrid(sc, trans, tg, params_[i], trans)) {
       converged_ = false;
       return;
     }
   }
   ROS_DEBUG_STREAM("[D2D_NDT2D]: final trans:" << matToVec(trans).transpose());
-  // return transformed pcl only if source pcl was inputed
-  if (!source_grid_updated_)
-    transformPointCloud(*input_, output, trans);
+  transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;
   converged_ = true;
 }
@@ -529,6 +534,8 @@ bool D2DNormalDistributionsTransform2D<
                                  const d2d_ndt2d::FittingParams &param,
                                  Eigen::Matrix4f &trans)
 {
+  std::cout << "grid:states:\n" << target_grid << std::endl << std::endl
+            << source_grid << std::endl;
   nr_iterations_ = 0;
   converged_ = false;
   // Initialise final transformation to the guessed one
@@ -542,6 +549,9 @@ bool D2DNormalDistributionsTransform2D<
   d2d_ndt2d::ScoreAndDerivatives<3, double> score;
   while (!converged_) {
     score = calcScore(param, source_grid, xytheta_p, target_grid, true);
+    std::cout << "score: " << score.value_
+              << " gradient: " << score.gradient_.transpose()
+              << "\n hessian: \n" << score.hessian_ << std::endl;
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -575,12 +585,12 @@ bool D2DNormalDistributionsTransform2D<
     transformation_ = p;
     trans_probability_ =
         score.value_ / static_cast<double>(input_->points.size());
-    // ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
-    //                  << delta_p_norm
-    //                  << " Delta: " << delta_xytheta_p.transpose()
-    //                  << " Score: " << score.value_
-    //                  << " probability of match: " << trans_probability_
-    //                  << " current transformation: \n"<< xytheta_p);
+    ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
+                     << delta_p_norm
+                     << " Delta: " << delta_xytheta_p.transpose()
+                     << " Score: " << score.value_
+                     << " probability of match: " << trans_probability_
+                     << " current transformation: \n" << xytheta_p);
     // convergence testing
     if (nr_iterations_ >= max_iterations_ ||
         (nr_iterations_ &&
@@ -619,7 +629,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
   trans_mat.matrix() = vecToMat<double>(trans);
 
   SourceVec source_cells = sourceNDT.getGaussianCells();
-
+  std::cout << "ndt cells: " << source_cells.size() << std::endl;
   std::vector<ReturnVals> omp_ret;
   omp_ret.resize(4);
   for (size_t i = 0; i < 4; ++i) {
@@ -637,8 +647,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
       // TRANSFORMATION OF SOURCE GRID
       Eigen::Vector3d cell_mean;
       Eigen::Matrix3d cell_cov;
-      cell_mean.head(2) = source_cells[cell_id]->getMean();
-      cell_cov.block(0, 0, 2, 2) = source_cells[cell_id]->getCov();
+      cell_mean = source_cells[cell_id]->getMean();
+      cell_cov = source_cells[cell_id]->getCov();
       mean_source = trans_mat * cell_mean;
       cov_source =
           trans_mat.rotation() * cell_cov * trans_mat.rotation().transpose();
@@ -648,6 +658,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
                          calc_hessian);
 
       TargetVec neighbours = targetNDT.getNeighbors(mean_source.head(2), 2);
+      std::cout << "neighbours: " << neighbours.size() << std::endl;
       for (size_t i = 0; i < neighbours.size(); ++i) {
         local_ret +=
             calcSourceCellScore(mean_source, cov_source, neighbours[i],
@@ -702,8 +713,9 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   // declaration
   Eigen::Vector3d diff_mean;
   Eigen::Matrix3d cov_sum, icov;
-  double det = 0;
-  bool exists = false;
+  cov_sum.setIdentity();
+  // double det = 0;
+  // bool exists = false;
   double dist;
   // vars for gradient
   Eigen::Matrix<double, 3, 1> xtBJ, xtBZBx, Q;
@@ -721,14 +733,24 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   TMP1.setZero();
   xtB.setZero();
 
-  diff_mean.head(2) = (mean_source.head(2) - cell_t->getMean());
-  cov_sum.block(0, 0, 2, 2) = (cell_t->getCov() + cov_source.block(0, 0, 2, 2));
-  cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
-  if (!exists) {
+  diff_mean = (mean_source - cell_t->getMean());
+  cov_sum = (cell_t->getCov() + cov_source);
+  if (!slamuk::covarInverse(cov_sum, cov_sum, icov)) {
+    ROS_ERROR_STREAM("[D2D_NDT2D]: Not possible to calculate inverse of "
+                     "covariances between source cell and target cell");
     return res.Zero();
   }
+
+  // cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
+  // if (!exists) {
+  //   ROS_ERROR_STREAM("[D2D_NDT2D]: Not possible to calculate inverse of "
+  //                    "covariances between source cell and target cell");
+  //   return res.Zero();
+  // }
   dist = (diff_mean).dot(icov * (diff_mean));
   if (dist * 0 != 0) {
+    ROS_ERROR_STREAM("[D2D_NDT2D]: Mean diffrence hase some infiniti or nan "
+                     "values in");
     return res.Zero();
   }
   res.value_ = -param.gauss_d1_ * std::exp(-param.gauss_d2__half_ * dist);
@@ -828,7 +850,8 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
   // transformation = vecToMat(x_t);
 
-  // Updates score, gradient and hessian.  Hessian calculation is unessisary but
+  // Updates score, gradient and hessian.  Hessian calculation is unessisary
+  // but
   // testing showed that most step calculations use the
   // initial step suggestion and recalculation the reusable portions of the
   // hessian would intail more computation time.
@@ -923,7 +946,8 @@ bool D2DNormalDistributionsTransform2D<
                                 double &a_u, double &f_u, double &g_u,
                                 double a_t, double f_t, double g_t) const
 {
-  // Case U1 in Update Algorithm and Case a in Modified Update Algorithm [More,
+  // Case U1 in Update Algorithm and Case a in Modified Update Algorithm
+  // [More,
   // Thuente 1994]
   if (f_t > f_l) {
     a_u = a_t;
@@ -931,7 +955,8 @@ bool D2DNormalDistributionsTransform2D<
     g_u = g_t;
     return (false);
   }
-  // Case U2 in Update Algorithm and Case b in Modified Update Algorithm [More,
+  // Case U2 in Update Algorithm and Case b in Modified Update Algorithm
+  // [More,
   // Thuente 1994]
   else if (g_t * (a_l - a_t) > 0) {
     a_l = a_t;
@@ -939,7 +964,8 @@ bool D2DNormalDistributionsTransform2D<
     g_l = g_t;
     return (false);
   }
-  // Case U3 in Update Algorithm and Case c in Modified Update Algorithm [More,
+  // Case U3 in Update Algorithm and Case c in Modified Update Algorithm
+  // [More,
   // Thuente 1994]
   else if (g_t * (a_l - a_t) < 0) {
     a_u = a_l;
@@ -966,7 +992,8 @@ double D2DNormalDistributionsTransform2D<
 {
   // Case 1 in Trial Value Selection [More, Thuente 1994]
   if (f_t > f_l) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l and
+    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
+    // and
     // g_t
     // Equation 2.4.52 [Sun, Yuan 2006]
     double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
@@ -987,7 +1014,8 @@ double D2DNormalDistributionsTransform2D<
   }
   // Case 2 in Trial Value Selection [More, Thuente 1994]
   else if (g_t * g_l < 0) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l and
+    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
+    // and
     // g_t
     // Equation 2.4.52 [Sun, Yuan 2006]
     double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
@@ -1007,7 +1035,8 @@ double D2DNormalDistributionsTransform2D<
   }
   // Case 3 in Trial Value Selection [More, Thuente 1994]
   else if (std::fabs(g_t) <= std::fabs(g_l)) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l and
+    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
+    // and
     // g_t
     // Equation 2.4.52 [Sun, Yuan 2006]
     double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
@@ -1032,7 +1061,8 @@ double D2DNormalDistributionsTransform2D<
   }
   // Case 4 in Trial Value Selection [More, Thuente 1994]
   else {
-    // Calculate the minimizer of the cubic that interpolates f_u, f_t, g_u and
+    // Calculate the minimizer of the cubic that interpolates f_u, f_t, g_u
+    // and
     // g_t
     // Equation 2.4.52 [Sun, Yuan 2006]
     double z = 3 * (f_t - f_u) / (a_t - a_u) - g_t - g_u;

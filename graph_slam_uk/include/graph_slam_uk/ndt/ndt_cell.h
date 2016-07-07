@@ -4,19 +4,20 @@
 #include <Eigen/Dense>
 #include <graph_slam_uk/ndt/output_msgs.h>
 #include <ostream>
+#include <iostream>
 
 namespace slamuk
 {
 template <class Policy>
 class NDTCell
 {
-  typedef typename Policy::Vector Vector;
-  typedef typename Policy::Matrix Matrix;
+public:
+  typedef typename Eigen::Vector3d Vector;
+  typedef typename Eigen::Matrix3d Matrix;
+  typedef Eigen::Transform<double, 3, Eigen::TransformTraits::Affine> Transform;
 
 public:
-  NDTCell()
-  {
-  }
+  NDTCell();
 
   NDTCell &operator+=(const NDTCell &other);
   bool hasGaussian() const
@@ -27,20 +28,20 @@ public:
   {
     return points_;
   }
-  const Eigen::Vector2d &getMean() const
+  const Vector &getMean() const
   {
     return mean_;
   }
 
-  Eigen::Vector2d &getMean()
+  Vector &getMean()
   {
     return mean_;
   }
-  const Eigen::Matrix2d &getCov() const
+  const Matrix &getCov() const
   {
     return cov_;
   }
-  const Eigen::Matrix2d &getICov() const
+  const Matrix &getICov() const
   {
     return icov_;
   }
@@ -61,7 +62,7 @@ public:
   void updateOccupancy(const Vector &start, const Vector &end,
                        size_t new_points);
 
-  void transform(const typename Policy::Transform &trans);
+  void transform(const Transform &trans);
   NDTCellMsg serialize() const;
 
   template <typename Pol>
@@ -81,6 +82,17 @@ protected:
   double calcMaxLikelihoodOnLine(const Vector &start, const Vector &end,
                                  Vector &pt) const;
 };
+
+template <class Policy>
+NDTCell<Policy>::NDTCell()
+  : mean_(Vector::Zero())
+  , cov_(Matrix::Identity())
+  , icov_(Matrix::Identity())
+  , occup_(-1)
+  , points_(0)
+  , gaussian_(false)
+{
+}
 
 template <class Policy>
 NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
@@ -138,34 +150,47 @@ void NDTCell<Policy>::computeGaussian()
     gaussian_ = false;
     return;
   }
+  if (points_vec_.size() < 3) {
+    gaussian_ = false;
+    return;
+  }
+
   // compute gaussian of new points
-  Vector mean_sum2;
-  for (int i = 0; i < Policy::dim_; ++i) {
-    mean_sum2(i) = 0;
-  }
+  Vector mean_add = Vector::Zero();
+  Matrix cov_add = Matrix::Zero();
+
   for (auto &&pt : points_vec_) {
-    mean_sum2 += pt;
+    mean_add += pt;
+    cov_add += (pt * pt.transpose());
   }
-  Vector mean2 = mean_sum2 / points_vec_.size();
+  Vector mean2 = mean_add / points_vec_.size();
+  // // simgle pass covariance calculation
+  // Matrix cov_temp =
+  //     (cov_add - 2 * (mean_add * mean2.transpose())) / points_vec_.size() +
+  //     mean2 * mean2.transpose();
+  // Matrix cov2 = cov_temp;  //* ((points_vec_.size() - 1) /
+  // points_vec_.size());
 
   Eigen::MatrixXd mp;
-  mp.resize(points_vec_.size(), Policy::dim_);
+  mp.resize(points_vec_.size(), 3);
   for (int i = 0; i < points_vec_.size(); ++i) {
-    mp.col(i) = points_vec_[i] - mean2;
+    mp.row(i) = (points_vec_[i] - mean2).transpose();
   }
-  Matrix cov_sum2 = mp.transpose() * mp;
-  Matrix cov2 = cov_sum2 / (points_vec_.size() - 1);
+  Matrix cov2 = mp.transpose() * mp / (points_vec_.size() - 1);
 
   if (!gaussian_) {
     // cell do not have any gaussian information calculated
-    mean_ = mean2;
-    cov_ = cov2;
-    points_ = points_vec_.size();
+    this->mean_ = mean2;
+    this->cov_ = cov2;
+    this->points_ = points_vec_.size();
     rescaleCovar();
   } else {
     // previously calculated gaussian needs to be updated from points added
     Vector mean_sum1 = mean_ * points_;
     Matrix cov_sum1 = cov_ * (points_ - 1);
+
+    Vector mean_sum2 = mean2 * points_vec_.size();
+    Matrix cov_sum2 = cov2 * (points_vec_.size() - 1);
     double points1 = static_cast<double>(points_);
     double points2 = static_cast<double>(points_vec_.size());
     double w1 = points1 / (points2 * (points1 + points2));
@@ -221,7 +246,7 @@ void NDTCell<Policy>::updateOccupancy(const Vector &start, const Vector &end,
 }
 
 template <class Policy>
-void NDTCell<Policy>::transform(const typename Policy::Transform &trans)
+void NDTCell<Policy>::transform(const Transform &trans)
 {
   if (gaussian_) {
     mean_ = trans * mean_;
@@ -234,9 +259,9 @@ template <class Policy>
 NDTCellMsg NDTCell<Policy>::serialize() const
 {
   NDTCellMsg msg;
-  msg.mean_ << mean_(0), mean_(1), 0;
+  msg.mean_ = mean_;
   msg.cov_.setIdentity();
-  msg.cov_.block(0, 0, 2, 2) = cov_;
+  msg.cov_ = cov_;
   msg.occupancy_ = occup_;
   msg.points_ = points_;
   return msg;
@@ -245,7 +270,7 @@ NDTCellMsg NDTCell<Policy>::serialize() const
 template <typename Policy>
 std::ostream &operator<<(std::ostream &os, const NDTCell<Policy> &cell)
 {
-  os << cell.getOccupancy();
+  os << cell.occup_;
   return os;
 }
 
@@ -279,7 +304,7 @@ void NDTCell<Policy>::rescaleCovar()
     int id_max;
     double max_eval = evals.maxCoeff(&id_max);
     // test if every eigenval is big enough
-    for (int i = 0; i < Policy::dim_; ++i) {
+    for (int i = 0; i < 3; ++i) {
       if (max_eval > evals(i) * eval_factor) {
         evals(i) = evals(id_max) / eval_factor;
         recalc = true;

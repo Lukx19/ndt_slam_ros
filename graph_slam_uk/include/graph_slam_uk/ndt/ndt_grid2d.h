@@ -25,6 +25,7 @@ public:
   typedef NDTGrid2D<CellType, PointType> SelfType;
   typedef CellType Cell;
   typedef Eigen::Vector3d Pose;
+  typedef Eigen::Transform<double, 2, Eigen::TransformTraits::Affine> Transform;
   typedef typename VoxelGrid2D<CellType>::CellPtrVector CellPtrVector;
   typedef typename VoxelGrid2D<CellType>::Iterator Iterator;
   typedef typename VoxelGrid2D<CellType>::ConstIterator ConstIterator;
@@ -52,12 +53,13 @@ public:
     grid_.enlarge(left, down, right, up);
   }
   void move(const Eigen::Vector2d &translation);
-  void transform(const Eigen::Matrix3d &transform);
+  void transform(const Transform &transform);
   OccupancyGrid createOccupancyGrid() const;
 
   void setCellSize(float cell_size)
   {
     cell_size_ = cell_size;
+    grid_.setCellSize(cell_size);
   }
   float getCellSize() const
   {
@@ -88,12 +90,12 @@ public:
   /////////////// IMPLEMENTATION of IScanmatchableGrid
   // returns only cells with gaussian inside. Includes all cells in radius plus
   // cell where pt belongs.
-  CellPtrVector getNeighbors(const Eigen::Vector2d &pt, size_t radius) const;
+  CellPtrVector getNeighbors(const Eigen::Vector2d &pt, float radius) const;
 
   // multiple 2 means 2x2 grids will be merged to one cell. Multiple 3  means
   // 4x4 grids will be merged together
   // multiple - multiple of cell_sizes
-  SelfType createCoarserGrid(size_t multiple) const;
+  SelfType createCoarserGrid(float cell_size) const;
 
   PointCloud getMeans() const;
 
@@ -117,6 +119,10 @@ public:
   }
   NDTGridMsg serialize() const;
 
+  template <typename Cell, typename Pt>
+  friend std::ostream &operator<<(std::ostream &os,
+                                  const NDTGrid2D<Cell, Pt> &grid);
+
 protected:
   Eigen::Vector3d origin_;  // x,y,theta in the world frame
   float cell_size_;
@@ -130,7 +136,7 @@ protected:
   void computeNDTCells();
   SelfType createGrid(const PointCloud &pcl) const;
   void transformNDTCells(std::vector<CellType> &grid,
-                         const Eigen::Matrix3d &transform);
+                         const Transform &transform);
 };
 
 // //////////////////IMPLEMENTATION ///////////
@@ -156,7 +162,6 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const PointCloud &pcl,
   // transforming input pcl to reference frame of this grid
   pcl::transformPointCloud(pcl, trans_pcl,
                            eigt::convertFromTransform(trans).cast<float>());
-
   mergeIn(createGrid(trans_pcl), false, resize);
 }
 
@@ -170,7 +175,7 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const SelfType &grid,
     // we need to transform each cell to its new position
     eigt::transform2d_t<double> trans =
         eigt::transBtwPoses(this->origin_, grid.origin_);
-    transformNDTCells(occupied_cells, trans.matrix());
+    transformNDTCells(occupied_cells, trans);
   }
   mergeIn(occupied_cells, resize);
 }
@@ -188,15 +193,16 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
     pcl::getMinMaxNDT2D(cells, minx, miny, maxx, maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
-      if (cell.hasGaussian())
-        grid_.addCell(cell.getMean(), cell);
+      if (cell.hasGaussian()) {
+        grid_.addCell(cell.getMean().head(2), cell, false);
+      }
     }
   } else {
     for (auto &&cell : cells) {
       // cell is discarted if it is outside of the boundries for current grid_
       if (cell.hasGaussian())
-        if (grid_.isInside(cell.getMean()))
-          grid_.addCell(cell.getMean(), cell);
+        if (grid_.isInside(cell.getMean().head(2)))
+          grid_.addCell(cell.getMean().head(2), cell);
     }
   }
 }
@@ -205,21 +211,21 @@ template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::mergeIn(std::vector<CellType> &&cells,
                                              bool resize)
 {
-  // incoming vector of cells includes all cells [cells with gaussian, visited
-  // unoccupied cells,unoccupied cells with gaussian]
+  // incoming vector of cells includes all cells [cells with Gaussian, visited
+  // unoccupied cells,unoccupied cells with Gaussian]
   if (resize || !initialized_) {
     initialized_ = true;
     float minx, miny, maxx, maxy;
     pcl::getMinMaxNDT2D(cells, minx, miny, maxx, maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
-      grid_.addCell(cell.getMean(), std::move(cell));
+      grid_.addCell(cell.getMean().head(2), std::move(cell));
     }
   } else {
     for (auto &&cell : cells) {
-      // cell is discarted if it is outside of the boundries for current grid_
-      if (grid_.isInside(cell.getMean()))
-        grid_.addCell(cell.getMean(), std::move(cell));
+      // cell is discarded if it is outside of the boundaries for current grid_
+      if (grid_.isInside(cell.getMean().head(2)))
+        grid_.addCell(cell.getMean().head(2), std::move(cell));
     }
   }
 }
@@ -248,15 +254,15 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
     // we need to transform each cell to its new position
     eigt::transform2d_t<double> trans =
         eigt::transBtwPoses(this->origin_, grid.origin_);
-    transformNDTCells(occupied_cells, trans.matrix());
+    transformNDTCells(occupied_cells, trans);
   }
   for (auto &&cell : occupied_cells) {
     if (cell.hasGaussian()) {
-      CellPtrVector ray_cells = grid_.rayTrace(cell.getMean());
+      CellPtrVector ray_cells = grid_.rayTrace(cell.getMean().head(2));
       for (CellType *ray_cell : ray_cells) {
         // update cell on line between start and end point
-        ray_cell->updateOccupancy(this->origin_.head(2), cell.getMean(),
-                                  cell.points());
+        typename CellType::Vector start(this->origin_(0), this->origin_(0), 0);
+        ray_cell->updateOccupancy(start, cell.getMean(), cell.points());
       }
     }
   }
@@ -280,14 +286,14 @@ void NDTGrid2D<CellType, PointType>::initializeSimple(const PointCloud &pcl)
 template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::addPoint(const PointType &pt)
 {
-  typename DataGrid::Point point;
-  point << pt.x, pt.y;
-  if (!grid_.cellExists(point)) {
+  Eigen::Vector3d point(pt.x, pt.y, pt.z);
+  Eigen::Vector2d point2d = point.head(2);
+  if (!grid_.cellExists(point2d)) {
     // this field doesn't exist in cell yet
-    grid_.addCell(point, CellType(), false);
-    grid_[point].addPoint(point);
+    grid_.addCell(point2d, CellType(), false);
+    grid_[point2d].addPoint(point);
   } else {
-    grid_[point].addPoint(point);
+    grid_[point2d].addPoint(point);
   }
 }
 
@@ -302,14 +308,16 @@ void NDTGrid2D<CellType, PointType>::computeNDTCells()
 template <typename CellType, typename PointType>
 typename NDTGrid2D<CellType, PointType>::CellPtrVector
 NDTGrid2D<CellType, PointType>::getNeighbors(const Eigen::Vector2d &pt,
-                                             size_t radius) const
+                                             float radius) const
 {
-  CellPtrVector neighbours = grid_.getNeighbors(pt, radius);
+  size_t manh_radius = std::ceil(radius / cell_size_);
+  CellPtrVector neighbours = grid_.getNeighbors(pt, manh_radius);
   CellPtrVector gaussians;
   gaussians.reserve(neighbours.size());
   for (CellType *cell : neighbours) {
     if (cell->hasGaussian())
-      gaussians.push_back(cell);
+      if ((cell->getMean().head(2) - pt).norm() < radius)
+        gaussians.push_back(cell);
   }
   return gaussians;
 }
@@ -351,14 +359,18 @@ OccupancyGrid NDTGrid2D<CellType, PointType>::createOccupancyGrid() const
 
 template <typename CellType, typename PointType>
 typename NDTGrid2D<CellType, PointType>::SelfType
-NDTGrid2D<CellType, PointType>::createCoarserGrid(size_t multiple) const
+NDTGrid2D<CellType, PointType>::createCoarserGrid(float cell_size) const
 {
-  if (multiple <= 1)
-    return *this;
+  if (cell_size < cell_size_)
+    cell_size = cell_size_;
 
   SelfType coarse_grid;
-  coarse_grid.setCellSize(multiple * cell_size_);
-  coarse_grid.mergeIn(grid_.getValidCells(), true);
+  coarse_grid.setCellSize(cell_size);
+  auto cells = grid_.getValidCells();
+  coarse_grid.mergeIn(cells, true);
+  std::cout << "old grid cells: " << getGaussianCells().size()
+            << " new cell: " << coarse_grid.getGaussianCells().size()
+            << std::endl;
   return coarse_grid;
 }
 
@@ -369,10 +381,10 @@ NDTGrid2D<CellType, PointType>::getMeans() const
   PointCloud pcl;
   for (auto &&cell : getGaussianCells()) {
     PointType pt;
-    Eigen::Vector2d mean = cell->getMean();
+    Eigen::Vector3d mean = cell->getMean();
     pt.x = mean(0);
     pt.y = mean(1);
-    pt.z = 0;
+    pt.z = mean(2);
   }
 }
 
@@ -390,7 +402,7 @@ NDTGrid2D<CellType, PointType>::getGaussianCells() const
 }
 
 template <typename CellType, typename PointType>
-void NDTGrid2D<CellType, PointType>::transform(const Eigen::Matrix3d &transform)
+void NDTGrid2D<CellType, PointType>::transform(const Transform &transform)
 {
   // get valid cells apply on them transformation and fuse them back to empty
   // grid
@@ -400,8 +412,7 @@ void NDTGrid2D<CellType, PointType>::transform(const Eigen::Matrix3d &transform)
   trans_grid.mergeIn(cells, true);
   grid_ = std::move(trans_grid);
   // transform origin of ndt grid
-  eigt::transform2d_t<double> trans_mat(transform);
-  origin_ = trans_mat * origin_;
+  origin_ = eigt::transformPose(origin_, transform);
 }
 
 template <typename CellType, typename PointType>
@@ -424,7 +435,7 @@ void NDTGrid2D<CellType, PointType>::move(const Eigen::Vector2d &translation)
   origin_(1) += move(1) * cell_size_;
   // applies transformation to all means of ndt cells
   for (auto &&cell : getGaussianCells()) {
-    cell->getMean() += move.cast<double>();
+    cell->getMean() += Eigen::Vector3d(move(0), move(1), 0);
   }
 }
 
@@ -441,6 +452,27 @@ NDTGridMsg NDTGrid2D<CellType, PointType>::serialize() const
   return msg;
 }
 
+template <typename Cell, typename Pt>
+std::ostream &operator<<(std::ostream &os, const NDTGrid2D<Cell, Pt> &grid)
+{
+  size_t i = 0;
+  for (typename NDTGrid2D<Cell, Pt>::DataGrid::ConstIterator cell =
+           grid.grid_.cbegin();
+       cell != grid.grid_.cend(); ++cell) {
+    if (cell->get() == nullptr)
+      os << std::setw(1) << "";
+    else if ((*cell)->hasGaussian())
+      os << std::setw(1) << "W";
+    else
+      os << std::setw(1) << ".";
+    ++i;
+    if (i == grid.grid_.width()) {
+      os << std::endl;
+      i = 0;
+    }
+  }
+  return os;
+}
 ////////////////////PROTECCTED////////////////
 template <typename CellType, typename PointType>
 typename NDTGrid2D<CellType, PointType>::SelfType
@@ -463,10 +495,11 @@ NDTGrid2D<CellType, PointType>::createGrid(const PointCloud &pcl) const
 
 template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::transformNDTCells(
-    std::vector<CellType> &grid, const Eigen::Matrix3d &transform)
+    std::vector<CellType> &grid, const Transform &transform)
 {
+  typename CellType::Transform trans(eigt::convertFromTransform(transform));
   for (CellType &cell : grid) {
-    cell.transform(transform);
+    cell.transform(trans);
   }
 }
 

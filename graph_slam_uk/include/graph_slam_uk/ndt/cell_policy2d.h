@@ -10,7 +10,7 @@ class CellPolicy2d
 public:
   typedef Eigen::Vector2d Vector;
   typedef Eigen::Matrix2d Matrix;
-  typedef Eigen::Matrix3d Transform;
+  typedef Eigen::Transform<double, 2, Eigen::TransformTraits::Affine> Transform;
 
   static const size_t dim_ = 2;
   static const size_t max_points_ = 1e9;

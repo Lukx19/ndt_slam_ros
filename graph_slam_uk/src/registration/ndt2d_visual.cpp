@@ -31,14 +31,14 @@ using namespace pcl;
 typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
 
 double EPSILON = 0.001;
-double MIN_DISPLACEMENT = 0.4;
-double MIN_ROTATION = 0.3;
+double MIN_DISPLACEMENT = 0.2;
+double MIN_ROTATION = 0.15;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 // std::vector<MatchResult> matches;
 Registration<pcl::PointXYZ, pcl::PointXYZ> *matcher;
-D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ> *proofer;
-// IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> * proofer;
+// D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ> *proofer;
+IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> *proofer;
 // SampleConsensusInitialAlignment<pcl::PointXYZ, pcl::PointXYZ> * proofer;
 std::vector<std::string> split(std::string data, std::string token)
 {
@@ -276,10 +276,9 @@ int main(int argc, char **argv)
   // matcher->setResolution(1);
   preparePoseData(args[1]);
   prepareLaserScans(args[1]);
-  proofer =
-      new D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>();
-  // proofer = new
-  // SampleConsensusInitialAlignment<pcl::PointXYZ,pcl::PointXYZ>();
+  // proofer =
+  //     new D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>();
+  proofer = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
   if (args[2] == "basic") {
     matcher =
         new NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>();
@@ -288,15 +287,17 @@ int main(int argc, char **argv)
         new D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>();
   } else if (args[2] == "corr") {
     matcher = new CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ>();
+    static_cast<CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ> *>(matcher)
+        ->setCoarseStep(0.5);
   } else if (args[2] == "robust") {
     matcher = new D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ,
                                                           pcl::PointXYZ>();
   }
-  testMatch(4, 2);
-  testMatch(2, 0);
-  testMatch(6, 0);
-  testMatch(0, 10);
-  testMatch(0, 100);
+  // testMatch(4, 2);
+  // testMatch(2, 0);
+  // testMatch(6, 0);
+  // testMatch(0, 10);
+  // testMatch(0, 100);
   size_t start = 80;
   test(start);
   delete matcher;
