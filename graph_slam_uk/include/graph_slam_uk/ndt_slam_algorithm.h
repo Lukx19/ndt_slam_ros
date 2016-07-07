@@ -44,7 +44,9 @@ public:
   virtual nav_msgs::OccupancyGrid
   calcOccupancyGrid(std::string &world_frame_id) const override
   {
-    return map_.calcOccupancyGridMsg();
+    auto map = map_.calcOccupancyGridMsg();
+    map.header.frame_id = world_frame_id;
+    return map;
   }
 
   virtual visualization_msgs::MarkerArray
@@ -90,13 +92,13 @@ protected:
   double max_uncertanity_in_window_;
   double max_euclidean_distance_traveled_;
 
+  ros::Time window_update_time_;
+  unsigned int window_seq_;
+
   inline bool movedEnough(const Transform &trans,
                           const CovarianceWrapper &covar) const;
   inline graph_slam_uk::NDTMapMsg
-  toNdtMapMsg(const NDTGridMsg &msg, const std::string &fixed_frame) const
-  {
-    return graph_slam_uk::NDTMapMsg();
-  }
+  toNdtMapMsg(const NDTGridMsg &msg, const std::string &fixed_frame) const;
 };
 NdtSlamAlgortihm::NdtSlamAlgortihm()
   : initialized_(false)
@@ -146,6 +148,8 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
                              win_radius_);
     running_window_->initialize(pcl);
     frame_temp_->initialize(pcl);
+    window_update_time_ update_time;
+    window_seq_ = 0;
     return position_;
   }
   Transform position_odom = position_ * motion;
@@ -165,6 +169,9 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     running_window_->move(trans_vec.head(2));
     running_window_->mergeInTraced(pcl, eigt::getPoseFromTransform(position_),
                                    false);
+    window_update_time_ = update_time;
+    ++window_seq_;
+
     // increasing transformation and covariance of local temp frame
     transform_temp_ = transform_temp_ * trans_mat;
     covar_temp_.addToCovar(covariance, trans_mat);
@@ -230,6 +237,36 @@ bool NdtSlamAlgortihm::movedEnough(const Transform &trans,
     return false;
 }
 
+graph_slam_uk::NDTMapMsg NdtSlamAlgortihm::toNdtMapMsg(
+    const NDTGridMsg &msg, const std::string &fixed_frame) const
+{
+  graph_slam_uk::NDTMapMsg ros_msg;
+  ros_msg.header.frame_id = fixed_frame;
+  ros_msg.header.stamp = window_update_time_;
+  ros_msg.header.seq = window_seq_;
+  ros_msg.x_cen = msg.origin_(0);
+  ros_msg.y_cen = msg.origin_(1);
+  ros_msg.z_cen = msg.origin_(2);
+  ros_msg.x_size = msg.size_(0);
+  ros_msg.y_size = msg.size_(1);
+  ros_msg.z_size = msg.size_(2);
+  ros_msg.x_cell_size = msg.cell_sizes_(0);
+  ros_msg.y_cell_size = msg.cell_sizes_(1);
+  ros_msg.z_cell_size = msg.cell_sizes_(2);
+  for (auto &&cell : msg.cells_) {
+    graph_slam_uk::NDTCellMsg cl;
+    cl.mean_x = cell.mean_(0);
+    cl.mean_y = cell.mean_(1);
+    cl.mean_z = cell.mean_(2);
+    cl.occupancy = cell.occupancy_;
+    cl.N = cell.points_;
+    for (auto &&val : cell.cov_) {
+      cl.cov_matrix.push_back(val);
+    }
+    ros_msg.cells.push_back(std::move(cl));
+  }
+  return ros_msg;
+}
 }  // end of namespace slamuk
 
 #endif
