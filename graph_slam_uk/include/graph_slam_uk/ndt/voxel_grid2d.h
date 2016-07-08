@@ -53,6 +53,7 @@ public:
 
   bool cellExists(const Point& pt) const;
   CellType& operator[](const Point& pt);
+  CellType* getCellPtr(const Point& pt) const;
   // returns all initialized cells by values. Should be used for creation of new
   // grids
   CellVector getValidCells() const;
@@ -331,6 +332,12 @@ template <typename CellType>
 CellType& VoxelGrid2D<CellType>::operator[](const Point& pt)
 {
   return *cells_[calcIndex(pt)];
+}
+
+template <typename CellType>
+CellType* VoxelGrid2D<CellType>::getCellPtr(const Point& pt) const
+{
+  return cells_[calcIndex(pt)].get();
 }
 
 // returns all initialized cells by values. Should be used for creation of new

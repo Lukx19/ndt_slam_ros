@@ -8,7 +8,6 @@
 #include <pcl/common/transforms.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
 #include <graph_slam_uk/utils/point_cloud_tools.h>
-#include <graph_slam_uk/registration/scanmatchable_grid_interface.h>
 #include <boost/shared_ptr.hpp>
 #include <graph_slam_uk/ndt/output_msgs.h>
 #include <pcl/kdtree/kdtree_flann.h>
@@ -100,7 +99,10 @@ public:
   // multiple - multiple of cell_sizes
   SelfType createCoarserGrid(float cell_size) const;
 
-  PointCloud getMeans() const;
+  const typename PointCloud::Ptr getMeans() const
+  {
+    return means_;
+  }
 
   CellPtrVector getGaussianCells() const;
 
@@ -138,6 +140,7 @@ protected:
   DataGrid grid_;
   Eigen::Vector2d cumul_move_;
   pcl::KdTreeFLANN<PointType> kdtree_;
+  typename PointCloud::Ptr means_;
 
   void mergeIn(std::vector<CellType> &&cells, bool resize);
   void addPoint(const PointType &pt);
@@ -145,6 +148,16 @@ protected:
   SelfType createGrid(const PointCloud &pcl) const;
   void transformNDTCells(std::vector<CellType> &grid,
                          const Transform &transform);
+  void updateKDTree()
+  {
+    means_ = getMeans();
+    kdtree_.setInputCloud(means_, nullptr);
+  }
+  CellPtrVector getKNearestNeighborsVoxel(const Eigen::Vector2d &pt,
+                                          size_t K) const;
+  CellPtrVector getKNearestNeighborsKDTree(const Eigen::Vector2d &pt,
+                                           size_t K) const;
+  void updateMeansCloud();
 };
 
 // //////////////////IMPLEMENTATION ///////////
@@ -213,6 +226,8 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
           grid_.addCell(cell.getMean().head(2), cell);
     }
   }
+  updateMeansCloud();
+  updateKDTree();
 }
 
 template <typename CellType, typename PointType>
@@ -236,6 +251,8 @@ void NDTGrid2D<CellType, PointType>::mergeIn(std::vector<CellType> &&cells,
         grid_.addCell(cell.getMean().head(2), std::move(cell));
     }
   }
+  updateMeansCloud();
+  updateKDTree();
 }
 
 template <typename CellType, typename PointType>
@@ -345,27 +362,7 @@ typename NDTGrid2D<CellType, PointType>::CellPtrVector
 NDTGrid2D<CellType, PointType>::getKNearestNeighbors(const Eigen::Vector2d &pt,
                                                      size_t K) const
 {
-  Eigen::Vector3d point(pt(0), pt(1), 0);
-  CellPtrVector res;
-  // slowly increase search radius and find sufficient number of points
-  CellPtrVector radius_cells = getNeighbors(pt, 1);
-  size_t radius = 2;
-  while (radius_cells.size() < K && radius < grid_.width()) {
-    radius_cells = getNeighbors(pt, radius);
-    radius = radius * 2;
-  }
-  // not enough elements in grid
-  if (radius_cells.size() < K)
-    return radius_cells;
-  // sort elements based on distance from point from parameter
-  std::sort(radius_cells.begin(), radius_cells.end(),
-            [&point](CellType *a, CellType *b) {
-    return (a->getMean() - point).norm() < (a->getMean() - point).norm();
-  });
-  res.reserve(K);
-  std::move(radius_cells.begin(), radius_cells.begin() + K,
-            std::back_inserter(res));
-  return res;
+  return getKNearestNeighborsKDTree(pt, K);
 }
 
 template <typename CellType, typename PointType>
@@ -442,24 +439,7 @@ NDTGrid2D<CellType, PointType>::createCoarserGrid(float cell_size) const
   coarse_grid.setCellSize(cell_size);
   auto cells = grid_.getValidCells();
   coarse_grid.mergeIn(cells, true);
-  std::cout << "old grid cells: " << getGaussianCells().size()
-            << " new cell: " << coarse_grid.getGaussianCells().size()
-            << std::endl;
   return coarse_grid;
-}
-
-template <typename CellType, typename PointType>
-typename NDTGrid2D<CellType, PointType>::PointCloud
-NDTGrid2D<CellType, PointType>::getMeans() const
-{
-  PointCloud pcl;
-  for (auto &&cell : getGaussianCells()) {
-    PointType pt;
-    Eigen::Vector3d mean = cell->getMean();
-    pt.x = mean(0);
-    pt.y = mean(1);
-    pt.z = mean(2);
-  }
 }
 
 template <typename CellType, typename PointType>
@@ -575,6 +555,70 @@ void NDTGrid2D<CellType, PointType>::transformNDTCells(
   for (CellType &cell : grid) {
     cell.transform(trans);
   }
+}
+
+template <typename CellType, typename PointType>
+typename NDTGrid2D<CellType, PointType>::CellPtrVector
+NDTGrid2D<CellType, PointType>::getKNearestNeighborsVoxel(
+    const Eigen::Vector2d &pt, size_t K) const
+{
+  Eigen::Vector3d point(pt(0), pt(1), 0);
+  CellPtrVector res;
+  // slowly increase search radius and find sufficient number of points
+  CellPtrVector radius_cells = getNeighbors(pt, 1);
+  size_t radius = 2;
+  while (radius_cells.size() < K && radius < grid_.width()) {
+    radius_cells = getNeighbors(pt, radius);
+    radius = radius * 2;
+  }
+  // not enough elements in grid
+  if (radius_cells.size() < K)
+    return radius_cells;
+  // sort elements based on distance from point from parameter
+  std::sort(radius_cells.begin(), radius_cells.end(),
+            [&point](CellType *a, CellType *b) {
+    return (a->getMean() - point).norm() < (a->getMean() - point).norm();
+  });
+  res.reserve(K);
+  std::move(radius_cells.begin(), radius_cells.begin() + K,
+            std::back_inserter(res));
+  return res;
+}
+
+template <typename CellType, typename PointType>
+typename NDTGrid2D<CellType, PointType>::CellPtrVector
+NDTGrid2D<CellType, PointType>::getKNearestNeighborsKDTree(
+    const Eigen::Vector2d &pt, size_t K) const
+{
+  CellPtrVector res;
+  res.reserve(K);
+  PointType point;
+  point.x = pt(0);
+  point.y = pt(1);
+  point.z = 0;
+  std::vector<int> res_indexes;
+  std::vector<float> distances;
+  kdtree_.nearestKSearch(point, K, res_indexes, distances);
+  for (int id : res_indexes) {
+    PointType near_pt = means_->at(id);
+    res.push_back(grid_.getCellPtr(Eigen::Vector2d(near_pt.x, near_pt.y)));
+  }
+  return res;
+}
+
+template <typename CellType, typename PointType>
+void NDTGrid2D<CellType, PointType>::updateMeansCloud()
+{
+  typename PointCloud::Ptr pcl(new PointCloud());
+  for (auto &&cell : getGaussianCells()) {
+    PointType pt;
+    Eigen::Vector3d mean = cell->getMean();
+    pt.x = mean(0);
+    pt.y = mean(1);
+    pt.z = mean(2);
+    pcl->push_back(pt);
+  }
+  means_ = pcl;
 }
 
 }  // end of namespace slamuk

@@ -271,7 +271,7 @@ public:
   virtual void setInputSource(const GridSourceConstPtr &grid)
   {
     source_grid_ = grid;
-    PclSourceConstPtr pcl = grid->getMeans().makeShared();
+    PclSourceConstPtr pcl = grid->getMeans();
     Registration<PointSource, PointTarget>::setInputSource(pcl);
     setCellSize(source_grid_->getCellSize());
   }
@@ -280,7 +280,7 @@ public:
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
     target_grid_ = grid;
-    PclTargetConstPtr pcl = grid->getMeans().makeShared();
+    PclTargetConstPtr pcl = grid->getMeans();
     Registration<PointSource, PointTarget>::setInputTarget(pcl);
     setCellSize(target_grid_->getCellSize());
   }
@@ -497,24 +497,11 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     ROS_ERROR_STREAM("[D2D_NDT2D]: source cloud or grid not set");
     return;
   }
-  // for (size_t i = 0; i < layer_count_; ++i) {
-  //   if (!computeSingleGrid(source_grid_->createCoarserGrid(cell_sizes_[i]),
-  //                          trans,
-  //                          target_grid_->createCoarserGrid(cell_sizes_[i]),
-  //                          params_[i], trans)) {
-  //     converged_ = false;
-  //     return;
-  //   }
-  // }
-
   for (size_t i = 0; i < layer_count_; ++i) {
-    GridTarget tg;
-    GridSource sc;
-    tg.setCellSize(cell_sizes_[i]);
-    sc.setCellSize(cell_sizes_[i]);
-    tg.initializeSimple(*target_);
-    sc.initializeSimple(*input_);
-    if (!computeSingleGrid(sc, trans, tg, params_[i], trans)) {
+    if (!computeSingleGrid(source_grid_->createCoarserGrid(cell_sizes_[i]),
+                           trans,
+                           target_grid_->createCoarserGrid(cell_sizes_[i]),
+                           params_[i], trans)) {
       converged_ = false;
       return;
     }
@@ -534,8 +521,6 @@ bool D2DNormalDistributionsTransform2D<
                                  const d2d_ndt2d::FittingParams &param,
                                  Eigen::Matrix4f &trans)
 {
-  std::cout << "grid:states:\n" << target_grid << std::endl << std::endl
-            << source_grid << std::endl;
   nr_iterations_ = 0;
   converged_ = false;
   // Initialise final transformation to the guessed one
@@ -549,17 +534,13 @@ bool D2DNormalDistributionsTransform2D<
   d2d_ndt2d::ScoreAndDerivatives<3, double> score;
   while (!converged_) {
     score = calcScore(param, source_grid, xytheta_p, target_grid, true);
-    std::cout << "score: " << score.value_
-              << " gradient: " << score.gradient_.transpose()
-              << "\n hessian: \n" << score.hessian_ << std::endl;
+
     // Solve for decent direction using newton method
     Eigen::JacobiSVD<Eigen::Matrix3d> sv(
         score.hessian_, Eigen::ComputeFullU | Eigen::ComputeFullV);
     // Negative for maximization as opposed to minimization
     delta_xytheta_p = sv.solve(-score.gradient_);
 
-    // Calculate step length with guarnteed sufficient decrease [More, Thuente
-    // 1994]
     delta_p_norm = delta_xytheta_p.norm();
     if (delta_p_norm == 0 || delta_p_norm != delta_p_norm) {
       trans_probability_ =
@@ -572,6 +553,8 @@ bool D2DNormalDistributionsTransform2D<
       return false;
     }
     delta_xytheta_p.normalize();
+    // Calculate step length with guarnteed sufficient decrease [More, Thuente
+    // 1994]
     delta_p_norm = computeStepLengthMT(xytheta_p, delta_xytheta_p, delta_p_norm,
                                        step_size_, transformation_epsilon_ / 2,
                                        source_grid, score, target_grid, param);
@@ -585,12 +568,12 @@ bool D2DNormalDistributionsTransform2D<
     transformation_ = p;
     trans_probability_ =
         score.value_ / static_cast<double>(input_->points.size());
-    ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
-                     << delta_p_norm
-                     << " Delta: " << delta_xytheta_p.transpose()
-                     << " Score: " << score.value_
-                     << " probability of match: " << trans_probability_
-                     << " current transformation: \n" << xytheta_p);
+    // ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
+    //                  << delta_p_norm
+    //                  << " Delta: " << delta_xytheta_p.transpose()
+    //                  << " Score: " << score.value_
+    //                  << " probability of match: " << trans_probability_
+    //                  << " current transformation: \n" << xytheta_p);
     // convergence testing
     if (nr_iterations_ >= max_iterations_ ||
         (nr_iterations_ &&
@@ -657,8 +640,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
       computeDerivatives(mean_source, cov_source, partial_derivatives,
                          calc_hessian);
       TargetVec neighbors =
-          targetNDT.getKNearestNeighbors(mean_source.head(2), 1);
-      std::cout << "neighbors: " << neighbors.size() << std::endl;
+          targetNDT.getKNearestNeighbors(mean_source.head(2), 2);
+      // std::cout << "neighbors: " << neighbors.size() << std::endl;
       for (size_t i = 0; i < neighbors.size(); ++i) {
         local_ret +=
             calcSourceCellScore(mean_source, cov_source, neighbors[i],
@@ -743,14 +726,10 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
   cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
   if (!exists) {
-    ROS_ERROR_STREAM("[D2D_NDT2D]: Not possible to calculate inverse of "
-                     "covariances between source cell and target cell");
     return res.Zero();
   }
   dist = (diff_mean).dot(icov * (diff_mean));
   if (dist * 0 != 0) {
-    ROS_ERROR_STREAM("[D2D_NDT2D]: Mean diffrence hase some infiniti or nan "
-                     "values in");
     return res.Zero();
   }
   res.value_ = -param.gauss_d1_ * std::exp(-param.gauss_d2__half_ * dist);

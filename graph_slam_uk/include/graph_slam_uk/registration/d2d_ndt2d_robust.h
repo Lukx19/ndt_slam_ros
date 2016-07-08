@@ -71,14 +71,14 @@ public:
   virtual void setInputSource(const GridSourceConstPtr &grid)
   {
     d2d_.setInputSource(grid);
-    PclSourceConstPtr pcl = grid->getMeans().makeShared();
+    PclSourceConstPtr pcl = grid->getMeans();
     corr_est_.setInputSource(pcl);
     Registration<PointSource, PointTarget>::setInputSource(pcl);
   }
 
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
-    PclTargetConstPtr pcl = grid->getMeans().makeShared();
+    PclTargetConstPtr pcl = grid->getMeans();
     Registration<PointSource, PointTarget>::setInputTarget(pcl);
     d2d_.setInputTarget(grid);
     corr_est_.setInputTarget(pcl);

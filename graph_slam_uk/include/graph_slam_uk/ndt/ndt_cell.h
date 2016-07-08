@@ -119,9 +119,7 @@ NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
     double w1 = static_cast<double>(points1) /
                 static_cast<double>(points2 * points_sum);
     double w2 = static_cast<double>(points2) / static_cast<double>(points1);
-    // double w1 = static_cast<double>(points2 * this->points_) /
-    //             static_cast<double>(points_sum);
-    // double w2 = 1;
+
     Matrix c_sum3 =
         c_sum1 + c_sum2 +
         w1 * (w2 * m_sum1 - m_sum2) * (w2 * m_sum1 - m_sum2).transpose();
@@ -176,16 +174,6 @@ void NDTCell<Policy>::computeGaussian()
   double norm = static_cast<double>(points_vec_.size() - 1) /
                 static_cast<double>(points_vec_.size());
   Matrix cov2 = cov_temp * norm;
-
-  // std::cout << "\n" << cov_temp << std::endl << std::endl << cov_temp *norm
-  //           << "\n------\n";
-
-  // Eigen::MatrixXd mp;
-  // mp.resize(points_vec_.size(), 3);
-  // for (int i = 0; i < points_vec_.size(); ++i) {
-  //   mp.row(i) = (points_vec_[i] - mean2).transpose();
-  // }
-  // Matrix cov2 = mp.transpose() * mp / (points_vec_.size() - 1);
 
   if (!gaussian_) {
     // cell do not have any gaussian information calculated
@@ -300,52 +288,22 @@ template <class Policy>
 void NDTCell<Policy>::rescaleCovar()
 {
   Eigen::SelfAdjointEigenSolver<Matrix> solver(cov_);
-  Matrix evecs = solver.eigenvectors().real();
-  Vector evals = solver.eigenvalues().real();
-  double eval_factor = 100;
-  if (evals.sum() <= 0) {
+  Matrix evacs = solver.eigenvectors();
+  Matrix evals = solver.eigenvalues().asDiagonal();
+  if (evals(0, 0) < 0 || evals(1, 1) < 0 || evals(2, 2) <= 0)
     gaussian_ = false;
-  } else {
-    gaussian_ = true;
 
-    bool recalc = false;
-    // guard against near singular matrices::
-    int id_max;
-    double max_eval = evals.maxCoeff(&id_max);
-    // test if every eigenval is big enough
-    for (int i = 0; i < 3; ++i) {
-      if (max_eval > evals(i) * eval_factor) {
-        evals(i) = evals(id_max) / eval_factor;
-        recalc = true;
-      }
-    }
-    Matrix lamda;
-    lamda = evals.asDiagonal();
-    if (recalc) {
-      cov_ = evecs * lamda * (evecs.transpose());
-    }
-    // compute inverse covariance
-    icov_ = evecs * (lamda.inverse()) * (evecs.transpose());
-  }
-
-  // //////////////////////
-  // Eigen::SelfAdjointEigenSolver<Matrix> solver(cov_);
-  // Matrix evacs = solver.eigenvectors();
-  // Matrix evals = solver.eigenvalues().asDiagonal();
-  // if (evals(0, 0) < 0 || evals(1, 1) < 0 || evals(2, 2) <= 0)
-  //   gaussian_ = false;
-
-  // double min_eval = 0.01 * evals(2, 2);
-  // if (evals(0, 0) < min_eval)
-  //   evals(0, 0) = min_eval;
-  // if (evals(1, 1) < min_eval)
-  //   evals(1, 1) = min_eval;
-  // cov_ = evacs * evals * evacs.transpose();
-  // icov_ = cov_.inverse();
-  // if (icov_.maxCoeff() == std::numeric_limits<float>::infinity() ||
-  //     icov_.minCoeff() == -std::numeric_limits<float>::infinity())
-  //   gaussian_ = false;
-  // gaussian_ = true;
+  double min_eval = 0.01 * evals(2, 2);
+  if (evals(0, 0) < min_eval)
+    evals(0, 0) = min_eval;
+  if (evals(1, 1) < min_eval)
+    evals(1, 1) = min_eval;
+  cov_ = evacs * evals * evacs.transpose();
+  icov_ = cov_.inverse();
+  if (icov_.maxCoeff() == std::numeric_limits<float>::infinity() ||
+      icov_.minCoeff() == -std::numeric_limits<float>::infinity())
+    gaussian_ = false;
+  gaussian_ = true;
 }
 
 template <class Policy>
