@@ -61,6 +61,19 @@ public:
     return coarse_step_;
   }
 
+  void setTranslationRange(float range)
+  {
+    translation_range_ = range;
+  }
+  void setRotationRange(float range)
+  {
+    rotation_range_ = range;
+  }
+  void enableMultithreading(unsigned int thread_count)
+  {
+    threads_ = thread_count;
+  }
+
 protected:
   using Registration<PointSource, PointTarget>::input_;
   using Registration<PointSource, PointTarget>::target_;
@@ -71,8 +84,7 @@ protected:
   float coarse_rot_step_;
   float translation_range_;  // search from [-range,range]
   float rotation_range_;     // maximum is [-Pi,Pi]
-  float MIN_OVERLAP_SCORE = 0.3f;
-  const int threads = 1;
+  unsigned int threads_;
 
   ml_corr::LookUpTable<PointTarget> coarse_lookup_;
   ml_corr::LookUpTable<PointTarget> fine_lookup_;
@@ -104,6 +116,7 @@ CorrelativeEstimation<PointSource, PointTarget>::CorrelativeEstimation()
   , coarse_rot_step_(0.2f)
   , translation_range_(4.0f)
   , rotation_range_(1.6f)
+  , threads_(2)
 {
   converged_ = false;
 }
@@ -117,7 +130,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   transformPointCloud(*input_, guess_pcl, guess);
   // initialize lookup tables
   coarse_lookup_.initGrid(*target_, coarse_step_, 0.5f);
-  ROS_DEBUG_STREAM("grids initialized");
+  ROS_DEBUG_STREAM("[CorrelativeEstimation]: grids initialized");
   //////////////////
   ml_corr::SearchVoxel voxel2;
   voxel2.transform_ << 0, 0, 0;
@@ -142,8 +155,8 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
   search_voxels.reserve(elements);
 
   // preparre storage for thrread based result voxels
-  std::vector<std::vector<ml_corr::SearchVoxel>> search_voxels_thread(threads);
-  for (size_t i = 0; i < threads; ++i) {
+  std::vector<std::vector<ml_corr::SearchVoxel>> search_voxels_thread(threads_);
+  for (size_t i = 0; i < threads_; ++i) {
     search_voxels_thread.push_back(std::vector<ml_corr::SearchVoxel>());
   }
 
@@ -154,7 +167,7 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
     rotations.push_back(theta);
   }
   {
-    pcl::ScopeTime t_init("try total:");
+    pcl::ScopeTime t_init("[CorrelativeEstimation]: total calculation time:");
 
     pcl::PointCloud<PointSource> rot_pcl;  // cloud with points after applied
                                            // rotation
@@ -163,13 +176,15 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
                                                         // indexes
 
 #pragma omp parallel for private(rot_pcl, index_pcl,                           \
-                                 transl_index_pcl) num_threads(threads)
+                                 transl_index_pcl) num_threads(threads_)
     for (size_t theta_id = 0; theta_id < rotations.size(); ++theta_id) {
-      int thread_id = omp_get_thread_num();
+      // prepare storage for calculated voxels
+      std::vector<ml_corr::SearchVoxel> local_voxels;
+      local_voxels.reserve(static_cast<size_t>(
+          std::ceil(std::pow(2 * translation_range_ / coarse_step_, 2))));
       // rotate point cloud
       ml_corr::rotatePointCloud(guess_pcl, rot_pcl, rotations[theta_id]);
       index_pcl = coarse_lookup_.toIndexes(rot_pcl);
-      pcl::ScopeTime t_inside("try single translates:");
       // iterate over all possible translation x values
       for (float dx = -translation_range_; dx < translation_range_;
            dx += coarse_step_) {
@@ -180,30 +195,28 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
           ml_corr::SearchVoxel voxel;
           voxel.transform_ << dx, dy, rotations[theta_id];
           voxel.score_ = coarse_lookup_.getScore(transl_index_pcl);
-          search_voxels_thread[thread_id].push_back(voxel);
+          local_voxels.push_back(std::move(voxel));
         }
       }
+      int thread_id = omp_get_thread_num();
+      std::move(local_voxels.begin(), local_voxels.end(),
+                std::back_inserter(search_voxels_thread[thread_id]));
     }
 
     // end of parallel world
     // merge parallel results
-    for (size_t i = 0; i < threads; ++i) {
+    for (size_t i = 0; i < threads_; ++i) {
       std::copy(search_voxels_thread[i].begin(), search_voxels_thread[i].end(),
                 std::back_inserter(search_voxels));
     }
-  }
+  }  // end of measuring scope
   // find voxel with best score = best chance for good match
   std::sort(search_voxels.begin(), search_voxels.end());
   ml_corr::SearchVoxel best_voxel;
-  // test if this score is sufficent-> small score means little or no overlap
-  if (search_voxels.back().score_ < MIN_OVERLAP_SCORE) {
-    converged_ = false;
-    return;
-  }
+
   Eigen::Vector3f best_trans = search_voxels.back().transform_;
   ROS_DEBUG_STREAM(
       "[CorrelativeEstimation]: final_delta_trans:" << best_trans.transpose());
-  // ROS_DEBUG_STREAM("\n" << coarse_lookup_);
 
   // output data
   converged_ = true;

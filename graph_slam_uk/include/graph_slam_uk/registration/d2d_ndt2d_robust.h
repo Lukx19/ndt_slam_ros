@@ -5,11 +5,11 @@
 #include <graph_slam_uk/registration/d2d_ndt2d.h>
 #include <graph_slam_uk/registration/correlative_estimation2d.h>
 #include <pcl/registration/registration.h>
-#include <pcl/registration/icp.h>
 
 #include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
+#include <exception>
 
 namespace pcl
 {
@@ -82,8 +82,18 @@ public:
     Registration<PointSource, PointTarget>::setInputTarget(pcl);
     d2d_.setInputTarget(grid);
     corr_est_.setInputTarget(pcl);
+    cell_size_ = grid->getCellSize();
+    corr_est_.setCoarseStep(cell_size_);
   }
 
+  void setRejectionLimit(float limit)
+  {
+    if (limit < 1 && limit > 0)
+      rejection_limit_ = limit;
+    else
+      throw std::invalid_argument("Rejection limit in robust scan-matching out "
+                                  "of bounds [0,1]");
+  }
   inline void setNumLayers(size_t num)
   {
     d2d_.setNumLayers(num);
@@ -123,51 +133,45 @@ public:
   /** \brief Set/change the newton line search maximum step length.
     * \param[in] step_size maximum step length
     */
-  inline void setStepSize(double step_size)
+  void setStepSize(double step_size)
   {
     d2d_.setStepSize(step_size);
   }
 
-  /** \brief Get the point cloud outlier ratio.
-    * \return outlier ratio
-    */
-  inline double getOulierRatio() const
+  float getAlignmentQuality() const
   {
-    return d2d_.getOulierRatio();
+    return alignment_quality_;
   }
-
-  /** \brief Set/change the point cloud outlier ratio.
-    * \param[in] outlier_ratio outlier ratio
-    */
-  inline void setOulierRatio(double outlier_ratio)
-  {
-    d2d_.setOulierRatio(outlier_ratio);
-  }
-
-  /** \brief Get the registration alignment probability.
-    * \return transformation probability
-    */
-  inline float getTransformationProbability() const
-  {
-    return trans_probability_;
-  }
-
   /** \brief Get the number of iterations required to calculate alignment.
     * \return final number of iterations
     */
-  inline int getFinalNumIteration() const
+  int getFinalNumIteration() const
   {
     return d2d_.getFinalNumIteration();
   }
 
-  inline Eigen::Matrix3d getCovariance() const
+  Eigen::Matrix3d getCovariance() const
   {
     return d2d_.getCovariance();
   }
 
-  inline Eigen::Matrix3d getInformMatrix() const
+  Eigen::Matrix3d getInformMatrix() const
   {
     return d2d_.getInformMatrix();
+  }
+
+  void setTranslationRange(float range)
+  {
+    corr_est_.setTranslationRange(range);
+  }
+  void setRotationRange(float range)
+  {
+    corr_est_.setRotationRange(range);
+  }
+  void enableMultithreading(unsigned int thread_count)
+  {
+    d2d_.enableMultithreading(thread_count);
+    corr_est_.enableMultithreading(thread_count);
   }
 
 protected:
@@ -184,14 +188,14 @@ protected:
 
   D2DNormalDistributionsTransform2D<PointSource, PointTarget> d2d_;
   CorrelativeEstimation<PointSource, PointTarget> corr_est_;
-  IterativeClosestPoint<PointSource, PointTarget> icp_;
 
   float cell_size_;
-  float trans_probability_;
+  float alignment_quality_;
+  float rejection_limit_;
 
   /** \brief Estimate the transformation and returns the transformed source
    * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
+    * \param[out] output the resultant input transformed point cloud dataset
     */
   virtual void computeTransformation(PclSource &output)
   {
@@ -200,7 +204,7 @@ protected:
 
   /** \brief Estimate the transformation and returns the transformed source
    * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
+    * \param[out] output the resultant input transformed point cloud dataset
     * \param[in] guess the initial gross estimation of the transformation
     */
   virtual void computeTransformation(PclSource &output,
@@ -214,16 +218,10 @@ template <typename PointSource, typename PointTarget, typename CellType>
 D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget,
     CellType>::D2DNormalDistributionsTransform2DRobust()
-  : cell_size_(0.25), trans_probability_(0)
+  : cell_size_(0.25), alignment_quality_(0), rejection_limit_(0.4)
 {
-  d2d_.setMaximumIterations(max_iterations_);
   d2d_.setCellSize(0.25);
   d2d_.setMaximumIterations(10);
-
-  // icp_.setMaxCorrespondenceDistance (0.5);
-  // icp_.setRANSACOutlierRejectionThreshold (0.5);
-  // icp_.setTransformationEpsilon (transformation_epsilon);
-  // icp_.setMaximumIterations (3);
 }
 //////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
@@ -238,11 +236,12 @@ void D2DNormalDistributionsTransform2DRobust<
   Eigen::Matrix4f first_trans;
   // test if first d2d has return bad result
   if (!(d2d_.hasConverged() && score > 0.7)) {
-    // bad result -> robust aligment needed
+    // bad result -> robust alignment needed
     first_trans = d2d_.getFinalTransformation();
     corr_est_.align(output, guess);
     if (!corr_est_.hasConverged()) {
       converged_ = false;
+      alignment_quality_ = 0;
       final_transformation_.setIdentity();
       return;
     }
@@ -252,26 +251,29 @@ void D2DNormalDistributionsTransform2DRobust<
       //!proofTransform(d2d_.getFinalTransformation()))
       //{
       converged_ = false;
-      final_transformation_.setIdentity();
+      final_transformation_ = corr_est_.getFinalTransformation();
+      alignment_quality_ = 0;
       return;
     }
   }
   // score result
   double score2 = proofTransform(d2d_.getFinalTransformation());
-  // robust alignemnt still not good enough
-  if (score2 < 0.4) {
+  alignment_quality_ = score;
+  // robust alignment still not good enough
+  if (score2 < rejection_limit_) {
     // Maybe at least first d2d got some reasonable result
     if (score > 0.6) {
       converged_ = true;
       final_transformation_ = first_trans;
     } else {
-      // everyting is bad probably not the same place
+      // everything is bad probably not the same place
       converged_ = false;
-      final_transformation_.setIdentity();
+      final_transformation_ = d2d_.getFinalTransformation();
     }
   } else {
     // we got good result by robust algorithm
     converged_ = true;
+    alignment_quality_ = score2;
     final_transformation_ = d2d_.getFinalTransformation();
   }
   // output cloud transform
@@ -289,14 +291,8 @@ double D2DNormalDistributionsTransform2DRobust<
   PclSource output;
   transformPointCloud(*input_, output, trans);
   double score = proof_grid.getScore(output);
-  ROS_DEBUG_STREAM("proofer score: " << score);
+  ROS_DEBUG_STREAM("[D2DRobust]:proofer score: " << score);
   return score;
-  // if(score > min_score){
-  //   return true;
-  // }
-  // return false;
-
-  // return proof_grid.testMatch(output,1f,0.6);
 }
 }  // end of namespace pcl
 

@@ -2,7 +2,6 @@
 #define GRAPH_SLAM_UK_NDT_GRID2D
 
 #include <graph_slam_uk/ndt/voxel_grid2d.h>
-#include <graph_slam_uk/ndt/ndt_grid2d_interface.h>
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/common/transforms.h>

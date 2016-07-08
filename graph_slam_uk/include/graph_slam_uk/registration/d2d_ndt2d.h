@@ -223,6 +223,11 @@ public:
     initParams();
   }
 
+  void enableMultithreading(unsigned int thread_count)
+  {
+    threads_ = thread_count;
+  }
+
   /** \brief Get the registration alignment probability.
     * \return transformation probability
     */
@@ -331,6 +336,8 @@ protected:
   bool source_grid_updated_;
   GridSourceConstPtr source_grid_;
   GridTargetConstPtr target_grid_;
+
+  unsigned int threads_;
 
   /** \brief Initialize fitting parameters for normal distrubution in cells for
    * every resolution.
@@ -470,6 +477,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget,
   , layer_count_(4)
   , target_grid_updated_(false)
   , source_grid_updated_(false)
+  , threads_(2)
 {
   nr_iterations_ = 0;
   max_iterations_ = 35;
@@ -614,12 +622,12 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
   SourceVec source_cells = sourceNDT.getGaussianCells();
   // std::cout << "ndt cells: " << source_cells.size() << std::endl;
   std::vector<ReturnVals> omp_ret;
-  omp_ret.resize(4);
-  for (size_t i = 0; i < 4; ++i) {
+  omp_ret.resize(threads_);
+  for (size_t i = 0; i < threads_; ++i) {
     omp_ret.push_back(ReturnVals());
   }
 
-#pragma omp parallel num_threads(2)
+#pragma omp parallel num_threads(threads_)
   {
 #pragma omp for
     for (size_t cell_id = 0; cell_id < source_cells.size(); ++cell_id) {

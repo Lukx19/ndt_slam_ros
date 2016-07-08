@@ -22,13 +22,26 @@
 #include <graph_slam_uk/registration/correlative_estimation2d.h>
 #include <graph_slam_uk/registration/d2d_ndt2d_robust.h>
 
+#include <graph_slam_uk/ndt/cell_policy2d.h>
+#include <graph_slam_uk/ndt/ndt_cell.h>
+#include <graph_slam_uk/ndt/ndt_grid2d.h>
+
 #include <Eigen/Dense>
 
 #include <graph_slam_uk/utils/eigen_tools.h>
 
 using namespace pcl;
+using namespace slamuk;
 
 typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
+typedef NDTGrid2D<NDTCell<CellPolicy2d>, pcl::PointXYZ> GridType;
+typedef GridType::ConstPtr GridTypeConstPtr;
+typedef GridType::Ptr GridTypePtr;
+typedef D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>
+    D2DMatcher;
+typedef CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ> CorrMatcher;
+typedef D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ, pcl::PointXYZ>
+    RobustMatcher;
 
 double EPSILON = 0.001;
 double MIN_DISPLACEMENT = 0.4;
@@ -41,6 +54,8 @@ Registration<pcl::PointXYZ, pcl::PointXYZ> *matcher;
 // D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ> *proofer;
 IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> *proofer;
 // SampleConsensusInitialAlignment<pcl::PointXYZ, pcl::PointXYZ> * proofer;
+std::string mode_type;
+
 std::vector<std::string> split(std::string data, std::string token)
 {
   std::vector<std::string> output;
@@ -149,8 +164,27 @@ void testMatch(size_t source_id, size_t target_id)
   ////////////////////////////////////////////////////////
   // calculate my matcher
   s_match = std::chrono::system_clock::now();
-  matcher->setInputSource(scans[source_id]);
-  matcher->setInputTarget(scans[target_id]);
+  if (mode_type == "basic" || mode_type == "proof") {
+    matcher->setInputSource(scans[source_id]);
+    matcher->setInputTarget(scans[target_id]);
+  } else {
+    GridTypePtr target_grid(new GridType());
+    GridTypePtr source_grid(new GridType());
+    target_grid->initializeSimple(*scans[target_id]);
+    source_grid->initializeSimple(*scans[source_id]);
+    if (mode_type == "d2d") {
+      static_cast<D2DMatcher *>(matcher)->setInputSource(source_grid);
+      static_cast<D2DMatcher *>(matcher)->setInputTarget(target_grid);
+    }
+    if (mode_type == "corr") {
+      matcher->setInputSource(source_grid->getMeans());
+      matcher->setInputTarget(target_grid->getMeans());
+    }
+    if (mode_type == "robust") {
+      static_cast<RobustMatcher *>(matcher)->setInputSource(source_grid);
+      static_cast<RobustMatcher *>(matcher)->setInputTarget(target_grid);
+    }
+  }
   matcher->align(*output_m, guess);
   e_match = std::chrono::system_clock::now();
 
@@ -165,6 +199,8 @@ void testMatch(size_t source_id, size_t target_id)
             << " calc time: " << elapsed_seconds.count() << std::endl;
   std::cout << "DIFF:" << (proof_trans - calc_trans).cwiseAbs().transpose()
             << std::endl << std::endl;
+
+  ///////////////////////////OUTPUT/////////////////////////
 
   // Transforming unfiltered, input cloud using found transform.
   pcl_t::Ptr output(new pcl_t);
@@ -290,11 +326,11 @@ int main(int argc, char **argv)
     return 0;
   }
   if (args.size() == 4) {
-    MIN_DISPLACEMENT = std::stoi(args[3]);
+    MIN_DISPLACEMENT = std::stod(args[3]);
   }
   if (args.size() == 5) {
-    MIN_DISPLACEMENT = std::stoi(args[3]);
-    MIN_ROTATION = std::stoi(args[4]);
+    MIN_DISPLACEMENT = std::stod(args[3]);
+    MIN_ROTATION = std::stod(args[4]);
   }
   // matcher->setResolution(1);
   preparePoseData(args[1]);
@@ -302,22 +338,21 @@ int main(int argc, char **argv)
   // proofer =
   //     new D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>();
   proofer = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
+
   if (args[2] == "basic") {
     matcher =
         new NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>();
   } else if (args[2] == "d2d") {
-    matcher =
-        new D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>();
+    matcher = new D2DMatcher();
   } else if (args[2] == "corr") {
-    matcher = new CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ>();
-    static_cast<CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ> *>(matcher)
-        ->setCoarseStep(0.5);
+    matcher = new CorrMatcher();
+    static_cast<CorrMatcher *>(matcher)->setCoarseStep(0.25);
   } else if (args[2] == "robust") {
-    matcher = new D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ,
-                                                          pcl::PointXYZ>();
+    matcher = new RobustMatcher();
   } else if (args[2] == "proof") {
     matcher = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
   }
+  mode_type = args[2];
   // testMatch(4, 2);
   // testMatch(2, 0);
   // testMatch(6, 0);

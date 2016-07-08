@@ -193,12 +193,9 @@ void LookUpTable<PointType>::initGrid(const pcl::PointCloud<PointType> &target,
   // kernel is used for smearing points in look up table
 
   // std::cout << "Smoothing kernel:\n" << kernel_ << std::endl;
-  ROS_DEBUG_STREAM("creating grid cells x: " << cell_count_row_
-                                             << " y: " << cell_count_col_);
-  ROS_DEBUG_STREAM("values: minx: " << minx_ << " maxx: " << maxx_ << " miny "
-                                    << miny_ << " maxy " << maxy_);
+  ROS_DEBUG_STREAM("[CorrelativeEstimationGrid]:creating grid cells x: "
+                   << cell_count_row_ << " y: " << cell_count_col_);
   initGridWindowFce(target);
-  ROS_DEBUG_STREAM("grid initialized");
 }
 
 template <typename PointType>
