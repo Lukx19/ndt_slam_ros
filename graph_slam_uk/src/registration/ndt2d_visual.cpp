@@ -31,8 +31,9 @@ using namespace pcl;
 typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
 
 double EPSILON = 0.001;
-double MIN_DISPLACEMENT = 0.2;
-double MIN_ROTATION = 0.15;
+double MIN_DISPLACEMENT = 0.4;
+double MIN_ROTATION = 0.3;
+size_t MAX_LINES = 5000;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 // std::vector<MatchResult> matches;
@@ -69,7 +70,9 @@ void prepareLaserScans(std::string folder)
   }
   std::string line;
   unsigned int seq = 0;
-  while (std::getline(laser_msg, line)) {
+  size_t line_count = 0;
+  while (std::getline(laser_msg, line) && line_count < MAX_LINES) {
+    ++line_count;
     std::vector<std::string> parts = split(line, ",");
     sensor_msgs::LaserScan msg;
     msg.header.seq = seq;
@@ -104,7 +107,9 @@ void preparePoseData(std::string folder)
   }
   std::string line;
   Eigen::Vector3d pose;
-  while (std::getline(pose_msg, line)) {
+  size_t line_count = 0;
+  while (std::getline(pose_msg, line) && line_count < MAX_LINES) {
+    ++line_count;
     std::vector<std::string> parts = split(line, ",");
     pose << std::atof(parts[1].c_str()), std::atof(parts[2].c_str()),
         std::atof(parts[3].c_str());
@@ -254,11 +259,29 @@ void test(size_t start)
   }
 }
 
+void testSkip(size_t start)
+{
+  size_t target = 0;
+  std::cout << "start test" << std::endl;
+  for (size_t i = start; i < scans.size(); i += 1) {
+    eigt::transform2d_t<double> real_trans =
+        eigt::transBtwPoses(real_poses[target], real_poses[i]);
+    std::cout << "real trans: "
+              << eigt::getPoseFromTransform(real_trans).transpose()
+              << std::endl;
+    std::cout << "matching " << i << "  " << target << std::endl;
+    testMatch(i, target);
+    target = i;
+    // return;
+  }
+}
+
 int main(int argc, char **argv)
 {
   std::vector<std::string> args(argv, argv + argc);
-  if (args.size() < 3 && (args[2] != "d2d" && args[2] != "basic" &&
-                          args[2] != "corr" && args[2] != "robust")) {
+  if (args.size() < 3 &&
+      (args[2] != "d2d" && args[2] != "basic" && args[2] != "corr" &&
+       args[2] != "robust" && args[2] != "proof")) {
     std::cout << "Correct format of arguments: \n Path to the folder with "
                  "data.poses, data.scans was not provided\n Calculation engine "
                  "(d2d,basic,corr,robust) \n [Min displacement (m) min "
@@ -292,6 +315,8 @@ int main(int argc, char **argv)
   } else if (args[2] == "robust") {
     matcher = new D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ,
                                                           pcl::PointXYZ>();
+  } else if (args[2] == "proof") {
+    matcher = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
   }
   // testMatch(4, 2);
   // testMatch(2, 0);

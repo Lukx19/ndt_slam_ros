@@ -11,6 +11,7 @@
 #include <graph_slam_uk/registration/scanmatchable_grid_interface.h>
 #include <boost/shared_ptr.hpp>
 #include <graph_slam_uk/ndt/output_msgs.h>
+#include <pcl/kdtree/kdtree_flann.h>
 
 namespace slamuk
 {
@@ -92,6 +93,8 @@ public:
   // cell where pt belongs.
   CellPtrVector getNeighbors(const Eigen::Vector2d &pt, float radius) const;
 
+  CellPtrVector getKNearestNeighbors(const Eigen::Vector2d &pt, size_t K) const;
+
   // multiple 2 means 2x2 grids will be merged to one cell. Multiple 3  means
   // 4x4 grids will be merged together
   // multiple - multiple of cell_sizes
@@ -102,8 +105,12 @@ public:
   CellPtrVector getGaussianCells() const;
 
   /////////////// ADITIONAL
+  const CellType &operator[](const PointType &pt) const;
+  const CellType &operator[](const Eigen::Vector2d &pt) const;
   CellType &operator[](const PointType &pt);
+  CellType &operator[](const Eigen::Vector2d &pt);
   bool isInside(const PointType &pt);
+  bool isInside(const Eigen::Vector2d &pt) const;
   Ptr makeShared() const
   {
     return Ptr(new SelfType(*this));
@@ -130,6 +137,7 @@ protected:
   double timestamp_;
   DataGrid grid_;
   Eigen::Vector2d cumul_move_;
+  pcl::KdTreeFLANN<PointType> kdtree_;
 
   void mergeIn(std::vector<CellType> &&cells, bool resize);
   void addPoint(const PointType &pt);
@@ -310,16 +318,54 @@ typename NDTGrid2D<CellType, PointType>::CellPtrVector
 NDTGrid2D<CellType, PointType>::getNeighbors(const Eigen::Vector2d &pt,
                                              float radius) const
 {
-  size_t manh_radius = std::ceil(radius / cell_size_);
-  CellPtrVector neighbours = grid_.getNeighbors(pt, manh_radius);
+  size_t manh_radius;
   CellPtrVector gaussians;
-  gaussians.reserve(neighbours.size());
-  for (CellType *cell : neighbours) {
-    if (cell->hasGaussian())
-      if ((cell->getMean().head(2) - pt).norm() < radius)
+  if (radius <= 0) {
+    manh_radius = 0;
+    CellPtrVector neighbours = grid_.getNeighbors(pt, manh_radius);
+    for (CellType *cell : neighbours) {
+      if (cell->hasGaussian())
         gaussians.push_back(cell);
+    }
+  } else {
+    manh_radius = std::ceil(radius / cell_size_);
+    CellPtrVector neighbours = grid_.getNeighbors(pt, manh_radius);
+    gaussians.reserve(neighbours.size());
+    for (CellType *cell : neighbours) {
+      if (cell->hasGaussian())
+        if ((cell->getMean().head(2) - pt).norm() <= radius)
+          gaussians.push_back(cell);
+    }
   }
   return gaussians;
+}
+
+template <typename CellType, typename PointType>
+typename NDTGrid2D<CellType, PointType>::CellPtrVector
+NDTGrid2D<CellType, PointType>::getKNearestNeighbors(const Eigen::Vector2d &pt,
+                                                     size_t K) const
+{
+  Eigen::Vector3d point(pt(0), pt(1), 0);
+  CellPtrVector res;
+  // slowly increase search radius and find sufficient number of points
+  CellPtrVector radius_cells = getNeighbors(pt, 1);
+  size_t radius = 2;
+  while (radius_cells.size() < K && radius < grid_.width()) {
+    radius_cells = getNeighbors(pt, radius);
+    radius = radius * 2;
+  }
+  // not enough elements in grid
+  if (radius_cells.size() < K)
+    return radius_cells;
+  // sort elements based on distance from point from parameter
+  std::sort(radius_cells.begin(), radius_cells.end(),
+            [&point](CellType *a, CellType *b) {
+    return (a->getMean() - point).norm() < (a->getMean() - point).norm();
+  });
+  res.reserve(K);
+  std::move(radius_cells.begin(), radius_cells.begin() + K,
+            std::back_inserter(res));
+  return res;
 }
 
 template <typename CellType, typename PointType>
@@ -331,11 +377,39 @@ CellType &NDTGrid2D<CellType, PointType>::operator[](const PointType &pt)
 }
 
 template <typename CellType, typename PointType>
+CellType &NDTGrid2D<CellType, PointType>::operator[](const Eigen::Vector2d &pt)
+{
+  return grid_[pt];
+}
+
+template <typename CellType, typename PointType>
+const CellType &NDTGrid2D<CellType, PointType>::
+operator[](const PointType &pt) const
+{
+  typename DataGrid::Point point;
+  point << pt.x, pt.y;
+  return grid_[point];
+}
+
+template <typename CellType, typename PointType>
+const CellType &NDTGrid2D<CellType, PointType>::
+operator[](const Eigen::Vector2d &pt) const
+{
+  return grid_[pt];
+}
+
+template <typename CellType, typename PointType>
 bool NDTGrid2D<CellType, PointType>::isInside(const PointType &pt)
 {
   typename DataGrid::Point point;
   point << pt.x, pt.y;
-  return grid_.isInside(point);
+  return grid_.cellExists(point);
+}
+
+template <typename CellType, typename PointType>
+bool NDTGrid2D<CellType, PointType>::isInside(const Eigen::Vector2d &pt) const
+{
+  return grid_.cellExists(pt);
 }
 
 template <typename CellType, typename PointType>

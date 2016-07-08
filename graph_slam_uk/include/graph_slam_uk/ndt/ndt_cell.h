@@ -103,27 +103,31 @@ NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
   if (!other.hasGaussian())
     return *this;
   if (this->hasGaussian()) {
-    Vector m_sum1 = mean_ * static_cast<double>(points_);
-    Vector m_sum2 = other.mean_ * static_cast<double>(other.points_);
+    size_t points1 = this->points_;
+    size_t points2 = other.points_;
 
-    Matrix c_sum1 = cov_ * static_cast<double>(points_ - 1);
-    Matrix c_sum2 = other.cov_ * static_cast<double>(other.points_ - 1);
+    Vector m_sum1 = mean_ * static_cast<double>(points1);
+    Vector m_sum2 = other.mean_ * static_cast<double>(points2);
 
-    size_t points_sum = other.points_ + this->points_;
+    Matrix c_sum1 = cov_ * static_cast<double>(points1 - 1);
+    Matrix c_sum2 = other.cov_ * static_cast<double>(points2 - 1);
 
-    mean_ = (m_sum2 + m_sum1) / points_sum;
+    size_t points_sum = points2 + points1;
 
-    double w1 = static_cast<double>(this->points_) /
-                static_cast<double>(other.points_ * points_sum);
-    double w2 =
-        static_cast<double>(other.points_) / static_cast<double>(this->points_);
+    mean_ = (m_sum2 + m_sum1) / static_cast<double>(points_sum);
+
+    double w1 = static_cast<double>(points1) /
+                static_cast<double>(points2 * points_sum);
+    double w2 = static_cast<double>(points2) / static_cast<double>(points1);
+    // double w1 = static_cast<double>(points2 * this->points_) /
+    //             static_cast<double>(points_sum);
+    // double w2 = 1;
     Matrix c_sum3 =
         c_sum1 + c_sum2 +
         w1 * (w2 * m_sum1 - m_sum2) * (w2 * m_sum1 - m_sum2).transpose();
     points_ = points_sum;
-    cov_ = (1.0 / static_cast<double>(points_)) * c_sum3;
-    float occup_addition =
-        static_cast<float>(other.points_) * Policy::log_like_occ_;
+    cov_ = (1.0 / static_cast<double>(points_sum - 1)) * c_sum3;
+    float occup_addition = static_cast<float>(points2) * Policy::log_like_occ_;
     updateOccupancy(occup_addition);
     if (points_ > Policy::max_points_)
       points_ = Policy::max_points_;
@@ -132,6 +136,7 @@ NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
     else
       rescaleCovar();
   } else {
+    // no previous data. Use calculated Gaussian from other cell
     this->operator=(other);
     gaussian_ = true;
   }
@@ -150,33 +155,37 @@ void NDTCell<Policy>::computeGaussian()
     gaussian_ = false;
     return;
   }
-  if (points_vec_.size() < 3) {
+  if (points_vec_.size() < 6) {
     gaussian_ = false;
     return;
   }
 
   // compute gaussian of new points
   Vector mean_add = Vector::Zero();
-  Matrix cov_add = Matrix::Zero();
+  Matrix cov_add = Matrix::Identity();
 
   for (auto &&pt : points_vec_) {
     mean_add += pt;
     cov_add += (pt * pt.transpose());
   }
-  Vector mean2 = mean_add / points_vec_.size();
+  Vector mean2 = mean_add / static_cast<double>(points_vec_.size());
   // // simgle pass covariance calculation
-  // Matrix cov_temp =
-  //     (cov_add - 2 * (mean_add * mean2.transpose())) / points_vec_.size() +
-  //     mean2 * mean2.transpose();
-  // Matrix cov2 = cov_temp;  //* ((points_vec_.size() - 1) /
-  // points_vec_.size());
+  Matrix cov_temp = (cov_add - 2 * (mean_add * mean2.transpose())) /
+                        static_cast<double>(points_vec_.size()) +
+                    mean2 * mean2.transpose();
+  double norm = static_cast<double>(points_vec_.size() - 1) /
+                static_cast<double>(points_vec_.size());
+  Matrix cov2 = cov_temp * norm;
 
-  Eigen::MatrixXd mp;
-  mp.resize(points_vec_.size(), 3);
-  for (int i = 0; i < points_vec_.size(); ++i) {
-    mp.row(i) = (points_vec_[i] - mean2).transpose();
-  }
-  Matrix cov2 = mp.transpose() * mp / (points_vec_.size() - 1);
+  // std::cout << "\n" << cov_temp << std::endl << std::endl << cov_temp *norm
+  //           << "\n------\n";
+
+  // Eigen::MatrixXd mp;
+  // mp.resize(points_vec_.size(), 3);
+  // for (int i = 0; i < points_vec_.size(); ++i) {
+  //   mp.row(i) = (points_vec_[i] - mean2).transpose();
+  // }
+  // Matrix cov2 = mp.transpose() * mp / (points_vec_.size() - 1);
 
   if (!gaussian_) {
     // cell do not have any gaussian information calculated
@@ -318,6 +327,25 @@ void NDTCell<Policy>::rescaleCovar()
     // compute inverse covariance
     icov_ = evecs * (lamda.inverse()) * (evecs.transpose());
   }
+
+  // //////////////////////
+  // Eigen::SelfAdjointEigenSolver<Matrix> solver(cov_);
+  // Matrix evacs = solver.eigenvectors();
+  // Matrix evals = solver.eigenvalues().asDiagonal();
+  // if (evals(0, 0) < 0 || evals(1, 1) < 0 || evals(2, 2) <= 0)
+  //   gaussian_ = false;
+
+  // double min_eval = 0.01 * evals(2, 2);
+  // if (evals(0, 0) < min_eval)
+  //   evals(0, 0) = min_eval;
+  // if (evals(1, 1) < min_eval)
+  //   evals(1, 1) = min_eval;
+  // cov_ = evacs * evals * evacs.transpose();
+  // icov_ = cov_.inverse();
+  // if (icov_.maxCoeff() == std::numeric_limits<float>::infinity() ||
+  //     icov_.minCoeff() == -std::numeric_limits<float>::infinity())
+  //   gaussian_ = false;
+  // gaussian_ = true;
 }
 
 template <class Policy>

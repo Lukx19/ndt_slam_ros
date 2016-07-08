@@ -506,7 +506,7 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   //     return;
   //   }
   // }
-  //
+
   for (size_t i = 0; i < layer_count_; ++i) {
     GridTarget tg;
     GridSource sc;
@@ -629,7 +629,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
   trans_mat.matrix() = vecToMat<double>(trans);
 
   SourceVec source_cells = sourceNDT.getGaussianCells();
-  std::cout << "ndt cells: " << source_cells.size() << std::endl;
+  // std::cout << "ndt cells: " << source_cells.size() << std::endl;
   std::vector<ReturnVals> omp_ret;
   omp_ret.resize(4);
   for (size_t i = 0; i < 4; ++i) {
@@ -656,13 +656,18 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
       d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
       computeDerivatives(mean_source, cov_source, partial_derivatives,
                          calc_hessian);
-
-      TargetVec neighbours = targetNDT.getNeighbors(mean_source.head(2), 2);
-      std::cout << "neighbours: " << neighbours.size() << std::endl;
-      for (size_t i = 0; i < neighbours.size(); ++i) {
+      TargetVec neighbors =
+          targetNDT.getKNearestNeighbors(mean_source.head(2), 1);
+      std::cout << "neighbors: " << neighbors.size() << std::endl;
+      for (size_t i = 0; i < neighbors.size(); ++i) {
         local_ret +=
-            calcSourceCellScore(mean_source, cov_source, neighbours[i],
+            calcSourceCellScore(mean_source, cov_source, neighbors[i],
                                 partial_derivatives, param, calc_hessian);
+        // std::cout << "\ncovar:\n" << neighbors[i]->getCov() << std::endl
+        //           << neighbors[i]->getICov()
+        //           << "\nmean: " << neighbors[i]->getMean().transpose()
+        //           << "\n points: " << neighbors[i]->points()
+        //           << "\n----------\n";
       }
       omp_ret[thread_id] += local_ret;
     }
@@ -714,8 +719,8 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   Eigen::Vector3d diff_mean;
   Eigen::Matrix3d cov_sum, icov;
   cov_sum.setIdentity();
-  // double det = 0;
-  // bool exists = false;
+  double det = 0;
+  bool exists = false;
   double dist;
   // vars for gradient
   Eigen::Matrix<double, 3, 1> xtBJ, xtBZBx, Q;
@@ -735,18 +740,13 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
   diff_mean = (mean_source - cell_t->getMean());
   cov_sum = (cell_t->getCov() + cov_source);
-  if (!slamuk::covarInverse(cov_sum, cov_sum, icov)) {
+
+  cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
+  if (!exists) {
     ROS_ERROR_STREAM("[D2D_NDT2D]: Not possible to calculate inverse of "
                      "covariances between source cell and target cell");
     return res.Zero();
   }
-
-  // cov_sum.computeInverseAndDetWithCheck(icov, det, exists);
-  // if (!exists) {
-  //   ROS_ERROR_STREAM("[D2D_NDT2D]: Not possible to calculate inverse of "
-  //                    "covariances between source cell and target cell");
-  //   return res.Zero();
-  // }
   dist = (diff_mean).dot(icov * (diff_mean));
   if (dist * 0 != 0) {
     ROS_ERROR_STREAM("[D2D_NDT2D]: Mean diffrence hase some infiniti or nan "
