@@ -1,11 +1,11 @@
 #ifndef GRAPH_SLAM_UK_VOXEL_GRID2D
 #define GRAPH_SLAM_UK_VOXEL_GRID2D
 
-#include <vector>
 #include <Eigen/Dense>
-#include <memory>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
+#include <memory>
+#include <vector>
 
 /*
 * CellType should have these methods implemented:
@@ -187,6 +187,7 @@ VoxelGrid2D<CellType>::VoxelGrid2D(const VoxelGrid2D& other)
   , width_right_(other.width_right_)
   , height_up_(other.height_up_)
   , height_down_(other.height_down_)
+  , valid_cells_(other.valid_cells_)
 {
   cells_.resize(other.cells_.size());
   for (const std::unique_ptr<CellType>& cell : other.cells_) {
@@ -270,9 +271,11 @@ bool VoxelGrid2D<CellType>::removeCell(const Point& posistion)
 template <typename CellType>
 bool VoxelGrid2D<CellType>::isInside(const Point& pt) const
 {
-  if (pt(0) >= -width_left_ * cell_size_ - cell_size_half_ &&
+  if (pt(0) >=
+          -static_cast<double>(width_left_) * cell_size_ - cell_size_half_ &&
       pt(0) <= width_right_ * cell_size_ + cell_size_half_ &&
-      pt(1) >= -height_down_ * cell_size_ - cell_size_half_ &&
+      pt(1) >=
+          -static_cast<double>(height_down_) * cell_size_ - cell_size_half_ &&
       pt(1) <= height_up_ * cell_size_ + cell_size_half_)
     return true;
   else
@@ -584,7 +587,7 @@ void VoxelGrid2D<CellType>::enlargeToFit(const Point& pt)
 template <typename CellType>
 size_t VoxelGrid2D<CellType>::calcIncLeft(float pt) const
 {
-  float minx = -width_left_ * cell_size_ - cell_size_half_;
+  float minx = -static_cast<float>(width_left_) * cell_size_ - cell_size_half_;
   if (pt < minx)
     return static_cast<size_t>(std::ceil((minx - pt) / cell_size_));
   return 0;
@@ -611,7 +614,7 @@ size_t VoxelGrid2D<CellType>::calcIncUp(float pt) const
 template <typename CellType>
 size_t VoxelGrid2D<CellType>::calcIncDown(float pt) const
 {
-  float miny = -height_down_ * cell_size_ - cell_size_half_;
+  float miny = -static_cast<float>(height_down_) * cell_size_ - cell_size_half_;
   if (pt < miny)
     return static_cast<size_t>(std::ceil((miny - pt) / cell_size_));
   return 0;
@@ -636,11 +639,11 @@ void VoxelGrid2D<CellType>::enlargeGrid(size_t left, size_t right, size_t up,
   for (size_t i = 0; i < cells_.size(); ++i) {
     size_t new_index = 0;
     if (up > 0 && left == 0) {
-      new_index = i + up * (new_w)+offset_x;
+      new_index = i + up * (new_w) + offset_x;
     } else if (up == 0 && left == 0) {
       new_index = i + offset_x;
     } else {
-      new_index = i + up * (new_w)+left + offset_x;
+      new_index = i + up * (new_w) + left + offset_x;
     }
     large_grid[new_index] = std::move(cells_[i]);
     ++w_used;

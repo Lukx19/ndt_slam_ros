@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-#include <graph_slam_uk/ndt/voxel_grid2d.h>
-#include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/cell_policy2d.h>
+#include <graph_slam_uk/ndt/ndt_cell.h>
+#include <graph_slam_uk/ndt/voxel_grid2d.h>
+#include <gtest/gtest.h>
 
 #include <iostream>
 
