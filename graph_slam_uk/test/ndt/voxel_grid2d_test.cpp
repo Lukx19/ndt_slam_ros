@@ -270,21 +270,7 @@ TEST(VoxelGrid2D, rayTracing)
   GridSimple grid = createGridSimple();
   grid.setCellSize(1);
   grid.addCell(Point(0, 0), 0, false);
-  // grid.addCell(Point(-1, -1), -111, false);
-  // grid.addCell(Point(1, -1), 111, false);
-  // grid.addCell(Point(-1, 1), -101, false);
-  // grid.addCell(Point(1, 1), 101, false);
-
-  // grid.addCell(Point(-2, -2), -222, false);
-  // grid.addCell(Point(2, -2), 222, false);
-  // grid.addCell(Point(-2, 2), -202, false);
-  // grid.addCell(Point(2, 2), 202, false);
-
-  // grid.addCell(Point(-3, -3), -333, false);
-  // grid.addCell(Point(3, -3), 333, false);
-  // grid.addCell(Point(-3, 3), -303, false);
-  // grid.addCell(Point(3, 3), 303, false);
-  // std::cout << grid << std::endl << std::endl;
+  std::cout << grid << std::endl << std::endl;
   std::vector<int> valid_res = {0, 136, 123, 124, 111, 112, 99};
   size_t i = 0;
   for (auto &&cell : grid.rayTrace(Point(3, 3))) {
@@ -292,7 +278,7 @@ TEST(VoxelGrid2D, rayTracing)
     ++i;
   }
 
-  valid_res = {0, 134, 120, 119};
+  valid_res = {0, 134, 121, 120, 119};
   i = 0;
   for (auto &&cell : grid.rayTrace(Point(-3.2, 1.4))) {
     EXPECT_EQ(valid_res[i], *cell);
@@ -313,8 +299,47 @@ TEST(VoxelGrid2D, rayTracing)
     ++i;
   }
 
-  EXPECT_EQ(0, grid.rayTrace(Point(3, 20), Point(9, 30)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(3, -50), Point(3, -30)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(3, -30), Point(3, -50)).size());
   EXPECT_EQ(0, grid.rayTrace(Point(3, 20), Point(3, 30)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(3, 30), Point(3, 20)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(-200, 0), Point(-100, 0)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(-100, 0), Point(-200, 0)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(200, 0), Point(100, 0)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(100, 0), Point(200, 0)).size());
+
+  // diagonal out of scope rays
+  EXPECT_EQ(0, grid.rayTrace(Point(20, 0), Point(30, 30)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(30, 30), Point(20, 0)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(20, 30), Point(30, 0)).size());
+  EXPECT_EQ(0, grid.rayTrace(Point(30, 0), Point(20, 30)).size());
+
+  GridSimple grid2;
+  grid2.setCellSize(1);
+  grid2.addCell(Point(0, 0), 0, false);
+  grid2.addCell(Point(-1, -1), -111, false);
+  grid2.addCell(Point(1, -1), 111, false);
+  grid2.addCell(Point(-1, 1), -101, false);
+  grid2.addCell(Point(1, 1), 101, false);
+
+  grid2.addCell(Point(-2, -2), -222, false);
+  grid2.addCell(Point(2, -2), 222, false);
+  grid2.addCell(Point(-2, 2), -202, false);
+  grid2.addCell(Point(2, 2), 202, false);
+
+  grid2.addCell(Point(-3, -3), -333, false);
+  grid2.addCell(Point(3, -3), 333, false);
+  grid2.addCell(Point(-3, 3), -303, false);
+  grid2.addCell(Point(3, 3), 303, false);
+  std::cout << grid2 << std::endl << std::endl;
+  EXPECT_EQ(4, grid2.rayTrace(Point(-3, 0)).size());
+  EXPECT_EQ(4, grid2.rayTrace(Point(-3, 0), Point(-3, 10)).size());
+  EXPECT_EQ(9, grid2.rayTrace(Point(-3, -2), Point(3, 2)).size());
+  EXPECT_EQ(5, grid2.rayTrace(Point(-2, -3), Point(2, -3)).size());
+  EXPECT_EQ(0, grid2.rayTrace(Point(-8, -3), Point(10, -3)).size());
+  EXPECT_EQ(7, grid2.rayTrace(Point(-3, -3), Point(10, -3)).size());
+  EXPECT_EQ(4, grid2.rayTrace(Point(0, 10)).size());
+  std::cout << grid2 << std::endl << std::endl;
 }
 
 // Run all the tests that were declared with TEST()

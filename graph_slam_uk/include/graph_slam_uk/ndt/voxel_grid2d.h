@@ -162,6 +162,11 @@ private:
   void moveRight(size_t move);
   void moveUp(size_t move);
   void moveDown(size_t move);
+  bool linesIntersection(const Eigen::Vector2d& p, const Eigen::Vector2d& p2,
+                         const Eigen::Vector2d& q, const Eigen::Vector2d& q2,
+                         Eigen::Vector2d& intersection,
+                         bool output_colinear = false) const;
+  double cross(const Eigen::Vector2d& a, const Eigen::Vector2d& b) const;
 };
 
 ////////////////////////IMPLEMENTATION//////////
@@ -382,108 +387,63 @@ typename VoxelGrid2D<CellType>::CellPtrVector
 VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
 {
   CellPtrVector res;
-  double minx = -width_left_ * cell_size_ - cell_size_half_;
-  double maxx = width_right_ * cell_size_ + cell_size_half_;
-  double miny = -height_down_ * cell_size_ - cell_size_half_;
-  double maxy = height_up_ * cell_size_ + cell_size_half_;
-
-  // fitting end point of raytracing to grid
   Point end_in;
   Point start_in;
-  double diff_x = end(0) - start(0);
-  double diff_y = end(1) - start(1);
-  double slope = diff_y / diff_x;
-  if (std::isinf(slope)) {
-    // vertical line special case
-    if (!isInside(start)) {
-      start_in(0) = start(0);
-      if (start(1) < 0)
-        start_in(1) = miny;
-      else
-        start_in(1) = maxy;
-    } else {
-      start_in = start;
-    }
-    if (!isInside(end)) {
-      end_in(0) = end(0);
-      if (end(1) < 0)
-        end_in(1) = miny;
-      else
-        end_in(1) = maxy;
-    } else {
-      end_in = end;
-    }
-  } else {
-    // for all other lines
-    if (!isInside(start)) {
-      if (start(0) < 0)
-        start_in(0) = minx;
-      else
-        start_in(0) = maxx;
-      start_in(1) = slope * start_in(0) + start(1);
-    } else {
-      start_in = start;
-    }
+  bool end_indise = false;
+  Point delta;
+  double minx =
+      -static_cast<double>(width_left_) * cell_size_ - cell_size_half_;
+  double maxx = width_right_ * cell_size_ + cell_size_half_;
+  double miny =
+      -static_cast<double>(height_down_) * cell_size_ - cell_size_half_;
+  double maxy = height_up_ * cell_size_ + cell_size_half_;
 
-    if (!isInside(end)) {
-      if (end(0) < 0)
-        end_in(0) = minx;
-      else
-        end_in(0) = maxx;
-      end_in(1) = slope * end_in(0) + start(1);
-    } else {
-      end_in = end;
-    }
+  if (!isInside(start)) {
+    return res;
   }
-  // intersection check
-  if (end_in(0) > maxx || end_in(0) < minx || end_in(1) > maxy ||
-      end_in(1) < miny)
-    return res;
-  if (start_in(0) > maxx || start_in(0) < minx || start_in(1) > maxy ||
-      start_in(1) < miny)
-    return res;
-  if (std::isinf(slope) && ((start_in(1) <= miny && end_in(1) <= miny) ||
-                            (start_in(1) >= maxy && end_in(1) >= maxy)))
-    return res;
-
+  start_in = start;
+  end_indise = isInside(end);
+  end_in = end;
   // calculation of delta movement along line
   auto idx1 = calcCoordinates(start_in);
-  auto idx2 = calcCoordinates(end_in);
-  Point delta;
-  double length_x = std::abs(static_cast<double>(idx2.first) -
-                             static_cast<double>(idx1.first));
-  double length_y = std::abs(static_cast<double>(idx2.second) -
-                             static_cast<double>(idx1.second));
+
+  double length_x = std::abs(end_in(0) - start_in(0)) / cell_size_;
+  double length_y = std::abs(end_in(1) - start_in(1)) / cell_size_;
   delta(0) = (end_in(0) - start_in(0)) / std::max(length_x, length_y);
   delta(1) = (end_in(1) - start_in(1)) / std::max(length_y, length_x);
+  double length = std::max(length_x, length_y);
   delta *= 0.5;
-  Point p = start;
-  p += delta;
+  size_t steps =
+      std::floor((length * cell_size_) / std::max(delta(1), delta(0)));
+  Point p = start_in;
   size_t idx_old = calcIndex(start_in);
-  size_t idx_current = calcIndex(p);
-  size_t idx_finish = calcIndex(end_in);
+  size_t idx_current = calcIndex(start_in);
+  size_t idx_final;
+  if (end_indise)
+    idx_final = calcIndex(end_in);
 
-  // appending start element
-  if (cells_[idx_old].get() == nullptr)
-    cells_[idx_old].reset(new CellType());
-  res.push_back(cells_[idx_old].get());
-
-  while (idx_current != idx_finish) {
+  if (cells_[idx_current].get() == nullptr) {
+    cells_[idx_current].reset(new CellType());
+  }
+  res.push_back(cells_[idx_current].get());
+  std::cout << "steps: " << steps << std::endl;
+  while (true) {
     // if program  is still in the same cell like last time just step forward
     if (idx_current != idx_old) {
       if (cells_[idx_current].get() == nullptr) {
         cells_[idx_current].reset(new CellType());
       }
       res.push_back(cells_[idx_current].get());
+      std::cout << p.transpose() << std::endl;
     }
     p += delta;
+    if (p(0) >= maxx || p(0) <= minx || p(1) >= maxy || p(1) <= miny)
+      return res;
+    if (end_indise && idx_current == idx_final)
+      return res;
     idx_old = idx_current;
     idx_current = calcIndex(p);
   }
-  // appending end point element
-  if (cells_[idx_finish].get() == nullptr)
-    cells_[idx_finish].reset(new CellType());
-  res.push_back(cells_[idx_finish].get());
 
   return res;
 }
@@ -750,6 +710,77 @@ void VoxelGrid2D<CellType>::moveDown(size_t move)
       cells_[i].reset(nullptr);
     }
   }
+}
+
+template <typename CellType>
+bool VoxelGrid2D<CellType>::linesIntersection(const Eigen::Vector2d& p,
+                                              const Eigen::Vector2d& p2,
+                                              const Eigen::Vector2d& q,
+                                              const Eigen::Vector2d& q2,
+                                              Eigen::Vector2d& intersection,
+                                              bool output_colinear) const
+{
+  // Eigen::Vector3d pw;
+  // Eigen::Vector3d p2w;
+  // Eigen::Vector3d qw;
+  // Eigen::Vector3d q2w;
+  // pw << p(0), p(1), 0;
+  // p2w << p2(0), p2(1), 0;
+  // qw << q(0), q(1), 0;
+  // q2w << q2(0), q2(1), 0;
+  double epsilon = 1e-7;
+  intersection.setZero();
+  Eigen::Vector2d r = p2 - p;
+  Eigen::Vector2d s = q2 - q;
+  double rxs = cross(r, s);
+  double qpxr = cross((q - p), r);
+  // If r x s = 0 and (q - p) x r = 0, then the two lines are collinear.
+  if (std::abs(rxs) < epsilon && std::abs(qpxr) < epsilon) {
+    // 1. If either  0 <= (q - p) * r <= r * r or 0 <= (p - q) * s <= * s
+    // then the two lines are overlapping,
+    if (output_colinear)
+      if ((0 <= (q - p).dot(r) && (q - p).dot(r) <= r.dot(r)) ||
+          (0 <= (p - q).dot(s) && (p - q).dot(s) <= s.dot(s)))
+        return true;
+
+    // 2. If neither 0 <= (q - p) * r = r * r nor 0 <= (p - q) * s <= s * s
+    // then the two lines are collinear but disjoint.
+    // No need to implement this expression, as it follows from the expression
+    // above.
+    return false;
+  }
+
+  // 3. If r x s = 0 and (q - p) x r != 0, then the two lines are parallel and
+  // non-intersecting.
+  if (std::abs(rxs) < epsilon && std::abs(qpxr) >= epsilon)
+    return false;
+
+  // t = (q - p) x s / (r x s)
+  double t = cross((q - p), s) / rxs;
+
+  // u = (q - p) x r / (r x s)
+
+  double u = cross((q - p), r) / rxs;
+
+  // 4. If r x s != 0 and 0 <= t <= 1 and 0 <= u <= 1
+  // the two line segments meet at the point p + t r = q + u s.
+  if (std::abs(rxs) >= epsilon && (0 <= t && t <= 1) && (0 <= u && u <= 1)) {
+    // We can calculate the intersection point using either t or u.
+    intersection = p + t * r;
+
+    // An intersection was found.
+    return true;
+  }
+
+  // 5. Otherwise, the two line segments are not parallel but do not intersect.
+  return false;
+}
+
+template <typename CellType>
+double VoxelGrid2D<CellType>::cross(const Eigen::Vector2d& a,
+                                    const Eigen::Vector2d& b) const
+{
+  return a(0) * b(1) - a(1) * b(0);
 }
 
 }  // end of slamuk namespace
