@@ -156,6 +156,7 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
     ${G2O_INCLUDE_DIR}
     ${CSPARSE_INCLUDE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
 )
 link_directories(
     ${PCL_LIBRARY_DIRS}
@@ -193,6 +194,12 @@ add_executable(ndt2d_visual src/registration/ndt2d_visual.cpp)
 target_link_libraries (ndt2d_visual
   ${PCL_LIBRARIES}
   ${catkin_LIBRARIES}
+  )
+add_executable(ndt_grid2d_merging src/ndt/ndt_grid2d_merging.cpp)
+target_link_libraries (ndt_grid2d_merging
+  ${PCL_LIBRARIES}
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBS}
   )
 
 #############

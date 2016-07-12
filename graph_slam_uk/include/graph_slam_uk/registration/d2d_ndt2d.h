@@ -1,15 +1,15 @@
 #ifndef GRAPH_SLAM_UK_D2D_NDT2D
 #define GRAPH_SLAM_UK_D2D_NDT2D
 
-#include <ros/ros.h>
-#include <pcl/registration/registration.h>
-#include <pcl/filters/voxel_grid_covariance.h>
-#include <Eigen/Dense>
-#include <pcl/common/time.h>
 #include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
 #include <graph_slam_uk/utils/covariance_inverse.h>
+#include <pcl/common/time.h>
+#include <pcl/filters/voxel_grid_covariance.h>
+#include <pcl/registration/registration.h>
+#include <ros/ros.h>
+#include <Eigen/Dense>
 
 namespace pcl
 {
@@ -20,8 +20,7 @@ namespace d2d_ndt2d
   * functions
   */
 template <unsigned N = 3, typename T = double>
-struct ScoreAndDerivatives
-{
+struct ScoreAndDerivatives {
   ScoreAndDerivatives() : hessian_(), gradient_(), value_()
   {
     hessian_.setZero();
@@ -60,8 +59,7 @@ ScoreAndDerivatives<N, T> operator+(const ScoreAndDerivatives<N, T> &lhs,
   return ret;
 }
 
-struct FittingParams
-{
+struct FittingParams {
   double gauss_d1_;
   double gauss_d2_;
   double gauss_d2__half_;
@@ -87,8 +85,7 @@ private:
   }
 };
 
-struct JacobianHessianDerivatives
-{
+struct JacobianHessianDerivatives {
   Eigen::Matrix<double, 3, 3> Jest;
   Eigen::Matrix<double, 9, 3> Hest;
   Eigen::Matrix<double, 3, 9> Zest;
@@ -147,9 +144,11 @@ protected:
 
 public:
   typedef boost::shared_ptr<
-      D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>> Ptr;
+      D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>>
+      Ptr;
   typedef boost::shared_ptr<const D2DNormalDistributionsTransform2D<
-      PointSource, PointTarget, CellType>> ConstPtr;
+      PointSource, PointTarget, CellType>>
+      ConstPtr;
   typedef Eigen::Vector3d VectorTrans;
   /** \brief Constructor.
     * Sets \ref outlier_ratio_ to 0.35, \ref step_size_ to 0.05 and \ref
@@ -278,7 +277,7 @@ public:
     source_grid_ = grid;
     PclSourceConstPtr pcl = grid->getMeans();
     Registration<PointSource, PointTarget>::setInputSource(pcl);
-    setCellSize(source_grid_->getCellSize());
+    // setCellSize(source_grid_->getCellSize());
   }
 
   // using Registration<PointSource, PointTarget>::setInputTarget;
@@ -287,7 +286,7 @@ public:
     target_grid_ = grid;
     PclTargetConstPtr pcl = grid->getMeans();
     Registration<PointSource, PointTarget>::setInputTarget(pcl);
-    setCellSize(target_grid_->getCellSize());
+    // setCellSize(target_grid_->getCellSize());
   }
 
 protected:
@@ -471,8 +470,8 @@ protected:
 template <typename PointSource, typename PointTarget, typename CellType>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget,
                                   CellType>::D2DNormalDistributionsTransform2D()
-  : step_size_(0.1)
-  , outlier_ratio_(0.55)
+  : step_size_(0.01)
+  , outlier_ratio_(0.99)
   , trans_probability_()
   , layer_count_(4)
   , target_grid_updated_(false)
@@ -521,13 +520,12 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 }
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
-bool D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget,
-    CellType>::computeSingleGrid(const GridSource &source_grid,
-                                 const Eigen::Matrix4f &guess,
-                                 const GridTarget &target_grid,
-                                 const d2d_ndt2d::FittingParams &param,
-                                 Eigen::Matrix4f &trans)
+bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    computeSingleGrid(const GridSource &source_grid,
+                      const Eigen::Matrix4f &guess,
+                      const GridTarget &target_grid,
+                      const d2d_ndt2d::FittingParams &param,
+                      Eigen::Matrix4f &trans)
 {
   nr_iterations_ = 0;
   converged_ = false;
@@ -927,11 +925,10 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
-bool D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget,
-    CellType>::updateIntervalMT(double &a_l, double &f_l, double &g_l,
-                                double &a_u, double &f_u, double &g_u,
-                                double a_t, double f_t, double g_t) const
+bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    updateIntervalMT(double &a_l, double &f_l, double &g_l, double &a_u,
+                     double &f_u, double &g_u, double a_t, double f_t,
+                     double g_t) const
 {
   // Case U1 in Update Algorithm and Case a in Modified Update Algorithm
   // [More,
@@ -971,11 +968,10 @@ bool D2DNormalDistributionsTransform2D<
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
-double D2DNormalDistributionsTransform2D<
-    PointSource, PointTarget,
-    CellType>::trialValueSelectionMT(double a_l, double f_l, double g_l,
-                                     double a_u, double f_u, double g_u,
-                                     double a_t, double f_t, double g_t) const
+double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
+    trialValueSelectionMT(double a_l, double f_l, double g_l, double a_u,
+                          double f_u, double g_u, double a_t, double f_t,
+                          double g_t) const
 {
   // Case 1 in Trial Value Selection [More, Thuente 1994]
   if (f_t > f_l) {

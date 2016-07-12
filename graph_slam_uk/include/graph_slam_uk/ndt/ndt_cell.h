@@ -1,16 +1,24 @@
 #ifndef GRAPH_SLAM_UK_NDT_CELL2D
 #define GRAPH_SLAM_UK_NDT_CELL2D
 
-#include <Eigen/Dense>
 #include <graph_slam_uk/ndt/output_msgs.h>
-#include <ostream>
+#include <Eigen/Dense>
 #include <iostream>
+#include <ostream>
 
 namespace slamuk
 {
 template <class Policy>
 class NDTCell
 {
+  constexpr static float MAX_OCCUPANCY = 1;
+  constexpr static float MIN_OCCUPANCY = -1;
+  constexpr static float LOG_LIKE_OCCUPANCY = 0.405465108;
+  constexpr static float SENSOR_NOISE = 0.01;
+  constexpr static size_t MAX_POINTS = 1000000000;
+
+  constexpr static float NO_GAUSSIAN_OCCUP_UPDATE = -0.2;
+
 public:
   typedef typename Eigen::Vector3d Vector;
   typedef typename Eigen::Matrix3d Matrix;
@@ -33,9 +41,9 @@ public:
     return mean_;
   }
 
-  Vector &getMean()
+  void setMean(const Vector &mean)
   {
-    return mean_;
+    mean_ = mean;
   }
   const Matrix &getCov() const
   {
@@ -47,11 +55,19 @@ public:
   }
   int8_t getOccupancy() const
   {
-    if (occup_ > Policy::max_occupancy_)
+    if (occup_ >= MAX_OCCUPANCY)
       return 100;
-    if (occup_ < 0)
+    if (occup_ < MIN_OCCUPANCY)
       return 0;
-    return static_cast<int8_t>(occup_);
+    return static_cast<int8_t>(std::floor(occup_ * 100));
+  }
+  float getOccupancyRaw() const
+  {
+    return occup_;
+  }
+  void setOccupancy(int8_t occup)
+  {
+    occup_ = occup;
   }
 
   void addPoint(const Vector &pt)
@@ -67,6 +83,14 @@ public:
 
   template <typename Pol>
   friend std::ostream &operator<<(std::ostream &os, const NDTCell<Pol> &cell);
+
+  std::string toString() const
+  {
+    std::stringstream os;
+    os << "occup: " << occup_ << "gaussian: " << gaussian_
+       << " mean: " << mean_.transpose() << " points: " << points_ << std::endl;
+    return os.str();
+  }
 
 protected:
   Vector mean_;
@@ -88,7 +112,7 @@ NDTCell<Policy>::NDTCell()
   : mean_(Vector::Zero())
   , cov_(Matrix::Identity())
   , icov_(Matrix::Identity())
-  , occup_(-1)
+  , occup_(0)
   , points_(0)
   , gaussian_(false)
 {
@@ -125,10 +149,10 @@ NDTCell<Policy> &NDTCell<Policy>::operator+=(const NDTCell<Policy> &other)
         w1 * (w2 * m_sum1 - m_sum2) * (w2 * m_sum1 - m_sum2).transpose();
     points_ = points_sum;
     cov_ = (1.0 / static_cast<double>(points_sum - 1)) * c_sum3;
-    float occup_addition = static_cast<float>(points2) * Policy::log_like_occ_;
+    float occup_addition = static_cast<float>(points2) * LOG_LIKE_OCCUPANCY;
     updateOccupancy(occup_addition);
-    if (points_ > Policy::max_points_)
-      points_ = Policy::max_points_;
+    if (points_ > MAX_POINTS)
+      points_ = MAX_POINTS;
     if (occup_ < 0)
       gaussian_ = false;
     else
@@ -147,14 +171,16 @@ void NDTCell<Policy>::computeGaussian()
 {
   // update occupancy probability
   float occup_addition =
-      static_cast<float>(points_vec_.size()) * Policy::log_like_occ_;
+      static_cast<float>(points_vec_.size()) * LOG_LIKE_OCCUPANCY;
   updateOccupancy(occup_addition);
   if (occup_ <= 0) {
     gaussian_ = false;
+    points_ = points_vec_.size();
     return;
   }
   if (points_vec_.size() < 6) {
     gaussian_ = false;
+    points_ = points_vec_.size();
     return;
   }
 
@@ -199,12 +225,12 @@ void NDTCell<Policy>::computeGaussian()
 
     points_ += points_vec_.size();
     // restrict number of points in cell
-    if (Policy::max_points_ > 0 && Policy::max_points_ < points_) {
-      mean_sum_comb *= (static_cast<double>(Policy::max_points_) /
-                        static_cast<double>(points_));
-      cov_sum_comb *= (static_cast<double>(Policy::max_points_ - 1) /
+    if (MAX_POINTS > 0 && MAX_POINTS < points_) {
+      mean_sum_comb *=
+          (static_cast<double>(MAX_POINTS) / static_cast<double>(points_));
+      cov_sum_comb *= (static_cast<double>(MAX_POINTS - 1) /
                        static_cast<double>(points_ - 1));
-      points_ = Policy::max_points_;
+      points_ = MAX_POINTS;
     }
     mean_ = mean_sum_comb / points_;
     cov_ = cov_sum_comb / (points_ - 1);
@@ -218,28 +244,55 @@ void NDTCell<Policy>::updateOccupancy(const Vector &start, const Vector &end,
                                       size_t new_points)
 {
   if (!gaussian_) {
-    updateOccupancy(-0.85 * new_points);
-    gaussian_ = false;
-  }
-  Vector pt_out;
-  double lik = calcMaxLikelihoodOnLine(start, end, pt_out);
-  double l2_target = (pt_out - end).norm();
-
-  double dist = (start - pt_out).norm();
-  double sigma_dist =
-      0.5 * (dist / 30.0);  /// test for distance based sensor noise
-  double snoise = sigma_dist + Policy::sensor_noise_;
-  /// This is the probability of max lik point being endpoint
-  double thr = exp(-0.5 * (l2_target * l2_target) / (snoise * snoise));
-  lik = lik * (1.0 - thr);
-  if (lik < 0.3)
+    updateOccupancy(NO_GAUSSIAN_OCCUP_UPDATE * new_points);
+    if (occup_ <= 0)
+      gaussian_ = false;
+    // std::cout << "\nNOTHING\n";
     return;
-  lik = 0.1 * lik + 0.5;  /// Evidence value for empty - alpha * p(x);
-  double logoddlik = log((1.0 - lik) / (lik));
-  updateOccupancy(new_points * logoddlik);
-  if (occup_ <= 0) {
-    gaussian_ = false;
   }
+  // std::cout << "UpdateOccupancy: start: " << start.transpose()
+  //           << " end: " << end.transpose() << "adding pts: " << new_points
+  //           << "cell mean: " << mean_.transpose() << std::endl;
+  if ((mean_ - end).cwiseAbs().sum() < 0.01) {
+    // we are at the end keep occupancy
+    updateOccupancy(MAX_OCCUPANCY);
+    // std::cout << "END\n";
+  }
+  // } else {
+  //   updateOccupancy(MIN_OCCUPANCY);
+  //   gaussian_ = false;
+  //   // std::cout << "REMOVE\n";
+  // }
+
+  // Vector pt_out;
+  // double lik = calcMaxLikelihoodOnLine(start, end, pt_out);
+  // std::cout << "lik: " << lik << " point: " << pt_out.transpose() <<
+  // std::endl;
+  // double l2_target = (pt_out - end).norm();
+
+  // double dist = (start - pt_out).norm();
+  // // double sigma_dist =
+  // //     0.5 * (dist / 30.0);  /// test for distance based sensor noise
+  // // double snoise = sigma_dist + SENSOR_NOISE;
+  // double snoise = SENSOR_NOISE;
+  // /// This is the probability of max lik point being endpoint
+  // double thr = exp(-0.5 * (l2_target * l2_target) / (snoise * snoise));
+  // lik = lik * (1.0 - thr);
+  // std::cout << "threashold: " << thr << std::endl;
+  // // if (lik < 0.45) {
+  // //   // cell is observed as empty
+  // //   // gaussian_ = false;
+  // //   // updateOccupancy(0);
+  // //   return;
+  // // }
+  // lik = 0.1 * lik + 0.5;  /// scaling to have lik in range [0,0.5]
+  // double logodd_lik = log((1.0 - lik) / lik);
+  // std::cout << "\nnew occup: " << new_points * logodd_lik << std::endl
+  //           << std::endl;
+  // updateOccupancy(new_points * logodd_lik);
+  // if (occup_ <= 0) {
+  //   gaussian_ = false;
+  // }
 }
 
 template <class Policy>
@@ -267,7 +320,7 @@ NDTCellMsg NDTCell<Policy>::serialize() const
 template <typename Policy>
 std::ostream &operator<<(std::ostream &os, const NDTCell<Policy> &cell)
 {
-  os << cell.occup_;
+  os << std::floor(cell.occup_);
   return os;
 }
 
@@ -276,12 +329,12 @@ std::ostream &operator<<(std::ostream &os, const NDTCell<Policy> &cell)
 template <class Policy>
 void NDTCell<Policy>::updateOccupancy(float occup)
 {
-  // -1 unoccupied, [0,100] - occupied
+  // -1 unoccupied, [0,1] - occupied
   occup_ += occup;
-  if (occup_ > Policy::max_occupancy_)
-    occup_ = Policy::max_occupancy_;
-  if (occup_ < -Policy::max_occupancy_)
-    occup_ = -Policy::max_occupancy_;
+  if (occup_ > MAX_OCCUPANCY)
+    occup_ = MAX_OCCUPANCY;
+  if (occup_ < MIN_OCCUPANCY)
+    occup_ = MIN_OCCUPANCY;
 }
 
 template <class Policy>
@@ -323,6 +376,8 @@ double NDTCell<Policy>::calcMaxLikelihoodOnLine(const Vector &start,
   pt = l * t + end;  // spot on line with maximal likelihood with respect to
                      // gaussian in this cell
 
+  if (!gaussian_)
+    return -1;
   double likelihood = (pt - mean_).dot(icov_ * (pt - mean_));
   if (std::isnan(likelihood))
     return -1;

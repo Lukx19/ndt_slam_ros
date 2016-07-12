@@ -82,7 +82,7 @@ public:
    *                          left.
    * @param[in]  discard      True will not resize grid
    */
-  void translate(const Eigen::Vector2i& translation, bool discard = true);
+  void translate(const Eigen::Vector2i& translation, bool discard);
 
   /**
    * @brief      Removes all valid cells from structure. All pointers, iterators
@@ -110,6 +110,24 @@ public:
   {
     return height_up_ + height_down_ + 1;
   }
+  size_t left() const
+  {
+    return width_left_;
+  }
+  size_t up() const
+  {
+    return height_up_;
+  }
+
+  size_t right() const
+  {
+    return width_right_;
+  }
+
+  size_t down() const
+  {
+    return height_down_;
+  }
 
   // //////////////////iterators
   Iterator begin()
@@ -118,6 +136,16 @@ public:
   }
 
   Iterator end()
+  {
+    return cells_.end();
+  }
+
+  ConstIterator begin() const
+  {
+    return cells_.begin();
+  }
+
+  ConstIterator end() const
   {
     return cells_.end();
   }
@@ -391,6 +419,7 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   Point start_in;
   bool end_indise = false;
   Point delta;
+  double max_length = (end - start).norm();
   double minx =
       -static_cast<double>(width_left_) * cell_size_ - cell_size_half_;
   double maxx = width_right_ * cell_size_ + cell_size_half_;
@@ -413,8 +442,6 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   delta(1) = (end_in(1) - start_in(1)) / std::max(length_y, length_x);
   double length = std::max(length_x, length_y);
   delta *= 0.5;
-  size_t steps =
-      std::floor((length * cell_size_) / std::max(delta(1), delta(0)));
   Point p = start_in;
   size_t idx_old = calcIndex(start_in);
   size_t idx_current = calcIndex(start_in);
@@ -426,7 +453,6 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
     cells_[idx_current].reset(new CellType());
   }
   res.push_back(cells_[idx_current].get());
-  std::cout << "steps: " << steps << std::endl;
   while (true) {
     // if program  is still in the same cell like last time just step forward
     if (idx_current != idx_old) {
@@ -434,12 +460,14 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
         cells_[idx_current].reset(new CellType());
       }
       res.push_back(cells_[idx_current].get());
-      std::cout << p.transpose() << std::endl;
+      // std::cout << p.transpose() << std::endl;
     }
     p += delta;
     if (p(0) >= maxx || p(0) <= minx || p(1) >= maxy || p(1) <= miny)
       return res;
     if (end_indise && idx_current == idx_final)
+      return res;
+    if ((p - start).norm() > max_length)
       return res;
     idx_old = idx_current;
     idx_current = calcIndex(p);

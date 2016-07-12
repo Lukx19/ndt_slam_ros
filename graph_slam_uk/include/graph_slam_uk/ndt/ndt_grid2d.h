@@ -1,15 +1,15 @@
 #ifndef GRAPH_SLAM_UK_NDT_GRID2D
 #define GRAPH_SLAM_UK_NDT_GRID2D
 
+#include <graph_slam_uk/ndt/output_msgs.h>
 #include <graph_slam_uk/ndt/voxel_grid2d.h>
-#include <pcl/point_types.h>
-#include <pcl/point_cloud.h>
-#include <pcl/common/transforms.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
 #include <graph_slam_uk/utils/point_cloud_tools.h>
-#include <boost/shared_ptr.hpp>
-#include <graph_slam_uk/ndt/output_msgs.h>
+#include <pcl/common/transforms.h>
 #include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <boost/shared_ptr.hpp>
 
 namespace slamuk
 {
@@ -33,6 +33,7 @@ public:
 
 public:
   explicit NDTGrid2D(double timestamp = 0.0);
+  NDTGrid2D(const Eigen::Vector3d &origin, double timestamp = 0.0);
   /////////////IMPLEMENTATION oF INDTGrid2D
   // pcl should be in world coordinate frame
   void initialize(const PointCloud &pcl);
@@ -51,7 +52,19 @@ public:
   {
     grid_.enlarge(left, down, right, up);
   }
-  void move(const Eigen::Vector2d &translation);
+
+  /**
+   * @brief      moves grid in horizontal or vertical direction in units of
+   *             whole cell. Transformation which has not been used is returnet.
+   *             Always keeps this grid alligned whith Kartesian coordinates and
+   *             doesn't change cells covariances. It is faster and more robust
+   *             than regular transform method.
+   *
+   * @param[in]  transform  transformation which should be applied to this grid
+   *
+   * @return     residual (unused) transformation
+   */
+  Transform move(const Transform &transform);
   void transform(const Transform &transform);
   OccupancyGrid createOccupancyGrid() const;
 
@@ -98,9 +111,19 @@ public:
   // multiple - multiple of cell_sizes
   SelfType createCoarserGrid(float cell_size) const;
 
+  // Point cloud is in local coordinate system of this frame
   const typename PointCloud::Ptr getMeans() const
   {
     return means_;
+  }
+  // point cloud is transformed to world coordinate frame
+  const typename PointCloud::Ptr getMeansTransformed() const
+  {
+    typename PointCloud::Ptr res(new PointCloud());
+    Eigen::Matrix4d trans = eigt::convertFromTransform(
+        eigt::transBtwFrames(origin_, Eigen::Vector3d(0, 0, 0)));
+    pcl::transformPointCloud(*means_, *res, trans);
+    return res;
   }
 
   CellPtrVector getGaussianCells() const;
@@ -137,7 +160,6 @@ protected:
   bool initialized_;
   double timestamp_;
   DataGrid grid_;
-  Eigen::Vector2d cumul_move_;
   pcl::KdTreeFLANN<PointType> kdtree_;
   typename PointCloud::Ptr means_;
 
@@ -167,7 +189,18 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(double timestamp)
   , initialized_(false)
   , timestamp_(timestamp)
   , grid_()
-  , cumul_move_(0, 0)
+{
+  grid_.setCellSize(cell_size_);
+}
+
+template <typename CellType, typename PointType>
+NDTGrid2D<CellType, PointType>::NDTGrid2D(const Eigen::Vector3d &origin,
+                                          double timestamp)
+  : origin_(origin)
+  , cell_size_(0.25)
+  , initialized_(false)
+  , timestamp_(timestamp)
+  , grid_()
 {
   grid_.setCellSize(cell_size_);
 }
@@ -177,11 +210,11 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const PointCloud &pcl,
                                              const Pose &origin, bool resize)
 {
   eigt::transform2d_t<double> trans =
-      eigt::transBtwPoses(this->origin_, origin);
+      eigt::transBtwFrames(origin, this->origin_);
+  // std::cout << trans.matrix() << std::endl;
   PointCloud trans_pcl;
   // transforming input pcl to reference frame of this grid
-  pcl::transformPointCloud(pcl, trans_pcl,
-                           eigt::convertFromTransform(trans).cast<float>());
+  pcl::transformPointCloud(pcl, trans_pcl, eigt::convertFromTransform(trans));
   mergeIn(createGrid(trans_pcl), false, resize);
 }
 
@@ -194,7 +227,7 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const SelfType &grid,
   if (transform) {
     // we need to transform each cell to its new position
     eigt::transform2d_t<double> trans =
-        eigt::transBtwPoses(this->origin_, grid.origin_);
+        eigt::transBtwFrames(grid.origin_, this->origin_);
     transformNDTCells(occupied_cells, trans);
   }
   mergeIn(occupied_cells, resize);
@@ -260,11 +293,10 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const PointCloud &pcl,
                                                    bool resize)
 {
   eigt::transform2d_t<double> trans =
-      eigt::transBtwPoses(this->origin_, origin);
+      eigt::transBtwFrames(origin, this->origin_);
   PointCloud trans_pcl;
   // transforming input pcl to reference frame of this grid
-  pcl::transformPointCloud(pcl, trans_pcl,
-                           eigt::convertFromTransform(trans).cast<float>());
+  pcl::transformPointCloud(pcl, trans_pcl, eigt::convertFromTransform(trans));
   mergeInTraced(createGrid(trans_pcl), false, resize);
 }
 
@@ -274,23 +306,33 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
 {
   // all valid cells. Including cells without proper gaussian
   std::vector<CellType> occupied_cells = grid.grid_.getValidCells();
+  Eigen::Vector3d origin2(0, 0, 0);
   if (transform) {
-    // we need to transform each cell to its new position
     eigt::transform2d_t<double> trans =
-        eigt::transBtwPoses(this->origin_, grid.origin_);
+        eigt::transBtwFrames(grid.origin_, this->origin_);
+    // we need to transform each cell to its new position
     transformNDTCells(occupied_cells, trans);
+    origin2 = eigt::transformPose(grid.origin_, trans);
   }
+  // conversion from x y theta pose to x,y,z coordinates for 3dCell interface
+  typename CellType::Vector start(origin2(0), origin2(1), 0);
+
+  // go over all cells in grid, whichh is merging in.
   for (auto &&cell : occupied_cells) {
     if (cell.hasGaussian()) {
-      CellPtrVector ray_cells = grid_.rayTrace(cell.getMean().head(2));
+      // request all cells on ray passing through original grid with start and
+      // end of raytracing taken from new merge in grid
+      CellPtrVector ray_cells =
+          this->grid_.rayTrace(start.head(2), cell.getMean().head(2));
+      // std::cout << ray_cells.size() << std::endl;
       for (CellType *ray_cell : ray_cells) {
         // update cell on line between start and end point
-        typename CellType::Vector start(this->origin_(0), this->origin_(0), 0);
         ray_cell->updateOccupancy(start, cell.getMean(), cell.points());
       }
     }
   }
-  mergeIn(grid.grid_.getValidCells(), resize);
+  mergeIn(occupied_cells, resize);
+  // mergeIn(grid.grid_.getValidCells(), resize);
 }
 
 template <typename CellType, typename PointType>
@@ -412,14 +454,21 @@ template <typename CellType, typename PointType>
 OccupancyGrid NDTGrid2D<CellType, PointType>::createOccupancyGrid() const
 {
   OccupancyGrid oc_grid;
-  oc_grid.origin_ = origin_;
+  Eigen::Vector2d corner_origin(-grid_.left() * cell_size_,
+                                grid_.up() * cell_size_);
+  eigt::transform2d_t<double> trans =
+      eigt::transBtwFrames(origin_, Eigen::Vector3d(0, 0, 0));
+  oc_grid.origin_.head(2) = trans * corner_origin;
+  oc_grid.origin_(2) = origin_(2);
+
+  oc_grid.centroid_ << grid_.left() * cell_size_, grid_.up() * cell_size_;
+
   oc_grid.width_ = grid_.width();
   oc_grid.height_ = grid_.height();
   oc_grid.resolution_ = cell_size_;
-  oc_grid.cells_.resize(oc_grid.width_ * oc_grid.height_);
-  typename DataGrid::CellPtrVector valid_cells = grid_.getValidCellsPtr();
-  for (CellType *cell_it : valid_cells) {
-    if (cell_it == nullptr)
+  oc_grid.cells_.reserve(oc_grid.width_ * oc_grid.height_);
+  for (const auto &cell_it : grid_) {
+    if (cell_it.get() == nullptr)
       oc_grid.cells_.push_back(-1);
     else
       oc_grid.cells_.push_back(cell_it->getOccupancy());
@@ -455,48 +504,106 @@ NDTGrid2D<CellType, PointType>::getGaussianCells() const
 }
 
 template <typename CellType, typename PointType>
-void NDTGrid2D<CellType, PointType>::transform(const Transform &transform)
+void NDTGrid2D<CellType, PointType>::transform(const Transform &trans)
 {
   // get valid cells apply on them transformation and fuse them back to empty
   // grid
-  DataGrid trans_grid = grid_.clone();
   typename DataGrid::CellVector cells = grid_.getValidCells();
-  transformNDTCells(cells, transform);
-  trans_grid.mergeIn(cells, true);
-  grid_ = std::move(trans_grid);
+  grid_.clear();
+  Transform only_rotate = trans;
+  only_rotate.matrix().block(0, 2, 2, 1) << 0, 0;
+  transformNDTCells(cells, only_rotate);
+  for (auto &&cell : cells) {
+    if (cell.hasGaussian())
+      grid_.addCell(cell.getMean().head(2), std::move(cell), true);
+  }
   // transform origin of ndt grid
-  origin_ = eigt::transformPose(origin_, transform);
+  Transform only_translate = trans;
+  only_translate.linear().setIdentity();
+  origin_ = eigt::transformPose(origin_, only_translate);
+  updateMeansCloud();
+  updateKDTree();
 }
 
 template <typename CellType, typename PointType>
-void NDTGrid2D<CellType, PointType>::move(const Eigen::Vector2d &translation)
+typename NDTGrid2D<CellType, PointType>::Transform
+NDTGrid2D<CellType, PointType>::move(const Transform &transform)
 {
-  cumul_move_ += translation;
-  Eigen::Vector2i move(0, 0);
-  if (std::abs(std::floor(cumul_move_(0) / cell_size_)) > 0) {
-    move(0) = std::floor(cumul_move_(0) / cell_size_);
-    cumul_move_(0) -= move(0);
+  if (std::abs(origin_(2)) > 1e-7) {
+    std::cerr << "[NDT_GRID2D]: you may not use move of grid when grid is not "
+                 "aligned with Kartesian coordinates (your grid is rotated). "
+                 "Please use transform instead. origin: "
+              << origin_.transpose() << std::endl;
+    return transform;
   }
-  if (std::abs(std::floor(cumul_move_(1) / cell_size_)) > 0) {
-    move(1) = std::floor(cumul_move_(1) / cell_size_);
-    cumul_move_(1) -= move(1);
+  Transform out_trans = transform;
+  bool change = false;
+  // std::cout << "cumul 1: \n" << out_trans.matrix() << std::endl;
+
+  Eigen::Vector2i move(0, 0);  // move in discreat steps of grid
+  Eigen::Vector2d continuous_move(0, 0);
+
+  if (std::floor(std::abs(out_trans(0, 2)) / cell_size_) > 0) {
+    double res = out_trans(0, 2) / cell_size_;
+    if (res < 0)
+      move(0) = std::ceil(res);
+    else
+      move(0) = std::floor(res);
+    continuous_move(0) = move(0) * cell_size_;
+    // used movement in x direction is discarted
+    out_trans(0, 2) -= move(0) * cell_size_;
+    change = true;
   }
-  // move underling voxel grid
-  grid_.translate(move, true);
-  // move origin of this grid
-  origin_(0) += move(0) * cell_size_;
-  origin_(1) += move(1) * cell_size_;
-  // applies transformation to all means of ndt cells
-  for (auto &&cell : getGaussianCells()) {
-    cell->getMean() += Eigen::Vector3d(move(0), move(1), 0);
+  if (std::floor(std::abs(out_trans(1, 2)) / cell_size_) > 0) {
+    double res = out_trans(1, 2) / cell_size_;
+    if (res < 0)
+      move(1) = std::ceil(res);
+    else
+      move(1) = std::floor(res);
+    continuous_move(1) = move(1) * cell_size_;
+    // used movement in y direction is discarted
+    out_trans(1, 2) -= move(1) * cell_size_;
+    change = true;
   }
+
+  if (change) {
+    // move underling voxel grid
+    grid_.translate(-move, true);
+    // move origin of this grid
+    origin_(0) += continuous_move(0);
+    origin_(1) += continuous_move(1);
+    // applies transformation to all means of ndt cells
+    for (auto &&cell : getGaussianCells()) {
+      // e.g. if grid origin moves one cell forward all old cell needs to
+      // recalculate
+      // their position one step back
+      // std::cout << cell->getMean().transpose();
+      cell->setMean(cell->getMean() + Eigen::Vector3d(-continuous_move(0),
+                                                      -continuous_move(1), 0));
+      // std::cout << "after: " << cell->getMean().transpose() << std::endl;
+    }
+    updateMeansCloud();
+    updateKDTree();
+
+    // std::cout << change << std::endl;
+    // std::cout << "move: " << move.transpose() << "   "
+    //           << continuous_move.transpose() << std::endl;
+    // std::cout << "cumul 2: \n" << out_trans.matrix() << std::endl;
+    // std::cout << "origin: " << origin_.transpose() << std::endl;
+  }
+
+  return out_trans;
 }
 
 template <typename CellType, typename PointType>
 NDTGridMsg NDTGrid2D<CellType, PointType>::serialize() const
 {
   NDTGridMsg msg;
-  msg.origin_ << origin_(0), origin_(1), 0;
+  Eigen::Vector2d corner_origin(-grid_.left() * cell_size_,
+                                grid_.up() * cell_size_);
+  eigt::transform2d_t<double> trans =
+      eigt::transBtwFrames(origin_, Eigen::Vector3d(0, 0, 0));
+  msg.origin_.head(2) = trans * corner_origin;
   msg.size_ << grid_.width() * cell_size_, grid_.height() * cell_size_, 0;
   msg.cell_sizes_ << cell_size_, cell_size_, 0;
   for (auto &&cell : grid_.getValidCellsPtr) {
@@ -517,6 +624,7 @@ std::ostream &operator<<(std::ostream &os, const NDTGrid2D<Cell, Pt> &grid)
     else if ((*cell)->hasGaussian())
       os << std::setw(1) << "W";
     else
+      // os << std::setw(3) << std::floor((*cell)->getOccupancyRaw() * 10);
       os << std::setw(1) << ".";
     ++i;
     if (i == grid.grid_.width()) {
@@ -543,6 +651,10 @@ NDTGrid2D<CellType, PointType>::createGrid(const PointCloud &pcl) const
     localGrid.addPoint(pcl[i]);
   }
   localGrid.computeNDTCells();
+  std::vector<CellType> occupied_cells = localGrid.grid_.getValidCells();
+  // for (auto &&cell : occupied_cells) {
+  //   //std::cout << "valid cell: " << cell.toString() << std::endl;
+  // }
   return localGrid;
 }
 
@@ -574,8 +686,8 @@ NDTGrid2D<CellType, PointType>::getKNearestNeighborsVoxel(
   if (radius_cells.size() < K)
     return radius_cells;
   // sort elements based on distance from point from parameter
-  std::sort(radius_cells.begin(), radius_cells.end(),
-            [&point](CellType *a, CellType *b) {
+  std::sort(radius_cells.begin(), radius_cells.end(), [&point](CellType *a,
+                                                               CellType *b) {
     return (a->getMean() - point).norm() < (a->getMean() - point).norm();
   });
   res.reserve(K);

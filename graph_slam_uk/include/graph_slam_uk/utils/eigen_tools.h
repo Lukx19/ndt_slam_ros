@@ -30,6 +30,8 @@ template <typename T = double>
 pose2d_t<T> transformPose(const pose2d_t<T> &pose,
                           const transform2d_t<T> &trans);
 
+template <typename T = double>
+transform2d_t<T> transBtwFrames(const pose2d_t<T> &from, const pose2d_t<T> &to);
 // maps from transformation matrix 3x3 to vector
 // [delta_x,delta_y, detla_angle]
 template <typename T = double>
@@ -62,32 +64,85 @@ eigt::transform2d_t<T> getTransFromPose(const pose2d_t<T> &trans);
 
 template <typename T = double>
 T normalizeAngle(T angle);
+
+template <typename Out, typename In>
+Eigen::Matrix<Out, 4, 4> vecToMat3d(const Eigen::Matrix<In, 3, 1> &trans);
+
+template <typename Out, typename In>
+Eigen::Matrix<Out, 3, 3> vecToMat2d(const Eigen::Matrix<In, 3, 1> &trans);
 }
 // ************************* IMPLEMENTATION****************************
 template <typename T>
 eigt::transform2d_t<T> eigt::transBtwPoses(const pose2d_t<T> &from,
                                            const pose2d_t<T> &to)
 {
-  transform2d_t<T> t;
-  Eigen::Rotation2D<T> rot_from(from(2));
-  Eigen::Rotation2D<T> rot_to(to(2));
-  t.setIdentity();
-  t.matrix().block(0, 0, 2, 2) =
-      (rot_from.toRotationMatrix().transpose() * rot_to.toRotationMatrix());
-  t.matrix().block(0, 2, 2, 1) =
-      rot_from.toRotationMatrix() * (to.head(2) - from.head(2));
-  return t;
+  pose2d_t<T> trans_pose;
+  trans_pose(0) = to(0) - from(0);
+  trans_pose(1) = to(1) - from(1);
+  trans_pose(2) = normalizeAngle(to(2) - from(2));
+  return eigt::getTransFromPose(trans_pose);
+}
+
+template <typename T>
+eigt::transform2d_t<T> eigt::transBtwFrames(const pose2d_t<T> &from,
+                                            const pose2d_t<T> &to)
+{
+  // calculate base axes of pose from
+  Eigen::Matrix<T, 2, 1> k_base0(1, 0);
+  Eigen::Matrix<T, 2, 1> k_base1(0, 1);
+  auto trans_from = eigt::getTransFromPose(from);
+  Eigen::Matrix<T, 2, 1> from_base0 = trans_from.linear() * k_base0;
+  Eigen::Matrix<T, 2, 1> from_base1 = trans_from.linear() * k_base1;
+
+  auto trans_to = eigt::getTransFromPose(to);
+  Eigen::Matrix<T, 2, 1> to_base0 = trans_to.linear() * k_base0;
+  Eigen::Matrix<T, 2, 1> to_base1 = trans_to.linear() * k_base1;
+
+  transform2d_t<T> T1;
+  T1.linear() << from_base0, from_base1;
+
+  transform2d_t<T> T2;
+  T2.linear() << to_base0, to_base1;
+
+  transform2d_t<T> T_all;
+  T_all.linear() = T1.linear() * T2.linear().inverse();
+  T_all.translation() = T2.linear().inverse() * (from.head(2) - to.head(2));
+
+  // // base  change from kartezian to CS1
+  // T1.linear() << (from_base0 - from.head(2)).normalized(),
+  //     (from_base1 - from.head(2)).normalized();
+  // // T1.linear() << from_base0, from_base1;
+  // std::cout << T1.linear().inverse() << std::endl;
+  // // calculate base axes of end pose
+  // transform2d_t<T> T2;
+  // // base change from kartezian to CS2
+  // T2.linear() << (to_base0 - to.head(2)).normalized(),
+  //     (to_base1 - to.head(2)).normalized();
+  // // T2.linear() << to_base0.normalized(), to_base1.normalized();
+
+  // transform2d_t<T> transformation;
+  // transformation.setIdentity();
+  // // CS1 to(inverse) CS0 to CS2
+  // transformation.linear() = T2.linear() * T1.linear().inverse();
+  // transformation.translation() =
+  //     from.head(2) - (transformation.linear() * to.head(2));
+
+  // std::cout << "from_base:" << from_base0.transpose() << "   "
+  //           << from_base1.transpose() << std::endl;
+  // std::cout << "to_base:" << to_base0.transpose() << "   "
+  //           << to_base1.transpose() << std::endl;
+
+  return T_all;
 }
 
 template <typename T>
 eigt::pose2d_t<T> eigt::transformPose(const pose2d_t<T> &pose,
                                       const transform2d_t<T> &trans)
 {
-  Eigen::Rotation2D<T> rot(pose(2));
   pose2d_t<T> res_pose;
   pose2d_t<T> inc = getPoseFromTransform(trans);
-  res_pose.head(2) =
-      pose.head(2) + rot.toRotationMatrix().transpose() * inc.head(2);
+  res_pose(0) = pose(0) + inc(0);
+  res_pose(1) = pose(1) + inc(1);
   res_pose(2) = normalizeAngle(pose(2) + inc(2));
   return res_pose;
 }
@@ -157,6 +212,33 @@ T eigt::normalizeAngle(T angle)
 {
   return atan2(sin(angle), cos(angle));
   // return angle - 2 * M_PI *std::floor((angle + M_PI) / (2 * M_PI));
+}
+
+template <typename Out, typename In>
+Eigen::Matrix<Out, 4, 4> eigt::vecToMat3d(const Eigen::Matrix<In, 3, 1> &trans)
+{
+  Eigen::Matrix<Out, 4, 4> trans_mat = Eigen::Matrix<Out, 4, 4>::Identity();
+
+  trans_mat.block(0, 0, 3, 3).matrix() =
+      Eigen::Matrix<Out, 3, 3>(Eigen::AngleAxis<Out>(
+          static_cast<Out>(trans(2)), Eigen::Matrix<Out, 3, 1>::UnitZ()));
+
+  trans_mat.block(0, 3, 3, 1).matrix() = Eigen::Matrix<Out, 3, 1>(
+      static_cast<Out>(trans(0)), static_cast<Out>(trans(1)), 0.0);
+
+  return trans_mat;
+}
+
+template <typename Out, typename In>
+Eigen::Matrix<Out, 3, 3> eigt::vecToMat2d(const Eigen::Matrix<In, 3, 1> &trans)
+{
+  Eigen::Matrix<Out, 3, 3> trans_mat = Eigen::Matrix<Out, 3, 3>::Identity();
+  trans_mat.block(0, 0, 2, 2).matrix() =
+      Eigen::Rotation2D<Out>(static_cast<Out>(trans(2))).toRotationMatrix();
+  trans_mat.block(0, 2, 2, 1).matrix() = Eigen::Matrix<Out, 2, 1>(
+      static_cast<Out>(trans(0)), static_cast<Out>(trans(1)));
+
+  return trans_mat;
 }
 
 #endif
