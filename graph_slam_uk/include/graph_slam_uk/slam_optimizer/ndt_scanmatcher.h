@@ -1,9 +1,11 @@
 #ifndef GRAPH_SLAM_UK_NDT_SCANMATCHING
 #define GRAPH_SLAM_UK_NDT_SCANMATCHING
 
+#include <graph_slam_uk/registration/d2d_ndt2d_robust.h>
 #include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
-#include <graph_slam_uk/registration/d2d_ndt2d_robust.h>
+
+#include <graph_slam_uk/utils/point_cloud_tools.h>
 
 namespace slamuk
 {
@@ -23,7 +25,8 @@ public:
         const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity());
 
 protected:
-  pcl::D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ, pcl::PointXYZ>
+  pcl::D2DNormalDistributionsTransform2DRobust<typename FrameType::Point,
+                                               typename FrameType::Point>
       matcher;
 };
 
@@ -36,12 +39,17 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   matcher.setInputSource(source.getData());
   matcher.setInputTarget(target.getData());
   // Set initial alignment estimate found using robot odometry.
-  Eigen::Matrix<double, 4, 4> init_guess =
-      eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess));
+  Eigen::Matrix<float, 4, 4> init_guess =
+      eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess))
+          .cast<float>();
   // Calculating required rigid transform to align the input cloud to the target
   // cloud.
-  pcl::PointCloud<pcl::PointXYZ> pcl_out;
-  matcher.align(pcl_out, init_guess.cast<float>());
+  typename pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_out(
+      new pcl::PointCloud<pcl::PointXYZ>());
+
+  matcher.align(*pcl_out, init_guess);
+  pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
+                                               pcl_out);
 
   ROS_INFO_STREAM("PCL_NDT2D:Normal Distributions Transform has converged:"
                   << matcher.hasConverged());

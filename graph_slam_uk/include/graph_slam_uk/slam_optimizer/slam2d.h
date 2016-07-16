@@ -2,16 +2,16 @@
 #define GRAPH_SLAM_UK_SLAM2D
 
 #include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
-#include <graph_slam_uk/slam_optimizer/slam2d_policy.h>
-#include <graph_slam_uk/slam_optimizer/pose_graph.h>
 #include <graph_slam_uk/slam_optimizer/loop_detector.h>
-#include <graph_slam_uk/slam_optimizer/rrr_loop_proofer.h>
+#include <graph_slam_uk/slam_optimizer/pose_graph.h>
 #include <graph_slam_uk/slam_optimizer/rrr_g2o_wrapper.h>
+#include <graph_slam_uk/slam_optimizer/rrr_loop_proofer.h>
+#include <graph_slam_uk/slam_optimizer/slam2d_policy.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
 
-#include <visualization_msgs/MarkerArray.h>
 #include <geometry_msgs/Point.h>
 #include <std_msgs/ColorRGBA.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include <ros/ros.h>
 
@@ -20,12 +20,14 @@
 
 #include <iostream>
 
-#include <g2o/core/sparse_optimizer.h>
 #include <g2o/core/block_solver.h>
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
+#include <g2o/core/sparse_optimizer.h>
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/types/slam2d/edge_se2.h>
 #include <g2o/types/slam2d/vertex_se2.h>
+
+#include <graph_slam_uk/slam_optimizer/max_mixture/types_g2o_mixture.h>
 
 namespace slamuk
 {
@@ -41,7 +43,10 @@ class Slam2D : public IGraphOptimalizer2d<T>
   typedef g2o::LinearSolverCSparse<SlamBlockSolver::PoseMatrixType>
       SlamLinearSolver;
   typedef g2o::VertexSE2 VertexG2O;
-  typedef g2o::EdgeSE2 EdgeG2O;
+  typedef g2o::SE2 PoseG2O;
+  // typedef g2o::EdgeSE2 EdgeG2O;
+  // typedef VertexSwitchLinear VertexG2O;
+  typedef EdgeSE2Mixture EdgeG2O;
   typedef RRRLoopProofer<RRRG2OWrapper> LoopProofer;
 
 public:
@@ -135,20 +140,20 @@ bool Slam2D<T>::optimalize()
   g2o_opt_->initializeOptimization();
   g2o_opt_->optimize(10);
   updatePoseGraph();
-  return true;  // opt_engine_.optimizeGraph(graph_, epsilon_, iterations_);
+  return true;
 }
 
 template <typename T>
 bool Slam2D<T>::optimalizeIterationaly()
 {
   optimalize();
-  return true;  // opt_engine_.optimizeGraph(graph_, epsilon_, iterations_);
+  return true;
 }
 
 template <typename T>
 double Slam2D<T>::calcTotalGraphError() const
 {
-  return 0;  // opt_engine_.calcTotalError(graph_);
+  return 0;
 }
 
 template <typename T>
@@ -157,8 +162,9 @@ size_t Slam2D<T>::addPose(const Eigen::Vector3d &position, T &obj)
   // add vertex to pose_graph
   size_t id = graph_.addNode(NodeType(position, obj));
   // add vertex to g2o
-  VertexG2O::EstimateType xytheta(position(0), position(1), position(2));
-  VertexG2O *pose = new g2o::VertexSE2;
+  VertexG2O::EstimateType xytheta(
+      PoseG2O(position(0), position(1), position(2)));
+  VertexG2O *pose = new VertexG2O();
   pose->setId(id);
   pose->setEstimate(xytheta);
   // initialize ids
@@ -180,16 +186,18 @@ size_t Slam2D<T>::addConstrain(size_t node_id_from, size_t node_id_to,
                                const Eigen::Vector3d &trans,
                                const Eigen::Matrix3d &inform_mat)
 {
-  ROS_INFO_STREAM("Adding constrain betwen nodes:" << node_id_from << "->"
-                                                   << node_id_to);
+  ROS_INFO_STREAM("[SLAM2D]: Adding constrain betwen nodes:"
+                  << node_id_from << "->" << node_id_to);
   EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to), trans,
              inform_mat);
   size_t id = graph_.addEdge(std::move(e));
   graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
   // adding G2O edgeType
   EdgeG2O *edge_g2o = new EdgeG2O();
-  edge_g2o->setMeasurement(EdgeG2O::Measurement(trans(0), trans(1), trans(2)));
+  edge_g2o->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
+
   edge_g2o->setInformation(inform_mat);
+
   edge_g2o->vertices()[0] = g2o_opt_->vertex(node_id_from);
   edge_g2o->vertices()[1] = g2o_opt_->vertex(node_id_to);
   edge_g2o->setId(id);
@@ -350,8 +358,8 @@ void Slam2D<T>::initializeGrapFromOdom()
   }
   while (next_e != nullptr) {
     next_nd = next_e->getTo()->getId();
-    graph_.getNode(next_nd)
-        .setPose(eigt::transformPose(pose, next_e->getTransMatrix()));
+    graph_.getNode(next_nd).setPose(
+        eigt::transformPose(pose, next_e->getTransMatrix()));
     next_e = nullptr;
     for (EdgeType *e : graph_.getNode(next_nd).getEdgesOut()) {
       if (e->getType() == EdgeType::Type::ODOM) {
@@ -366,9 +374,12 @@ template <typename T>
 void Slam2D<T>::updatePoseGraph()
 {
   for (auto it = graph_.beginNode(); it != graph_.endNode(); ++it) {
-    it->setPose(dynamic_cast<VertexG2O *>(g2o_opt_->vertex(it->getId()))
-                    ->estimate()
-                    .toVector());
+    Eigen::Vector3d new_pose =
+        dynamic_cast<VertexG2O *>(g2o_opt_->vertex(it->getId()))
+            ->estimate()
+            .toVector();
+    it->setPose(new_pose);
+    it->getDataObj().updatePosition(new_pose);
   }
 }
 

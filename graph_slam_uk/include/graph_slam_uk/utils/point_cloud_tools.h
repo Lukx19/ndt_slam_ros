@@ -2,6 +2,7 @@
 #define GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 
 #include <pcl/point_cloud.h>
+#include <pcl/visualization/pcl_visualizer.h>
 #include <vector>
 
 namespace pcl
@@ -13,6 +14,13 @@ void getMinMax2D(const pcl::PointCloud<PointType> &pcl, Scalar &minx,
 template <typename CellType, typename Scalar>
 void getMinMaxNDT2D(const std::vector<CellType> &cells, Scalar &minx,
                     Scalar &miny, Scalar &maxx, Scalar &maxy);
+
+template <typename PointType>
+void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl);
+
+template <typename PointType>
+void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
+                  const typename PointCloud<PointType>::ConstPtr &pcl2);
 
 ////////////////////IMPLEMENTATION ///////////////
 template <typename PointType, typename Scalar>
@@ -48,6 +56,57 @@ void getMinMaxNDT2D(const std::vector<CellType> &cells, Scalar &minx,
     if (mean(1) > maxy)
       maxy = mean(1);
   }
+}
+
+template <typename PointType>
+void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl)
+{
+  // Initializing point cloud visualizer
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(
+      new pcl::visualization::PCLVisualizer("3D Viewer"));
+  viewer->setBackgroundColor(0, 0, 0);
+
+  pcl::visualization::PointCloudColorHandlerCustom<PointType> target_color(
+      pcl, 255, 0, 0);
+  viewer->addPointCloud<PointType>(pcl, target_color, "vis cloud");
+  viewer->setPointCloudRenderingProperties(
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "vis cloud");
+  viewer->addCoordinateSystem(1.0, "global");
+  // Wait until visualizer window is closed.
+  while (!viewer->wasStopped()) {
+    viewer->spinOnce(100);
+    boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+  }
+  viewer->close();
+}
+
+template <typename PointType>
+void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
+                  const typename PointCloud<PointType>::ConstPtr &pcl2)
+{
+  // Initializing point cloud visualizer
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(
+      new pcl::visualization::PCLVisualizer("3D Viewer"));
+  viewer->setBackgroundColor(0, 0, 0);
+  // visualize firs cloud
+  pcl::visualization::PointCloudColorHandlerCustom<PointType> first_color(
+      pcl1, 255, 0, 0);
+  viewer->addPointCloud<PointType>(pcl1, first_color, "first cloud");
+  viewer->setPointCloudRenderingProperties(
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "first cloud");
+  // visualize second cloud
+  pcl::visualization::PointCloudColorHandlerCustom<PointType> second_color(
+      pcl2, 0, 255, 0);
+  viewer->addPointCloud<PointType>(pcl2, second_color, "second cloud");
+  viewer->setPointCloudRenderingProperties(
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "second cloud");
+  viewer->addCoordinateSystem(1.0, "global");
+  // Wait until visualizer window is closed.
+  while (!viewer->wasStopped()) {
+    viewer->spinOnce(100);
+    boost::this_thread::sleep(boost::posix_time::microseconds(100000));
+  }
+  viewer->close();
 }
 }
 

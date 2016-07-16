@@ -75,7 +75,7 @@ protected:
   Transform last_trans_;
 
   Transform position_;
-  Transform postion_cumul_;
+  Transform position_cumul_;
   Transform transform_temp_;  // transform of current temp frame
   CovarianceWrapper covar_temp_;
   NDTMapper<CellType, PointType> map_;
@@ -105,7 +105,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , win_radius_(30.0f)
   , last_node_id_(0)
   , position_(Transform::Identity())
-  , postion_cumul_(Transform::Identity())
+  , position_cumul_(Transform::Identity())
   , transform_temp_(Transform::Identity())
   , covar_temp_()
   , map_()
@@ -147,7 +147,7 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
                              win_radius_);
     running_window_->initialize(pcl);
     frame_temp_->initialize(pcl);
-    window_update_time_ update_time;
+    window_update_time_ = update_time;
     window_seq_ = 0;
     return position_;
   }
@@ -162,6 +162,8 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
   inc_matcher_.align(
       pcl_out,
       eigt::convertFromTransform(position_cumul_ * motion).cast<float>());
+  ROS_INFO_STREAM("[SLAM ALGORITHM]: incremental scanamtching converged:"
+                  << inc_matcher_.hasConverged());
   if (inc_matcher_.hasConverged()) {
     // prepare transformation from successful scan registration
     Transform trans_mat = eigt::convertToTransform<double>(
@@ -180,7 +182,8 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     ++window_seq_;
 
     // increasing transformation and covariance of local temp frame
-    Transform diff_trans = eigt::transBtwPoses(position_, local->getOrigin());
+    Transform diff_trans = eigt::transBtwPoses(
+        eigt::getPoseFromTransform(position_), local->getOrigin());
     std::cout << "diff trans:"
               << eigt::getPoseFromTransform(diff_trans).transpose()
               << std::endl;
@@ -221,7 +224,7 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
       // which is currently in next tem frae...so it is not considered by pose
       // graph yet
       std::cout << "last nodes pose in graph: "
-                << opt_engine_->getPoseLocation(last_node_id_).traspose()
+                << opt_engine_->getPoseLocation(last_node_id_).transpose()
                 << std::endl;
       position_ =
           eigt::getTransFromPose(opt_engine_->getPoseLocation(last_node_id_)) *
@@ -284,8 +287,10 @@ graph_slam_uk::NDTMapMsg NdtSlamAlgortihm::toNdtMapMsg(
     cl.mean_z = cell.mean_(2);
     cl.occupancy = cell.occupancy_;
     cl.N = cell.points_;
-    for (auto &&val : cell.cov_) {
-      cl.cov_matrix.push_back(val);
+    for (size_t i = 0; i < cell.cov_.rows(); ++i) {
+      for (size_t j = 0; j < cell.cov_.cols(); ++j) {
+        cl.cov_matrix.push_back(cell.cov_(i, j));
+      }
     }
     ros_msg.cells.push_back(std::move(cl));
   }

@@ -1,19 +1,18 @@
 #ifndef GRAPH_SLAM_UK_LOOP_DETECTOR
 #define GRAPH_SLAM_UK_LOOP_DETECTOR
 
+#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
 #include <graph_slam_uk/slam_optimizer/pose_graph.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
-#include <graph_slam_uk/slam_optimizer/graph_slam_interfaces.h>
-#include <queue>
 #include <pcl/common/centroid.h>
 #include <ros/ros.h>
+#include <queue>
 
 namespace slamuk
 {
 namespace internal
 {
-struct EdgeCov
-{
+struct EdgeCov {
   typedef Eigen::Matrix3d Covar;
   typedef Eigen::Transform<double, 2, Eigen::TransformTraits::Affine> Transform;
   size_t start_id_;
@@ -67,7 +66,7 @@ private:
                                const Eigen::Vector2d &t_j) const
   {
     Eigen::Matrix3d res;
-    res << 1, 0, -si *t_j(0) - co * t_j(1), 0, 1, co * t_j(0) - si * t_j(1), 0,
+    res << 1, 0, -si * t_j(0) - co * t_j(1), 0, 1, co * t_j(0) - si * t_j(1), 0,
         0, 1;
     return res;
   }
@@ -79,16 +78,14 @@ private:
   }
 };
 
-struct EdgeCovComparer
-{
+struct EdgeCovComparer {
   bool operator()(const EdgeCov &a, const EdgeCov &b)
   {
     return a < b;
   }
 };
 
-struct ScanInfo
-{
+struct ScanInfo {
   double radius_;
   bool is_ready_;
 
@@ -111,8 +108,7 @@ public:
 }  // end of internal namespace
 
 template <typename Policy>
-struct LoopClosure
-{
+struct LoopClosure {
   std::pair<size_t, size_t> vertices_;
   typename Policy::InformMatrix information_;  // cumulative covariance
   typename Policy::TransformMatrix t_;         // cumulative transformation
@@ -139,7 +135,7 @@ private:
 
 public:
   LoopDetector(Graph<P, T> *graph, IScanmatcher2d<T> *matcher)
-    : graph_(graph), matcher_(matcher)
+    : graph_(graph), matcher_(matcher), min_dist_(4)
   {
   }
   std::vector<LoopClosure<P>> genLoopClosures(Id node_id);
@@ -151,6 +147,7 @@ protected:
   IScanmatcher2d<T> *matcher_;
 
   const float MATCH_SCORE = 0;
+  double min_dist_;
   std::vector<internal::ScanInfo> laser_range_;
 
   std::vector<internal::EdgeCov>
@@ -189,32 +186,33 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
     size_t curr_node_id = fringe.top().node_id_;
     // enough overlap
     if (isCloseMatch(fringe.top())) {
-      if (far_enough) {
-        // calculate transformation with scanmatching
-        Node &source_n = graph_->getNode(curr_node_id);
-        Node &target_n = graph_->getNode(node_id);
-        // try to match laser scans
-        auto guess_trans =
-            eigt::transBtwPoses(target_n.getPose(), source_n.getPose());
-        guess_trans(0, 2) = guess_trans(1, 2) = 0;
-        MatchResult res = matcher_->match(
-            source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
+      // if (far_enough) {
+      // calculate transformation with scanmatching
+      Node &source_n = graph_->getNode(curr_node_id);
+      Node &target_n = graph_->getNode(node_id);
+      // try to match laser scans
+      auto guess_trans =
+          eigt::transBtwPoses(target_n.getPose(), source_n.getPose());
+      guess_trans(0, 2) = guess_trans(1, 2) = 0;
+      MatchResult res = matcher_->match(
+          source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
 
-        // test if sucesfull match
-        if (res.success_ && res.score_ > MATCH_SCORE) {
-          // create edge
-          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                           << "accepted by matching");
-          all_constrains.push_back(LoopClosure<P>(node_id, curr_node_id,
-                                                  res.inform_, res.transform_));
-        } else {
-          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                           << "rejected by matching");
-        }
+      // test if sucesfull match
+      if (res.success_ && res.score_ > MATCH_SCORE) {
+        // create edge
+        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                         << "accepted by matching");
+        all_constrains.push_back(
+            LoopClosure<P>(node_id, curr_node_id, res.inform_, res.transform_));
+      } else {
+        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                         << "rejected by matching");
       }
-    } else {
-      far_enough = true;
+      //}
     }
+    // else {
+    //   far_enough = true;
+    // }
     graph_->getNode(curr_node_id).setVisited(true);
     ++nodes_visited;
     auto f_top = fringe.top();
@@ -335,10 +333,12 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
   // std::cout<<separation.transpose()<<std::endl;
   Eigen::Matrix2d icov = edge.cov_.inverse().block(0, 0, 2, 2);
   double m = (separation.transpose() * icov).dot(separation);
-  // double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
+  double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
+  if (dist < min_dist_)
+    return false;
   // std::cout<<"distance_raw:"<<delta_c.norm() - b_params.radius_ -
   // a_params.radius_<<std::endl;
-  std::cout << "distance:" << m << std::endl;
+  std::cout << "distance manh:" << m << " dist: " << dist << std::endl;
   if (m < 3)
     return true;
   else

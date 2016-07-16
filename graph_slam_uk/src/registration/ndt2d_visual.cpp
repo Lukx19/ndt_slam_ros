@@ -1,26 +1,26 @@
 
-#include <fstream>
-#include <vector>
-#include <string>
 #include <chrono>
+#include <fstream>
+#include <string>
+#include <vector>
 
-#include <sensor_msgs/PointCloud.h>
 #include <laser_geometry/laser_geometry.h>
 #include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/PointCloud.h>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <pcl/registration/ndt.h>
-#include <pcl/registration/icp.h>
 #include <pcl/registration/ia_ransac.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/ndt.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include <pcl_conversions/pcl_conversions.h>
 #include <boost/thread/thread.hpp>
 
-#include <graph_slam_uk/registration/ndt2d.h>
-#include <graph_slam_uk/registration/d2d_ndt2d.h>
 #include <graph_slam_uk/registration/correlative_estimation2d.h>
+#include <graph_slam_uk/registration/d2d_ndt2d.h>
 #include <graph_slam_uk/registration/d2d_ndt2d_robust.h>
+#include <graph_slam_uk/registration/ndt2d.h>
 
 #include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
@@ -177,8 +177,10 @@ void testMatch(size_t source_id, size_t target_id)
       static_cast<D2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
     if (mode_type == "corr") {
-      matcher->setInputSource(source_grid->getMeans());
-      matcher->setInputTarget(target_grid->getMeans());
+      // matcher->setInputSource(source_grid->getMeans());
+      // matcher->setInputTarget(target_grid->getMeans());
+      matcher->setInputSource(scans[source_id]);
+      matcher->setInputTarget(scans[target_id]);
     }
     if (mode_type == "robust") {
       static_cast<RobustMatcher *>(matcher)->setInputSource(source_grid);
@@ -198,7 +200,8 @@ void testMatch(size_t source_id, size_t target_id)
   std::cout << "CALC TRANSFORM:" << calc_trans.transpose()
             << " calc time: " << elapsed_seconds.count() << std::endl;
   std::cout << "DIFF:" << (proof_trans - calc_trans).cwiseAbs().transpose()
-            << std::endl << std::endl;
+            << std::endl
+            << std::endl;
 
   ///////////////////////////OUTPUT/////////////////////////
 

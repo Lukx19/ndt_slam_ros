@@ -2,6 +2,7 @@
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
 #include <graph_slam_uk/ndt/ndt_mapper.h>
+#include <graph_slam_uk/ndt_slam_algorithm.h>
 #include <graph_slam_uk/registration/d2d_ndt2d.h>
 #include <graph_slam_uk/registration/ndt2d.h>
 #include <laser_geometry/laser_geometry.h>
@@ -33,6 +34,7 @@ typedef pcl::D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>
     RobustMatcher;
 typedef pcl::NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>
     SimpleMatcher;
+typedef NdtSlamAlgortihm SLAM;
 
 double EPSILON = 0.001;
 double MIN_DISPLACEMENT = 0.1;
@@ -48,6 +50,7 @@ GridTypePtr map;
 eigt::transform2d_t<double> initial_trans;
 Eigen::Matrix4f cummulative_trans;
 bool flag = false;
+SLAM algo;
 
 Eigen::Vector3d old_origin;
 
@@ -95,6 +98,7 @@ void prepareLaserScans(std::string folder)
     ++seq;
   }
   laser_msg.close();
+  std::cout << "imported scans:" << scans.size() << std::endl;
 }
 
 void preparePoseData(std::string folder)
@@ -110,7 +114,7 @@ void preparePoseData(std::string folder)
   std::string line;
   Eigen::Vector3d pose;
   size_t line_count = 0;
-  while (std::getline(pose_msg, line) && line_count < MAX_LINES) {
+  while (std::getline(pose_msg, line) && line_count < MAX_LINES * 2) {
     ++line_count;
     std::vector<std::string> parts = split(line, ",");
     pose << std::atof(parts[1].c_str()), std::atof(parts[2].c_str()),
@@ -118,6 +122,7 @@ void preparePoseData(std::string folder)
     real_poses.push_back(pose);
   }
   pose_msg.close();
+  std::cout << "imported poses:" << real_poses.size() << std::endl;
 }
 void visualizePcl(const PointCloud::ConstPtr &pcl)
 {
@@ -341,6 +346,20 @@ void transformGrid()
   visualizePcl(scans[80], temp_grid->getMeans());
 }
 
+void runSLAM()
+{
+  size_t target = 0;
+  algo.update(SLAM::Transform::Identity(), SLAM::Covar::Identity(), *scans[0],
+              ros::Time(static_cast<double>(0)));
+  for (size_t i = 1; i < scans.size() - 1; ++i) {
+    eigt::transform2d_t<double> odom_trans =
+        eigt::transBtwPoses(real_poses[target], real_poses[i]);
+    algo.update(odom_trans, SLAM::Covar::Identity(), *scans[i],
+                ros::Time(static_cast<double>(i)));
+    target = i;
+  }
+}
+
 void test(size_t start)
 {
   // pcl::ScopeTime t_init("[NDT_GRID2D_MERGING]: total calculation time:");
@@ -515,7 +534,8 @@ int main(int argc, char **argv)
   // testMapMerging();
   // moveWindow();
   // transformGrid();
-  size_t start = 200;
-  test(start);
+  // size_t start = 200;
+  // test(start);
+  runSLAM();
   return 0;
 }

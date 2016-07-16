@@ -8,36 +8,41 @@
  *      Author: Christian Kerl <christian.kerl@in.tum.de>
  */
 
+#ifndef VERTEX_SWITCH_LINEAR_H_
+#define VERTEX_SWITCH_LINEAR_H_
 
-#pragma once
-
-#include "g2o/core/base_vertex.h"
+#include <g2o/core/base_vertex.h>
 #include <math.h>
 
+class VertexSwitchLinear : public g2o::BaseVertex<1, double>
+{
+public:
+  VertexSwitchLinear()
+  {
+    setToOrigin();
+  };
 
+  virtual void setToOriginImpl();
 
-    class VertexSwitchLinear : public g2o::BaseVertex<1, double>
-    {
+  virtual void oplusImpl(const double* update);
 
-    public:
-      VertexSwitchLinear() { setToOrigin(); };
+  virtual bool read(std::istream& is);
+  virtual bool write(std::ostream& os) const;
+  virtual void setEstimate(double& et);
 
-      virtual void setToOriginImpl();
+  double x() const
+  {
+    return _x;
+  };
 
-      virtual void oplusImpl(const double* update);
+  //! The gradient at the current estimate is always 1;
+  double gradient() const
+  {
+    return 1;
+  };
 
-      virtual bool read(std::istream& is);
-      virtual bool write(std::ostream& os) const;
-      virtual void setEstimate(double &et);
+private:
+  double _x;
+};
 
-
-      double x() const { return _x; };
-
-
-      //! The gradient at the current estimate is always 1;
-      double gradient() const { return 1; } ;
-
-    private:
-      double _x;
-
-    };
+#endif

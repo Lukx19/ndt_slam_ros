@@ -606,7 +606,7 @@ NDTGridMsg NDTGrid2D<CellType, PointType>::serialize() const
   msg.origin_.head(2) = trans * corner_origin;
   msg.size_ << grid_.width() * cell_size_, grid_.height() * cell_size_, 0;
   msg.cell_sizes_ << cell_size_, cell_size_, 0;
-  for (auto &&cell : grid_.getValidCellsPtr) {
+  for (auto &&cell : grid_.getValidCellsPtr()) {
     msg.cells_.push_back(cell->serialize());
   }
   return msg;

@@ -8,9 +8,12 @@ namespace slamuk
 template <typename CellType, typename PointType>
 class NDTGrid2DHolder
 {
+public:
   typedef NDTGrid2D<CellType, PointType> Grid;
   typedef typename Grid::Ptr GridPtr;
   typedef typename Grid::ConstPtr GridConstPtr;
+  typedef CellType Cell;
+  typedef PointType Point;
 
 public:
   explicit NDTGrid2DHolder(const GridPtr &data) : data_(data)

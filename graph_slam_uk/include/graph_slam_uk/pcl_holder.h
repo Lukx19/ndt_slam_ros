@@ -11,6 +11,7 @@ class NDTGrid2DHolder
 {
   typedef pcl::PointCloud<PointType> Pcl;
   typedef typename Pcl::Ptr PclPtr;
+  typedef PointType Point;
 
 public:
   explicit NDTGrid2DHolder(const PclPtr &data) : data_(data)

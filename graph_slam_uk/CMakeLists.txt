@@ -27,6 +27,7 @@ find_package(Eigen3 REQUIRED)
 find_package(G2O REQUIRED)
 find_package(OpenMP REQUIRED)
 find_package(OpenCV REQUIRED )
+find_package(CSparse REQUIRED )
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -132,7 +133,7 @@ catkin_package(
 # c++11 support required
 #set(CMAKE_CXX_COMPILER "clang++")
 #set(CMAKE_C_COMPILER "clang")
-set(cxx_compiler_flags "-O3 -msse3 -funroll-loops")
+set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)
@@ -167,6 +168,12 @@ add_definitions(
     ${PCL_DEFINITIONS}
 )
 link_libraries(${G2O_LIBRARIES})
+set(MAX_MIXTURES_SRC_FILES
+  "src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
+  src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
+  ")
 
 add_executable(graph_slam2d_g2o_parser src/slam_optimizer/parser2d.cpp)
 target_link_libraries(graph_slam2d_g2o_parser
@@ -178,6 +185,7 @@ add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
+  # ${MAX_MIXTURES_SRC_FILES}
   )
 add_dependencies(graph_slam2d ${PROJECT_NAME}_generate_messages_cpp)
   #${${PROJECT_NAME}_EXPORTED_TARGETS})
@@ -188,18 +196,32 @@ target_link_libraries(graph_slam2d
    ${G2O_LIBRARIES}
    ${CSPARSE_LIBRARY}
    ${OpenCV_LIBS}
+   ${EIGEN3_LIBRARIES}
 )
 
 add_executable(ndt2d_visual src/registration/ndt2d_visual.cpp)
 target_link_libraries (ndt2d_visual
   ${PCL_LIBRARIES}
   ${catkin_LIBRARIES}
+  ${EIGEN3_LIBRARIES}
   )
-add_executable(ndt_grid2d_merging src/ndt/ndt_grid2d_merging.cpp)
+add_executable(ndt_grid2d_merging
+  src/ndt/ndt_grid2d_merging.cpp
+  src/slam_optimizer/rrr_clusterizer.cpp
+  src/slam_optimizer/rrr_g20_wrapper.cpp
+  src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
+  src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
+  # ${MAX_MIXTURES_SRC_FILES}
+  )
 target_link_libraries (ndt_grid2d_merging
   ${PCL_LIBRARIES}
   ${catkin_LIBRARIES}
   ${OpenCV_LIBS}
+  ${EIGEN3_LIBRARIES}
+  ${G2O_LIBRARIES}
+  ${CSPARSE_LIBRARY}
   )
 
 #############
