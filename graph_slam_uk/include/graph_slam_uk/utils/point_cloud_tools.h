@@ -70,7 +70,7 @@ void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl)
       pcl, 255, 0, 0);
   viewer->addPointCloud<PointType>(pcl, target_color, "vis cloud");
   viewer->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "vis cloud");
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "vis cloud");
   viewer->addCoordinateSystem(1.0, "global");
   // Wait until visualizer window is closed.
   while (!viewer->wasStopped()) {
@@ -93,13 +93,13 @@ void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
       pcl1, 255, 0, 0);
   viewer->addPointCloud<PointType>(pcl1, first_color, "first cloud");
   viewer->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "first cloud");
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "first cloud");
   // visualize second cloud
   pcl::visualization::PointCloudColorHandlerCustom<PointType> second_color(
       pcl2, 0, 255, 0);
   viewer->addPointCloud<PointType>(pcl2, second_color, "second cloud");
   viewer->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "second cloud");
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "second cloud");
   viewer->addCoordinateSystem(1.0, "global");
   // Wait until visualizer window is closed.
   while (!viewer->wasStopped()) {

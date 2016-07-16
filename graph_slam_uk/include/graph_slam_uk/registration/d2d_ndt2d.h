@@ -323,8 +323,8 @@ protected:
 template <typename PointSource, typename PointTarget, typename CellType>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget,
                                   CellType>::D2DNormalDistributionsTransform2D()
-  : step_size_(0.25)      // 0.01
-  , outlier_ratio_(0.55)  // 0.99
+  : step_size_(0.22)
+  , outlier_ratio_(0.55)
   , trans_probability_()
   , layer_count_(4)
   , target_grid_updated_(false)
@@ -366,7 +366,7 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
       return;
     }
   }
-  ROS_INFO_STREAM(
+  ROS_DEBUG_STREAM(
       "[ndt_reg]: final trans:" << ndt_reg::matToVec(trans).transpose());
   transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;

@@ -282,6 +282,13 @@ void runningWindow(size_t scan_id)
   matcher.align(*transformed_pcl, cummulative_trans);
 
   cummulative_trans = matcher.getFinalTransformation();
+
+  // matcher_s.setInputTarget(running_win);
+  // matcher_s.setInputSource(temp_grid->getMeans());
+  // matcher_s.align(*transformed_pcl, cummulative_trans);
+
+  // cummulative_trans = matcher_s.getFinalTransformation();
+
   // if (flag == true) {
   //   flag = false;
   //   visualizePcl(running_win->getMeans(), transformed_pcl);
@@ -362,23 +369,25 @@ void runSLAM()
 
 void test(size_t start)
 {
-  // pcl::ScopeTime t_init("[NDT_GRID2D_MERGING]: total calculation time:");
-  // matches.clear();
-  size_t target = start;
-  runningWindow(target);
-  // testMergeD2D(start);
-  std::cout << "start test" << std::endl;
-  for (size_t i = start; i < scans.size(); ++i) {
-    eigt::transform2d_t<double> real_trans =
-        eigt::transBtwPoses(real_poses[target], real_poses[i]);
-    // if (eigt::getAngle(real_trans) > MIN_ROTATION ||
-    //     eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
-    // std::cout << "displace: " << eigt::getDisplacement(real_trans)
-    //           << "rot: " << eigt::getAngle(real_trans) << std::endl;
-    // testMergeD2D(i);
-    target = i;
-    runningWindow(i);
-    // }
+  {
+    pcl::ScopeTime t_init("[NDT_GRID2D_MERGING]: total calculation time:");
+    // matches.clear();
+    size_t target = start;
+    runningWindow(target);
+    // testMergeD2D(start);
+    std::cout << "start test" << std::endl;
+    for (size_t i = start; i < scans.size(); ++i) {
+      eigt::transform2d_t<double> real_trans =
+          eigt::transBtwPoses(real_poses[target], real_poses[i]);
+      // if (eigt::getAngle(real_trans) > MIN_ROTATION ||
+      //     eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
+      // std::cout << "displace: " << eigt::getDisplacement(real_trans)
+      //           << "rot: " << eigt::getAngle(real_trans) << std::endl;
+      // testMergeD2D(i);
+      target = i;
+      runningWindow(i);
+      // }
+    }
   }
   std::cout << "Running win: " << seq << " \n"
             << *running_win << std::endl
@@ -535,7 +544,8 @@ int main(int argc, char **argv)
   // moveWindow();
   // transformGrid();
   // size_t start = 200;
-  // test(start);
+  // test(0);
   runSLAM();
+
   return 0;
 }

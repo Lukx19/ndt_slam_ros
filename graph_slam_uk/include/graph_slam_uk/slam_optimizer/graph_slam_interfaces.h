@@ -1,12 +1,12 @@
 #ifndef GRAPH_SLAM_UK_GRAPH_OPTIMALIZER2D_BASE
 #define GRAPH_SLAM_UK_GRAPH_OPTIMALIZER2D_BASE
-#include <memory>
-#include <Eigen/Dense>
-#include <Eigen/Geometry>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <boost/shared_ptr.hpp>
 #include <visualization_msgs/MarkerArray.h>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+#include <boost/shared_ptr.hpp>
+#include <memory>
 
 namespace slamuk
 {
@@ -24,6 +24,7 @@ class IGraphOptimalizer2d
 public:
   virtual ~IGraphOptimalizer2d()
   {
+    std::cout << "destructing IGraphOpt" << std::endl;
   }
   // return true if optimalization changed poses in graph
   virtual bool optimalize() = 0;
@@ -56,8 +57,7 @@ public:
   virtual void getGraphSerialized(std::ostream &stream) const = 0;
 };
 
-struct MatchResult
-{
+struct MatchResult {
 public:
   typedef Eigen::Transform<double, 2, Eigen::TransformTraits::Affine>
       transform_t;

@@ -54,6 +54,7 @@ public:
   bool cellExists(const Point& pt) const;
   CellType& operator[](const Point& pt);
   CellType* getCellPtr(const Point& pt) const;
+  std::pair<double, double> getCentroid(const Point& pt) const;
   // returns all initialized cells by values. Should be used for creation of new
   // grids
   CellVector getValidCells() const;
@@ -178,6 +179,7 @@ private:
 
   size_t calcIndex(const Point& pt) const;
   size_t calcIndex(const std::pair<size_t, size_t>& coords) const;
+  // <colls, rows> of table
   std::pair<size_t, size_t> calcCoordinates(const Point& pt) const;
 
   void enlargeToFit(const Point& pt);
@@ -374,6 +376,18 @@ template <typename CellType>
 CellType* VoxelGrid2D<CellType>::getCellPtr(const Point& pt) const
 {
   return cells_[calcIndex(pt)].get();
+}
+
+template <typename CellType>
+std::pair<double, double>
+VoxelGrid2D<CellType>::getCentroid(const Point& pt) const
+{
+  std::pair<size_t, size_t> coords = calcCoordinates(pt);
+  double x =
+      (static_cast<long>(coords.first) - static_cast<long>(left)) * cell_size_;
+  double y =
+      -(static_cast<long>(coords.second) - static_cast<long>(up)) * cell_size_;
+  return std::pair<double, double>(x, y);
 }
 
 // returns all initialized cells by values. Should be used for creation of new

@@ -135,7 +135,7 @@ private:
 
 public:
   LoopDetector(Graph<P, T> *graph, IScanmatcher2d<T> *matcher)
-    : graph_(graph), matcher_(matcher), min_dist_(4)
+    : graph_(graph), matcher_(matcher), min_dist_(4), max_search_depth_(50)
   {
   }
   std::vector<LoopClosure<P>> genLoopClosures(Id node_id);
@@ -148,6 +148,7 @@ protected:
 
   const float MATCH_SCORE = 0;
   double min_dist_;
+  size_t max_search_depth_;
   std::vector<internal::ScanInfo> laser_range_;
 
   std::vector<internal::EdgeCov>
@@ -181,38 +182,39 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
   for (EdgeCov &e : first_edges) {
     fringe.push(e);
   }
+  size_t depth = 0;
   // repeat while some nodes are unvisited
-  while (graph_->nodeCount() != nodes_visited) {
+  while (graph_->nodeCount() != nodes_visited && depth < max_search_depth_) {
+    ++depth;
     size_t curr_node_id = fringe.top().node_id_;
     // enough overlap
     if (isCloseMatch(fringe.top())) {
-      // if (far_enough) {
-      // calculate transformation with scanmatching
-      Node &source_n = graph_->getNode(curr_node_id);
-      Node &target_n = graph_->getNode(node_id);
-      // try to match laser scans
-      auto guess_trans =
-          eigt::transBtwPoses(target_n.getPose(), source_n.getPose());
-      guess_trans(0, 2) = guess_trans(1, 2) = 0;
-      MatchResult res = matcher_->match(
-          source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
+      if (far_enough) {
+        // calculate transformation with scanmatching
+        Node &source_n = graph_->getNode(curr_node_id);
+        Node &target_n = graph_->getNode(node_id);
+        // try to match laser scans
+        auto guess_trans =
+            eigt::transBtwPoses(target_n.getPose(), source_n.getPose());
+        guess_trans(0, 2) = guess_trans(1, 2) = 0;
+        MatchResult res = matcher_->match(
+            source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
 
-      // test if sucesfull match
-      if (res.success_ && res.score_ > MATCH_SCORE) {
-        // create edge
-        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                         << "accepted by matching");
-        all_constrains.push_back(
-            LoopClosure<P>(node_id, curr_node_id, res.inform_, res.transform_));
-      } else {
-        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                         << "rejected by matching");
+        // test if sucesfull match
+        if (res.success_ && res.score_ > MATCH_SCORE) {
+          // create edge
+          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                           << "accepted by matching");
+          all_constrains.push_back(LoopClosure<P>(node_id, curr_node_id,
+                                                  res.inform_, res.transform_));
+        } else {
+          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                           << "rejected by matching");
+        }
       }
-      //}
+    } else {
+      far_enough = true;
     }
-    // else {
-    //   far_enough = true;
-    // }
     graph_->getNode(curr_node_id).setVisited(true);
     ++nodes_visited;
     auto f_top = fringe.top();
@@ -320,12 +322,12 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
 {
   auto a_params = calcScanParams(edge.start_id_);
   auto b_params = calcScanParams(edge.node_id_);
+  // std::cout << "radius a: " << a_params.radius_ << " b: " << b_params.radius_
+  //           << std::endl;
+  // std::cout << "centroid a: " << a_params.centroid_.transpose()
+  //           << " b: " << b_params.centroid_.transpose() << std::endl;
+
   Eigen::Vector2d delta_c = edge.t_ * b_params.centroid_ - a_params.centroid_;
-  // std::cout<<"distance:"<<delta_c.norm()<<std::endl;
-  // double delta_angle = std::atan2(edge.t_.rotation()(1, 0),
-  // edge.t_.rotation()(0, 0));
-  // Eigen::Vector3d delta_c(edge.t_.matrix()(0, 2),edge.t_.matrix()(1,
-  // 2),delta_angle);
 
   Eigen::Vector2d separation =
       std::max(0.0, delta_c.norm() - b_params.radius_ - a_params.radius_) *
@@ -334,11 +336,10 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
   Eigen::Matrix2d icov = edge.cov_.inverse().block(0, 0, 2, 2);
   double m = (separation.transpose() * icov).dot(separation);
   double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
-  if (dist < min_dist_)
-    return false;
-  // std::cout<<"distance_raw:"<<delta_c.norm() - b_params.radius_ -
-  // a_params.radius_<<std::endl;
-  std::cout << "distance manh:" << m << " dist: " << dist << std::endl;
+  // if (dist < min_dist_)
+  //   return false;
+  std::cout << "distance manh:" << m << " dist: " << dist
+            << " det:" << edge.cov_.determinant() << std::endl;
   if (m < 3)
     return true;
   else

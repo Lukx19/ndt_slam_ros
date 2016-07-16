@@ -36,6 +36,16 @@ public:
   {
     return points_;
   }
+  const Vector &getCentroid() const
+  {
+    return centroid_;
+  }
+
+  void setCentroid(const Vector &centroid)
+  {
+    centroid_ = centroid;
+  }
+
   const Vector &getMean() const
   {
     return mean_;
@@ -99,6 +109,7 @@ protected:
   float occup_;
   size_t points_;
   bool gaussian_;
+  Vector centroid_;
   std::vector<Vector> points_vec_;
 
   void updateOccupancy(float occup);
@@ -115,6 +126,7 @@ NDTCell<Policy>::NDTCell()
   , occup_(0)
   , points_(0)
   , gaussian_(false)
+  , centroid_(Vector::Identity())
 {
 }
 

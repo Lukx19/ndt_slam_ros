@@ -15,6 +15,8 @@ class NdtScanmatcher : public IScanmatcher2d<FrameType>
 public:
   NdtScanmatcher()
   {
+    matcher.setStepSize(0.1);
+    matcher.setOulierRatio(0.55);
   }
   virtual ~NdtScanmatcher()
   {
@@ -48,11 +50,12 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
       new pcl::PointCloud<pcl::PointXYZ>());
 
   matcher.align(*pcl_out, init_guess);
-  pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
-                                               pcl_out);
+  // pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
+  //                                              pcl_out);
 
-  ROS_INFO_STREAM("PCL_NDT2D:Normal Distributions Transform has converged:"
-                  << matcher.hasConverged());
+  ROS_INFO_STREAM(
+      "[NDT_SCANMATCHER]:Normal Distributions Transform has converged:"
+      << matcher.hasConverged());
   MatchResult res;
   res.success_ = matcher.hasConverged();
   res.score_ = 1;

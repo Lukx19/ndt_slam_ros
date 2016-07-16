@@ -142,11 +142,14 @@ public:
 
   double getRadius() const
   {
-    return std::max(grid_.width() * cell_size_, grid_.height() * cell_size_);
+    return std::max(grid_.width() * cell_size_, grid_.height() * cell_size_) /
+           2;
   }
   Eigen::Vector2d getCentroid() const
   {
-    return origin_.head(2);
+    double x = grid_.right() * cell_size_ - grid_.left() * cell_size_;
+    double y = -(grid_.up() * cell_size_ - grid_.down() * cell_size_);
+    return Eigen::Vector2d(x, y);
   }
   NDTGridMsg serialize() const;
 
@@ -312,7 +315,8 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
         eigt::transBtwFrames(grid.origin_, this->origin_);
     // we need to transform each cell to its new position
     transformNDTCells(occupied_cells, trans);
-    origin2 = eigt::transformPose(grid.origin_, trans);
+    origin2 = eigt::transformPose(
+        grid.origin_, eigt::transBtwPoses(grid.origin_, this->origin_));
   }
   // conversion from x y theta pose to x,y,z coordinates for 3dCell interface
   typename CellType::Vector start(origin2(0), origin2(1), 0);

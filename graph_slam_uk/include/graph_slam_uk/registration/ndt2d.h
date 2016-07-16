@@ -244,7 +244,10 @@ protected:
 template <typename PointSource, typename PointTarget, typename CellType>
 NormalDistributionsTransform2DEx<PointSource, PointTarget,
                                  CellType>::NormalDistributionsTransform2DEx()
-  : step_size_(0.1), outlier_ratio_(0.55), trans_probability_(), layer_count_(4)
+  : step_size_(0.01)
+  , outlier_ratio_(0.99)
+  , trans_probability_()
+  , layer_count_(4)
 {
   nr_iterations_ = 0;
   max_iterations_ = 35;
@@ -271,15 +274,14 @@ void NormalDistributionsTransform2DEx<PointSource, PointTarget, CellType>::
   }
   transformation_ = guess;
   for (size_t i = 0; i < layer_count_; ++i) {
-    std::cout << std::endl << "next iteration" << std::endl;
     if (!computeSingleGrid(out, target_grid_->createCoarserGrid(cell_sizes_[i]),
                            transformation_, params_[i])) {
       converged_ = false;
       return;
     }
   }
-  ROS_INFO_STREAM("[NDT2D]: final trans:"
-                  << ndt_reg::matToVec(transformation_).transpose());
+  ROS_DEBUG_STREAM("[NDT2D]: final trans:"
+                   << ndt_reg::matToVec(transformation_).transpose());
   transformPointCloud(*input_, output, transformation_);
   final_transformation_ = transformation_;
   converged_ = true;

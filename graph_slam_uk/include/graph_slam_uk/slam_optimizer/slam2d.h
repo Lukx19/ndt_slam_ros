@@ -50,7 +50,7 @@ class Slam2D : public IGraphOptimalizer2d<T>
   typedef RRRLoopProofer<RRRG2OWrapper> LoopProofer;
 
 public:
-  explicit Slam2D(IScanmatcher2d<T> &matcher)
+  explicit Slam2D(std::unique_ptr<IScanmatcher2d<T>> &&matcher)
     : epsilon_(0.001)
     , iterations_(5)
     , last_node_id_(0)
@@ -58,23 +58,25 @@ public:
     , first_node_id_(0)
     , first_node_added_(false)
     , graph_()
-    , matcher_(&matcher)
-    , loop_detector_(&graph_, matcher_)
+    , matcher_(std::move(matcher))
     , g2o_opt_(new g2o::SparseOptimizer())
     , linear_solver_(new SlamLinearSolver())
     , block_solver_(new SlamBlockSolver(linear_solver_.get()))
     , solver_gauss_(
           new g2o::OptimizationAlgorithmGaussNewton(block_solver_.get()))
+    , loop_detector_(&graph_, matcher_.get())
     , g2o_rrr_wrapper_(g2o_opt_.get())
     , loop_proofer_(&g2o_rrr_wrapper_)
+    , nodes_to_edge_id_()
   {
     linear_solver_->setBlockOrdering(false);
     g2o_opt_->setAlgorithm(solver_gauss_.get());
   }
 
-  // virtual ~Slam2D()
-  //  {
-  //  }
+  ~Slam2D()
+  {
+    std::cout << "destructing Slam2d" << std::endl;
+  }
 
   // return true if optimalization changed poses in graph
   virtual bool optimalize();
@@ -112,7 +114,7 @@ protected:
   size_t first_node_id_;
   bool first_node_added_;
   GraphType graph_;
-  IScanmatcher2d<T> *matcher_;
+  std::unique_ptr<IScanmatcher2d<T>> matcher_;
 
   std::unique_ptr<g2o::SparseOptimizer> g2o_opt_;  // needed for solving and
                                                    // graph manipulation
@@ -227,16 +229,17 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   std::vector<LoopClosure<Slam2d_Policy>> loops =
       loop_detector_.genLoopClosures(node_id);
   // add to graph
-  LoopProofer::VerticesPairSet all_loops;
-  LoopProofer::VerticesPairSet good_loops;
-  LoopProofer::VerticesPairSet bad_loops;
+  // LoopProofer::VerticesPairSet all_loops;
+  // LoopProofer::VerticesPairSet good_loops;
+  // LoopProofer::VerticesPairSet bad_loops;
   for (auto &&constrain : loops) {
     LoopProofer::VerticesPair edgeType;
     edgeType.first = constrain.vertices_.first;
     edgeType.second = constrain.vertices_.second;
-    std::cout << "potential loop: " << edgeType.first << "~>" << edgeType.second
-              << std::endl;
-    all_loops.insert(std::move(edgeType));
+    // std::cout << "potential loop: " << edgeType.first << "~>" <<
+    // edgeType.second
+    //           << std::endl;
+    // all_loops.insert(std::move(edgeType));
     size_t id = addConstrain(edgeType.first, edgeType.second,
                              Policy::transMatToVec(constrain.t_),
                              constrain.information_);
@@ -269,6 +272,8 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   //                      "g2o graph");
   // }
   // return true;
+  if (loops.size() > 0)
+    return true;
   return false;
 }
 

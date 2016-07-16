@@ -1,9 +1,9 @@
 #ifndef GRAPH_SLAM_UK_D2D_NDT2D_ROBUST
 #define GRAPH_SLAM_UK_D2D_NDT2D_ROBUST
 
+#include <graph_slam_uk/registration/correlative_estimation2d.h>
 #include <graph_slam_uk/registration/correlative_estimation_tools.h>
 #include <graph_slam_uk/registration/d2d_ndt2d.h>
-#include <graph_slam_uk/registration/correlative_estimation2d.h>
 #include <pcl/registration/registration.h>
 
 #include <graph_slam_uk/ndt/cell_policy2d.h>
@@ -39,9 +39,11 @@ protected:
 
 public:
   typedef boost::shared_ptr<
-      D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>> Ptr;
-  typedef boost::shared_ptr<const D2DNormalDistributionsTransform2DRobust<
-      PointSource, PointTarget>> ConstPtr;
+      D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>>
+      Ptr;
+  typedef boost::shared_ptr<
+      const D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget>>
+      ConstPtr;
   typedef Eigen::Vector3d VectorTrans;
   /** \brief Constructor.
     * Sets \ref outlier_ratio_ to 0.35, \ref step_size_ to 0.05 and \ref
@@ -94,12 +96,12 @@ public:
       throw std::invalid_argument("Rejection limit in robust scan-matching out "
                                   "of bounds [0,1]");
   }
-  inline void setNumLayers(size_t num)
+  void setNumLayers(size_t num)
   {
     d2d_.setNumLayers(num);
   }
 
-  inline size_t getNumLayers()
+  size_t getNumLayers()
   {
     return d2d_.getNumLayers();
   }
@@ -108,7 +110,7 @@ public:
    * will have smaller longer cell size (coarser)
     * \param[in] base_size side length of voxels
     */
-  inline void setCellSize(float base_size)
+  void setCellSize(float base_size)
   {
     d2d_.setCellSize(base_size);
     cell_size_ = base_size;
@@ -117,7 +119,7 @@ public:
   /** \brief Get voxel grid resolution.
     * \return side length of the moast coarse
     */
-  inline float getCellSize() const
+  float getCellSize() const
   {
     return cell_size_;
   }
@@ -125,7 +127,7 @@ public:
   /** \brief Get the newton line search maximum step length.
     * \return maximum step length
     */
-  inline double getStepSize() const
+  double getStepSize() const
   {
     return d2d_.getStepSize();
   }
@@ -136,6 +138,16 @@ public:
   void setStepSize(double step_size)
   {
     d2d_.setStepSize(step_size);
+  }
+
+  double getOutlierRatio() const
+  {
+    return d2d_.getOutlierRatio();
+  }
+
+  void setOulierRatio(double step_size)
+  {
+    d2d_.setOulierRatio(step_size);
   }
 
   float getAlignmentQuality() const
@@ -215,9 +227,8 @@ protected:
 
 //////////////////////////////IMPLEMENTATION
 template <typename PointSource, typename PointTarget, typename CellType>
-D2DNormalDistributionsTransform2DRobust<
-    PointSource, PointTarget,
-    CellType>::D2DNormalDistributionsTransform2DRobust()
+D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget, CellType>::
+    D2DNormalDistributionsTransform2DRobust()
   : cell_size_(0.25), alignment_quality_(0), rejection_limit_(0.4)
 {
   d2d_.setCellSize(0.25);
@@ -248,7 +259,7 @@ void D2DNormalDistributionsTransform2DRobust<
     // second d2d -> precise alignment
     d2d_.align(output, corr_est_.getFinalTransformation());
     if (!d2d_.hasConverged()) {  //||
-      //!proofTransform(d2d_.getFinalTransformation()))
+      //! proofTransform(d2d_.getFinalTransformation()))
       //{
       converged_ = false;
       final_transformation_ = corr_est_.getFinalTransformation();

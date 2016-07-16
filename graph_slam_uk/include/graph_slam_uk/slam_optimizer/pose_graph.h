@@ -1,15 +1,14 @@
 #ifndef GRAPH_SLAM_UK_POSE_GRAPH
 #define GRAPH_SLAM_UK_POSE_GRAPH
 
-#include <map>
-#include <vector>
-#include <memory>
-#include <iostream>
 #include <Eigen/Eigen>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <vector>
 
 namespace slamuk
 {
-
 template <typename P, typename T>
 class Edge;
 template <typename P, typename T>
@@ -357,8 +356,8 @@ public:
   Node() : id_(0), visited_(false), object_(nullptr)
   {
   }
-  Node(const typename P::Pose& pose, T& obj)
-    : id_(0), visited_(false), pose_(pose), object_(&obj)
+  Node(const typename P::Pose& pose, const T& obj)
+    : id_(0), visited_(false), pose_(pose), object_(obj)
   {
   }
   // Node(const Node<P, T>& other)
@@ -412,7 +411,7 @@ private:
   Id id_;
   bool visited_;
   typename P::Pose pose_;
-  T* object_;
+  T object_;
   edge_list_t edges_out_;
   edge_list_t edges_in_;
   // const float PI = 3.1415927f;
@@ -518,13 +517,13 @@ bool Node<P, T>::isVisited() const
 template <typename P, typename T>
 T& Node<P, T>::getDataObj()
 {
-  return *object_;
+  return object_;
 }
 
 template <typename P, typename T>
 const T& Node<P, T>::getDataObj() const
 {
-  return *object_;
+  return object_;
 }
 
 template <typename P, typename T>
@@ -702,5 +701,5 @@ bool Edge<P, T>::isUsed() const
   return is_used_;
 }
 
-} // end of namespace slamuk
+}  // end of namespace slamuk
 #endif
