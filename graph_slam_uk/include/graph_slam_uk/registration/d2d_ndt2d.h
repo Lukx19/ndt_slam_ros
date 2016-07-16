@@ -1,9 +1,10 @@
-#ifndef GRAPH_SLAM_UK_D2D_NDT2D
-#define GRAPH_SLAM_UK_D2D_NDT2D
+#ifndef GRAPH_SLAM_UK_NDT_D2D
+#define GRAPH_SLAM_UK_NDT_D2D
 
 #include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
+#include <graph_slam_uk/registration/ndt_reg_tools.h>
 #include <graph_slam_uk/utils/covariance_inverse.h>
 #include <pcl/common/time.h>
 #include <pcl/filters/voxel_grid_covariance.h>
@@ -13,104 +14,6 @@
 
 namespace pcl
 {
-namespace d2d_ndt2d
-{
-/** \brief Class to store vector value and first and second derivatives
-  * (grad vector and hessian matrix), so they can be returned easily from
-  * functions
-  */
-template <unsigned N = 3, typename T = double>
-struct ScoreAndDerivatives {
-  ScoreAndDerivatives() : hessian_(), gradient_(), value_()
-  {
-    hessian_.setZero();
-    gradient_.setZero();
-    value_ = 0;
-  }
-
-  Eigen::Matrix<T, N, N> hessian_;
-  Eigen::Matrix<T, N, 1> gradient_;
-  T value_;
-
-  static ScoreAndDerivatives<N, T> Zero()
-  {
-    ScoreAndDerivatives<N, T> r;
-    r.hessian_ = Eigen::Matrix<T, N, N>::Zero();
-    r.gradient_ = Eigen::Matrix<T, N, 1>::Zero();
-    r.value_ = 0;
-    return r;
-  }
-
-  ScoreAndDerivatives<N, T> &operator+=(ScoreAndDerivatives<N, T> const &r)
-  {
-    hessian_ += r.hessian_;
-    gradient_ += r.gradient_;
-    value_ += r.value_;
-    return *this;
-  }
-};
-template <unsigned N, typename T>
-ScoreAndDerivatives<N, T> operator+(const ScoreAndDerivatives<N, T> &lhs,
-                                    const ScoreAndDerivatives<N, T> &rhs)
-{
-  ScoreAndDerivatives<N, T> ret;
-  ret += lhs;
-  ret += rhs;
-  return ret;
-}
-
-struct FittingParams {
-  double gauss_d1_;
-  double gauss_d2_;
-  double gauss_d2__half_;
-
-  FittingParams(double outlier_ratio, double resolution)
-    : gauss_d1_(0), gauss_d2_(0), gauss_d2__half_(0)
-  {
-    calcParams(outlier_ratio, resolution);
-  }
-
-private:
-  void calcParams(double outlier_ratio, double resolution)
-  {
-    double gauss_c1, gauss_c2, gauss_d3;
-    // Initializes the guassian fitting parameters (eq. 6.8) [Magnusson 2009]
-    gauss_c1 = 10.0 * (1 - outlier_ratio);
-    gauss_c2 = outlier_ratio / pow(resolution, 2);
-    gauss_d3 = -log(gauss_c2);
-    gauss_d1_ = -log(gauss_c1 + gauss_c2) - gauss_d3;
-    gauss_d2_ = -2 * log((-log(gauss_c1 * exp(-0.5) + gauss_c2) - gauss_d3) /
-                         gauss_d1_);
-    gauss_d2__half_ = gauss_d2_ / 2;
-  }
-};
-
-struct JacobianHessianDerivatives {
-  Eigen::Matrix<double, 3, 3> Jest;
-  Eigen::Matrix<double, 9, 3> Hest;
-  Eigen::Matrix<double, 3, 9> Zest;
-  Eigen::Matrix<double, 9, 9> ZHest;
-
-  JacobianHessianDerivatives()
-  {
-    setZero();
-  }
-  void setZero()
-  {
-    Jest.setZero();
-    Hest.setZero();
-    Zest.setZero();
-    ZHest.setZero();
-  }
-  static JacobianHessianDerivatives Zero()
-  {
-    JacobianHessianDerivatives res;
-    res.setZero();
-    return res;
-  }
-};
-}  // end of namespace d2d_ndt2d
-
 template <typename PointSource, typename PointTarget,
           typename CellType = slamuk::NDTCell<slamuk::CellPolicy2d>>
 class D2DNormalDistributionsTransform2D
@@ -321,7 +224,7 @@ protected:
   /** \brief The normalization constants used fit the point distribution to a
    * normal d  // std::vector<GridTarget> target_cells_;istribution, Equation
    * 6.8 [Magnusson 2009]. */
-  std::vector<d2d_ndt2d::FittingParams> params_;
+  std::vector<ndt_reg::FittingParams> params_;
 
   /** \brief The probability score of the transform applied to the input cloud,
    * Equation 6.9 and 6.10 [Magnusson 2009]. */
@@ -346,7 +249,7 @@ protected:
     params_.clear();
     for (size_t i = 0; i < cell_sizes_.size(); ++i) {
       params_.push_back(
-          d2d_ndt2d::FittingParams(outlier_ratio_, 1 / cell_sizes_[i]));
+          ndt_reg::FittingParams(outlier_ratio_, 1 / cell_sizes_[i]));
     }
   }
   /** \brief Initialize cell_sizes. First grid will have cells of base_size
@@ -390,88 +293,38 @@ protected:
   virtual bool computeSingleGrid(const GridSource &source_grid,
                                  const Eigen::Matrix4f &guess,
                                  const GridTarget &target_grid,
-                                 const d2d_ndt2d::FittingParams &param,
+                                 const ndt_reg::FittingParams &param,
                                  Eigen::Matrix4f &trans);
 
-  virtual d2d_ndt2d::ScoreAndDerivatives<3, double>
-  calcScore(const d2d_ndt2d::FittingParams &param, const GridSource &sourceNDT,
+  virtual ndt_reg::ScoreAndDerivatives<3, double>
+  calcScore(const ndt_reg::FittingParams &param, const GridSource &sourceNDT,
             const Eigen::Vector3d &trans, const GridTarget &targetNDT,
             bool calc_hessian);
 
   virtual void computeDerivatives(const Eigen::Vector3d &x,
                                   const Eigen::Matrix3d &cov,
-                                  d2d_ndt2d::JacobianHessianDerivatives &data,
+                                  ndt_reg::JacobianHessianDerivatives &data,
                                   bool calc_hessian);
 
-  virtual d2d_ndt2d::ScoreAndDerivatives<3, double>
-  calcSourceCellScore(const Eigen::Vector3d &mean_source,
-                      const Eigen::Matrix3d &cov_source, const CellType *cell_t,
-                      const d2d_ndt2d::JacobianHessianDerivatives &deriv,
-                      const d2d_ndt2d::FittingParams &param, bool calc_hessian);
+  virtual ndt_reg::ScoreAndDerivatives<3, double> calcSourceCellScore(
+      const Eigen::Vector3d &mean_source, const Eigen::Matrix3d &cov_source,
+      const CellType *cell_t, const ndt_reg::JacobianHessianDerivatives &deriv,
+      const ndt_reg::FittingParams &param, bool calc_hessian);
 
   // linear search methods//////////////////////////////////////////
   virtual double computeStepLengthMT(
       const Eigen::Matrix<double, 3, 1> &x,
       Eigen::Matrix<double, 3, 1> &step_dir, double step_init, double step_max,
       double step_min, const GridSource &source_grid,
-      const d2d_ndt2d::ScoreAndDerivatives<3, double> &score,
-      const GridTarget &target_grid, const d2d_ndt2d::FittingParams &param);
-
-  bool updateIntervalMT(double &a_l, double &f_l, double &g_l, double &a_u,
-                        double &f_u, double &g_u, double a_t, double f_t,
-                        double g_t) const;
-
-  double trialValueSelectionMT(double a_l, double f_l, double g_l, double a_u,
-                               double f_u, double g_u, double a_t, double f_t,
-                               double g_t) const;
-  /** \brief Auxilary function used to determin endpoints of More-Thuente
-   * interval.
-    * \note \f$ \psi(\alpha) \f$ in Equation 1.6 (Moore, Thuente 1994)
-    * \param[in] a the step length, \f$ \alpha \f$ in More-Thuente (1994)
-    * \param[in] f_a function value at step length a, \f$ \phi(\alpha) \f$ in
-   * More-Thuente (1994)
-    * \param[in] f_0 initial function value, \f$ \phi(0) \f$ in Moore-Thuente
-   * (1994)
-    * \param[in] g_0 initial function gradiant, \f$ \phi'(0) \f$ in More-Thuente
-   * (1994)
-    * \param[in] mu the step length, constant \f$ \mu \f$ in Equation 1.1 [More,
-   * Thuente 1994]
-    * \return sufficent decrease value
-    */
-  inline double auxilaryFunction_PsiMT(double a, double f_a, double f_0,
-                                       double g_0, double mu = 1.e-4) const
-  {
-    return (f_a - f_0 - mu * g_0 * a);
-  }
-
-  /** \brief Auxilary function derivative used to determin endpoints of
-   * More-Thuente interval.
-    * \note \f$ \psi'(\alpha) \f$, derivative of Equation 1.6 (Moore, Thuente
-   * 1994)
-    * \param[in] g_a function gradient at step length a, \f$ \phi'(\alpha) \f$
-   * in More-Thuente (1994)
-    * \param[in] g_0 initial function gradiant, \f$ \phi'(0) \f$ in More-Thuente
-   * (1994)
-    * \param[in] mu the step length, constant \f$ \mu \f$ in Equation 1.1 [More,
-   * Thuente 1994]
-    * \return sufficent decrease derivative
-    */
-  inline double auxilaryFunction_dPsiMT(double g_a, double g_0,
-                                        double mu = 1.e-4) const
-  {
-    return (g_a - mu * g_0);
-  }
-  template <typename T = float>
-  Eigen::Matrix<T, 4, 4> vecToMat(const Eigen::Vector3d &trans) const;
-  template <typename T = float>
-  Eigen::Vector3d matToVec(const Eigen::Matrix<T, 4, 4> &trans) const;
+      const ndt_reg::ScoreAndDerivatives<3, double> &score,
+      const GridTarget &target_grid, const ndt_reg::FittingParams &param);
 };
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget,
                                   CellType>::D2DNormalDistributionsTransform2D()
-  : step_size_(0.01)
-  , outlier_ratio_(0.99)
+  : step_size_(0.25)      // 0.01
+  , outlier_ratio_(0.55)  // 0.99
   , trans_probability_()
   , layer_count_(4)
   , target_grid_updated_(false)
@@ -493,15 +346,15 @@ template <typename PointSource, typename PointTarget, typename CellType>
 void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     computeTransformation(PclSource &output, const Eigen::Matrix4f &guess)
 {
-  ROS_DEBUG_STREAM("[D2D_NDT2D]: guess:" << matToVec(guess).transpose());
+  ROS_DEBUG_STREAM("[ndt_reg]: guess:" << ndt_reg::matToVec(guess).transpose());
   Eigen::Matrix4f trans = guess;
   converged_ = false;
   if (!target_grid_) {
-    ROS_ERROR_STREAM("[D2D_NDT2D]: target cloud or grid not set");
+    ROS_ERROR_STREAM("[ndt_reg]: target cloud or grid not set");
     return;
   }
   if (!source_grid_) {
-    ROS_ERROR_STREAM("[D2D_NDT2D]: source cloud or grid not set");
+    ROS_ERROR_STREAM("[ndt_reg]: source cloud or grid not set");
     return;
   }
   for (size_t i = 0; i < layer_count_; ++i) {
@@ -513,7 +366,8 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
       return;
     }
   }
-  ROS_DEBUG_STREAM("[D2D_NDT2D]: final trans:" << matToVec(trans).transpose());
+  ROS_INFO_STREAM(
+      "[ndt_reg]: final trans:" << ndt_reg::matToVec(trans).transpose());
   transformPointCloud(*input_, output, trans);
   final_transformation_ = trans;
   converged_ = true;
@@ -524,7 +378,7 @@ bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     computeSingleGrid(const GridSource &source_grid,
                       const Eigen::Matrix4f &guess,
                       const GridTarget &target_grid,
-                      const d2d_ndt2d::FittingParams &param,
+                      const ndt_reg::FittingParams &param,
                       Eigen::Matrix4f &trans)
 {
   nr_iterations_ = 0;
@@ -533,11 +387,11 @@ bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   final_transformation_ = guess;
   previous_transformation_ = final_transformation_;
   // variables needed for calculation
-  Eigen::Vector3d xytheta_p = matToVec(guess);
+  Eigen::Vector3d xytheta_p = ndt_reg::matToVec(guess);
   Eigen::Vector3d delta_xytheta_p;
   Eigen::Matrix4f p;
   double delta_p_norm;
-  d2d_ndt2d::ScoreAndDerivatives<3, double> score;
+  ndt_reg::ScoreAndDerivatives<3, double> score;
   while (!converged_) {
     score = calcScore(param, source_grid, xytheta_p, target_grid, true);
 
@@ -554,8 +408,8 @@ bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
       converged_ = delta_p_norm == delta_p_norm;
       covariance_.setIdentity();
       inform_matrix_.setIdentity();
-      ROS_ERROR_STREAM("[D2D_NDT2D]:Not enough overlap. Probability: "
-                       << trans_probability_);
+      ROS_ERROR_STREAM(
+          "[ndt_reg]:Not enough overlap. Probability: " << trans_probability_);
       return false;
     }
     delta_xytheta_p.normalize();
@@ -567,14 +421,14 @@ bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     // delta_p_norm = 0.8
     delta_xytheta_p *= delta_p_norm;
     xytheta_p += delta_xytheta_p;
-    p = vecToMat(xytheta_p);
+    p = ndt_reg::vecToMat(xytheta_p);
 
     ++nr_iterations_;
     previous_transformation_ = transformation_;
     transformation_ = p;
     trans_probability_ =
         score.value_ / static_cast<double>(input_->points.size());
-    // ROS_DEBUG_STREAM("[D2D_NDT2D]: Step: "
+    // ROS_DEBUG_STREAM("[ndt_reg]: Step: "
     //                  << delta_p_norm
     //                  << " Delta: " << delta_xytheta_p.transpose()
     //                  << " Score: " << score.value_
@@ -602,20 +456,20 @@ bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 }
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
-d2d_ndt2d::ScoreAndDerivatives<3, double>
+ndt_reg::ScoreAndDerivatives<3, double>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore(
-    const d2d_ndt2d::FittingParams &param, const GridSource &sourceNDT,
+    const ndt_reg::FittingParams &param, const GridSource &sourceNDT,
     const Eigen::Vector3d &trans, const GridTarget &targetNDT,
     bool calc_hessian)
 {
   typedef typename GridSource::CellPtrVector SourceVec;
   typedef typename GridTarget::CellPtrVector TargetVec;
-  typedef d2d_ndt2d::ScoreAndDerivatives<3, double> ReturnVals;
+  typedef ndt_reg::ScoreAndDerivatives<3, double> ReturnVals;
 
   ReturnVals res;
 
   Eigen::Transform<double, 3, Eigen::Affine, Eigen::ColMajor> trans_mat;
-  trans_mat.matrix() = vecToMat<double>(trans);
+  trans_mat.matrix() = ndt_reg::vecToMat<double>(trans);
 
   SourceVec source_cells = sourceNDT.getGaussianCells();
   // std::cout << "ndt cells: " << source_cells.size() << std::endl;
@@ -642,7 +496,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
       cov_source =
           trans_mat.rotation() * cell_cov * trans_mat.rotation().transpose();
       // compute derivatives of score function
-      d2d_ndt2d::JacobianHessianDerivatives partial_derivatives;
+      ndt_reg::JacobianHessianDerivatives partial_derivatives;
       computeDerivatives(mean_source, cov_source, partial_derivatives,
                          calc_hessian);
       TargetVec neighbors =
@@ -671,7 +525,7 @@ D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::calcScore
 template <typename PointSource, typename PointTarget, typename CellType>
 void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     computeDerivatives(const Eigen::Vector3d &x, const Eigen::Matrix3d &cov,
-                       d2d_ndt2d::JacobianHessianDerivatives &data,
+                       ndt_reg::JacobianHessianDerivatives &data,
                        bool calc_hessian)
 {
   data.setZero();
@@ -693,16 +547,15 @@ void D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 }
 ////////////////////////////////////////////////////////////////////////
 template <typename PointSource, typename PointTarget, typename CellType>
-d2d_ndt2d::ScoreAndDerivatives<3, double>
+ndt_reg::ScoreAndDerivatives<3, double>
 D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     calcSourceCellScore(const Eigen::Vector3d &mean_source,
                         const Eigen::Matrix3d &cov_source,
                         const CellType *cell_t,
-                        const d2d_ndt2d::JacobianHessianDerivatives &deriv,
-                        const d2d_ndt2d::FittingParams &param,
-                        bool calc_hessian)
+                        const ndt_reg::JacobianHessianDerivatives &deriv,
+                        const ndt_reg::FittingParams &param, bool calc_hessian)
 {
-  d2d_ndt2d::ScoreAndDerivatives<3, double> res;
+  ndt_reg::ScoreAndDerivatives<3, double> res;
 
   // declaration
   Eigen::Vector3d diff_mean;
@@ -776,14 +629,14 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
                         Eigen::Matrix<double, 3, 1> &step_dir, double step_init,
                         double step_max, double step_min,
                         const GridSource &source_grid,
-                        const d2d_ndt2d::ScoreAndDerivatives<3, double> &score,
+                        const ndt_reg::ScoreAndDerivatives<3, double> &score,
                         const GridTarget &target_grid,
-                        const d2d_ndt2d::FittingParams &param)
+                        const ndt_reg::FittingParams &param)
 {
   Eigen::Matrix4f transformation;
   PclSource trans_cloud;
   // transformation.setIdentity();
-  d2d_ndt2d::ScoreAndDerivatives<3, double> score_vals = score;
+  ndt_reg::ScoreAndDerivatives<3, double> score_vals = score;
   // Set the value of phi(0), Equation 1.3 [More, Thuente 1994]
   double phi_0 = -score_vals.value_;
   // Set the value of phi'(0), Equation 1.3 [More, Thuente 1994]
@@ -817,11 +670,11 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
   // Auxiliary function psi is used until I is determined ot be a closed
   // interval, Equation 2.1 [More, Thuente 1994]
-  double f_l = auxilaryFunction_PsiMT(a_l, phi_0, phi_0, d_phi_0, mu);
-  double g_l = auxilaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
+  double f_l = ndt_reg::auxilaryFunction_PsiMT(a_l, phi_0, phi_0, d_phi_0, mu);
+  double g_l = ndt_reg::auxilaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
 
-  double f_u = auxilaryFunction_PsiMT(a_u, phi_0, phi_0, d_phi_0, mu);
-  double g_u = auxilaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
+  double f_u = ndt_reg::auxilaryFunction_PsiMT(a_u, phi_0, phi_0, d_phi_0, mu);
+  double g_u = ndt_reg::auxilaryFunction_dPsiMT(d_phi_0, d_phi_0, mu);
 
   // Check used to allow More-Thuente step length calculation to be skipped by
   // making step_min == step_max
@@ -833,7 +686,7 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
 
   x_t = x + step_dir * a_t;
 
-  // transformation = vecToMat(x_t);
+  // transformation = ndt_reg::vecToMat(x_t);
 
   // Updates score, gradient and hessian.  Hessian calculation is unessisary
   // but
@@ -848,9 +701,10 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
   double d_phi_t = -(score_vals.gradient_.dot(step_dir));
 
   // Calculate psi(alpha_t)
-  double psi_t = auxilaryFunction_PsiMT(a_t, phi_t, phi_0, d_phi_0, mu);
+  double psi_t =
+      ndt_reg::auxilaryFunction_PsiMT(a_t, phi_t, phi_0, d_phi_0, mu);
   // Calculate psi'(alpha_t)
-  double d_psi_t = auxilaryFunction_dPsiMT(d_phi_t, d_phi_0, mu);
+  double d_psi_t = ndt_reg::auxilaryFunction_dPsiMT(d_phi_t, d_phi_0, mu);
 
   // Iterate until max number of iterations, interval convergance or a value
   // satisfies the sufficient decrease, Equation 1.1, and curvature condition,
@@ -860,18 +714,18 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
            d_phi_t <= -nu * d_phi_0 /*Curvature Condition*/)) {
     // Use auxilary function if interval I is not closed
     if (open_interval) {
-      a_t = trialValueSelectionMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t, psi_t,
-                                  d_psi_t);
+      a_t = ndt_reg::trialValueSelectionMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t,
+                                           psi_t, d_psi_t);
     } else {
-      a_t = trialValueSelectionMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t, phi_t,
-                                  d_phi_t);
+      a_t = ndt_reg::trialValueSelectionMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t,
+                                           phi_t, d_phi_t);
     }
 
     a_t = std::min(a_t, step_max);
     a_t = std::max(a_t, step_min);
 
     x_t = x + step_dir * a_t;
-    // transformation = vecToMat(x_t);
+    // transformation = ndt_reg::vecToMat(x_t);
 
     score_vals = calcScore(param, source_grid, x_t, target_grid, false);
 
@@ -881,9 +735,9 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     d_phi_t = -(score_vals.gradient_.dot(step_dir));
 
     // Calculate psi(alpha_t+)
-    psi_t = auxilaryFunction_PsiMT(a_t, phi_t, phi_0, d_phi_0, mu);
+    psi_t = ndt_reg::auxilaryFunction_PsiMT(a_t, phi_t, phi_0, d_phi_0, mu);
     // Calculate psi'(alpha_t+)
-    d_psi_t = auxilaryFunction_dPsiMT(d_phi_t, d_phi_0, mu);
+    d_psi_t = ndt_reg::auxilaryFunction_dPsiMT(d_phi_t, d_phi_0, mu);
 
     // Check if I is now a closed interval
     if (open_interval && (psi_t <= 0 && d_psi_t >= 0)) {
@@ -901,192 +755,19 @@ double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
     if (open_interval) {
       // Update interval end points using Updating Algorithm [More, Thuente
       // 1994]
-      interval_converged =
-          updateIntervalMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t, psi_t, d_psi_t);
+      interval_converged = ndt_reg::updateIntervalMT(a_l, f_l, g_l, a_u, f_u,
+                                                     g_u, a_t, psi_t, d_psi_t);
     } else {
       // Update interval end points using Modified Updating Algorithm [More,
       // Thuente 1994]
-      interval_converged =
-          updateIntervalMT(a_l, f_l, g_l, a_u, f_u, g_u, a_t, phi_t, d_phi_t);
+      interval_converged = ndt_reg::updateIntervalMT(a_l, f_l, g_l, a_u, f_u,
+                                                     g_u, a_t, phi_t, d_phi_t);
     }
 
     step_iterations++;
   }
-
-  // If inner loop was run then hessian needs to be calculated.
-  // Hessian is unnessisary for step length determination but gradients are
-  // required
-  // so derivative and transform data is stored for the next iteration.
-  // if (step_iterations)
-  //   computeHessian (hessian, trans_cloud, x_t);
-
   return (a_t);
 }
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget, typename CellType>
-bool D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
-    updateIntervalMT(double &a_l, double &f_l, double &g_l, double &a_u,
-                     double &f_u, double &g_u, double a_t, double f_t,
-                     double g_t) const
-{
-  // Case U1 in Update Algorithm and Case a in Modified Update Algorithm
-  // [More,
-  // Thuente 1994]
-  if (f_t > f_l) {
-    a_u = a_t;
-    f_u = f_t;
-    g_u = g_t;
-    return (false);
-  }
-  // Case U2 in Update Algorithm and Case b in Modified Update Algorithm
-  // [More,
-  // Thuente 1994]
-  else if (g_t * (a_l - a_t) > 0) {
-    a_l = a_t;
-    f_l = f_t;
-    g_l = g_t;
-    return (false);
-  }
-  // Case U3 in Update Algorithm and Case c in Modified Update Algorithm
-  // [More,
-  // Thuente 1994]
-  else if (g_t * (a_l - a_t) < 0) {
-    a_u = a_l;
-    f_u = f_l;
-    g_u = g_l;
-
-    a_l = a_t;
-    f_l = f_t;
-    g_l = g_t;
-    return (false);
-  }
-  // Interval Converged
-  else
-    return (true);
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-template <typename PointSource, typename PointTarget, typename CellType>
-double D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::
-    trialValueSelectionMT(double a_l, double f_l, double g_l, double a_u,
-                          double f_u, double g_u, double a_t, double f_t,
-                          double g_t) const
-{
-  // Case 1 in Trial Value Selection [More, Thuente 1994]
-  if (f_t > f_l) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
-    // and
-    // g_t
-    // Equation 2.4.52 [Sun, Yuan 2006]
-    double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
-    double w = std::sqrt(z * z - g_t * g_l);
-    // Equation 2.4.56 [Sun, Yuan 2006]
-    double a_c = a_l + (a_t - a_l) * (w - g_l - z) / (g_t - g_l + 2 * w);
-
-    // Calculate the minimizer of the quadratic that interpolates f_l, f_t and
-    // g_l
-    // Equation 2.4.2 [Sun, Yuan 2006]
-    double a_q =
-        a_l - 0.5 * (a_l - a_t) * g_l / (g_l - (f_l - f_t) / (a_l - a_t));
-
-    if (std::fabs(a_c - a_l) < std::fabs(a_q - a_l))
-      return (a_c);
-    else
-      return (0.5 * (a_q + a_c));
-  }
-  // Case 2 in Trial Value Selection [More, Thuente 1994]
-  else if (g_t * g_l < 0) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
-    // and
-    // g_t
-    // Equation 2.4.52 [Sun, Yuan 2006]
-    double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
-    double w = std::sqrt(z * z - g_t * g_l);
-    // Equation 2.4.56 [Sun, Yuan 2006]
-    double a_c = a_l + (a_t - a_l) * (w - g_l - z) / (g_t - g_l + 2 * w);
-
-    // Calculate the minimizer of the quadratic that interpolates f_l, g_l and
-    // g_t
-    // Equation 2.4.5 [Sun, Yuan 2006]
-    double a_s = a_l - (a_l - a_t) / (g_l - g_t) * g_l;
-
-    if (std::fabs(a_c - a_t) >= std::fabs(a_s - a_t))
-      return (a_c);
-    else
-      return (a_s);
-  }
-  // Case 3 in Trial Value Selection [More, Thuente 1994]
-  else if (std::fabs(g_t) <= std::fabs(g_l)) {
-    // Calculate the minimizer of the cubic that interpolates f_l, f_t, g_l
-    // and
-    // g_t
-    // Equation 2.4.52 [Sun, Yuan 2006]
-    double z = 3 * (f_t - f_l) / (a_t - a_l) - g_t - g_l;
-    double w = std::sqrt(z * z - g_t * g_l);
-    double a_c = a_l + (a_t - a_l) * (w - g_l - z) / (g_t - g_l + 2 * w);
-
-    // Calculate the minimizer of the quadratic that interpolates g_l and g_t
-    // Equation 2.4.5 [Sun, Yuan 2006]
-    double a_s = a_l - (a_l - a_t) / (g_l - g_t) * g_l;
-
-    double a_t_next;
-
-    if (std::fabs(a_c - a_t) < std::fabs(a_s - a_t))
-      a_t_next = a_c;
-    else
-      a_t_next = a_s;
-
-    if (a_t > a_l)
-      return (std::min(a_t + 0.66 * (a_u - a_t), a_t_next));
-    else
-      return (std::max(a_t + 0.66 * (a_u - a_t), a_t_next));
-  }
-  // Case 4 in Trial Value Selection [More, Thuente 1994]
-  else {
-    // Calculate the minimizer of the cubic that interpolates f_u, f_t, g_u
-    // and
-    // g_t
-    // Equation 2.4.52 [Sun, Yuan 2006]
-    double z = 3 * (f_t - f_u) / (a_t - a_u) - g_t - g_u;
-    double w = std::sqrt(z * z - g_t * g_u);
-    // Equation 2.4.56 [Sun, Yuan 2006]
-    return (a_u + (a_t - a_u) * (w - g_u - z) / (g_t - g_u + 2 * w));
-  }
-}
-
-template <typename PointSource, typename PointTarget, typename CellType>
-template <typename T>
-Eigen::Matrix<T, 4, 4>
-D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::vecToMat(
-    const Eigen::Vector3d &trans) const
-{
-  Eigen::Matrix<T, 4, 4> trans_mat = Eigen::Matrix<T, 4, 4>::Identity();
-
-  trans_mat.block(0, 0, 3, 3).matrix() =
-      Eigen::Matrix<T, 3, 3>(Eigen::AngleAxis<T>(
-          static_cast<T>(trans(2)), Eigen::Matrix<T, 3, 1>::UnitZ()));
-
-  trans_mat.block(0, 3, 3, 1).matrix() = Eigen::Matrix<T, 3, 1>(
-      static_cast<T>(trans(0)), static_cast<T>(trans(1)), 0.0);
-
-  return trans_mat;
-}
-
-template <typename PointSource, typename PointTarget, typename CellType>
-template <typename T>
-Eigen::Vector3d
-D2DNormalDistributionsTransform2D<PointSource, PointTarget, CellType>::matToVec(
-    const Eigen::Matrix<T, 4, 4> &trans) const
-{
-  Eigen::Vector3d vec;
-  Eigen::Transform<T, 3, Eigen::Affine, Eigen::ColMajor> trans_mat(trans);
-  Eigen::Matrix<T, 3, 1> translation = trans_mat.translation();
-  vec << translation(0), translation(1),
-      std::atan2(trans_mat.rotation()(1, 0), trans_mat.rotation()(0, 0));
-  return vec;
-}
-
 }  // end of pcl namespace
 
 #endif

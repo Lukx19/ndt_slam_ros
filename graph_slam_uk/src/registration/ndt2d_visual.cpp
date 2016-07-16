@@ -37,6 +37,8 @@ typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
 typedef NDTGrid2D<NDTCell<CellPolicy2d>, pcl::PointXYZ> GridType;
 typedef GridType::ConstPtr GridTypeConstPtr;
 typedef GridType::Ptr GridTypePtr;
+typedef NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>
+    P2DMatcher;
 typedef D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>
     D2DMatcher;
 typedef CorrelativeEstimation<pcl::PointXYZ, pcl::PointXYZ> CorrMatcher;
@@ -164,7 +166,7 @@ void testMatch(size_t source_id, size_t target_id)
   ////////////////////////////////////////////////////////
   // calculate my matcher
   s_match = std::chrono::system_clock::now();
-  if (mode_type == "basic" || mode_type == "proof") {
+  if (mode_type == "proof") {
     matcher->setInputSource(scans[source_id]);
     matcher->setInputTarget(scans[target_id]);
   } else {
@@ -185,6 +187,11 @@ void testMatch(size_t source_id, size_t target_id)
     if (mode_type == "robust") {
       static_cast<RobustMatcher *>(matcher)->setInputSource(source_grid);
       static_cast<RobustMatcher *>(matcher)->setInputTarget(target_grid);
+    }
+    if (mode_type == "basic") {
+      matcher->setInputSource(scans[source_id]);
+      // matcher->setInputSource(source_grid->getMeans());
+      static_cast<P2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
   }
   matcher->align(*output_m, guess);
@@ -343,8 +350,7 @@ int main(int argc, char **argv)
   proofer = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
 
   if (args[2] == "basic") {
-    matcher =
-        new NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>();
+    matcher = new P2DMatcher();
   } else if (args[2] == "d2d") {
     matcher = new D2DMatcher();
   } else if (args[2] == "corr") {
