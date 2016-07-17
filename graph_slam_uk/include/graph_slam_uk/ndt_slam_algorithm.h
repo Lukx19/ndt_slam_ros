@@ -25,7 +25,6 @@ namespace slamuk
 {
 class NdtSlamAlgortihm : public ISlamAlgorithm
 {
-  typedef eigt::pose2d_t<double> Pose;
   typedef ISlamAlgorithm::PointType PointType;
   typedef NDTCell<CellPolicy2d> CellType;
   typedef NDTGrid2D<NDTCell<CellPolicy2d>, PointType> FrameType;
@@ -37,13 +36,13 @@ public:
   typedef ISlamAlgorithm::Transform Transform;
   typedef ISlamAlgorithm::Covar Covar;
   typedef ISlamAlgorithm::PointCloud PointCloud;
+  typedef ISlamAlgorithm::Pose Pose;
 
 public:
   NdtSlamAlgortihm();
-  virtual inline Transform update(const Transform &motion,
-                                  const Covar &covariance,
-                                  const PointCloud &pcl,
-                                  const ros::Time &update_time) override;
+  virtual inline Pose update(const Transform &motion, const Covar &covariance,
+                             const PointCloud &pcl,
+                             const ros::Time &update_time) override;
   virtual nav_msgs::OccupancyGrid
   calcOccupancyGrid(std::string &world_frame_id) const override
   {
@@ -83,11 +82,12 @@ protected:
   CovarianceWrapper last_covar_;
   Transform last_trans_;
   Transform unused_trans_;  // transformation of unused odometry
+  Pose addition_;
 
-  Transform position_;
+  Pose position_;
   Transform position_cumul_;
   Transform transform_temp_;  // transform of current temp frame
-  Pose last_local_origin_;
+  Pose last_matcher_pose_;
   CovarianceWrapper covar_temp_;
   NDTMapper<CellType, PointType> map_;
   FrameTypePtr running_window_;
@@ -105,7 +105,7 @@ protected:
   std::vector<FrameTypePtr> frames_;
 
   inline void updateGraph(const Transform &increase, const Covar &covariance,
-                          const FrameTypePtr &new_scan,
+                          const PointCloud &new_scan,
                           const ros::Time &update_time);
   inline bool movedEnough(const Transform &trans) const;
   inline bool movedEnough(const Transform &trans,
@@ -125,10 +125,10 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , last_node_id_(0)
   , last_trans_(Transform::Identity())
   , unused_trans_(Transform::Identity())
-  , position_(Transform::Identity())
+  , position_(Pose::Zero())
   , position_cumul_(Transform::Identity())
   , transform_temp_(Transform::Identity())
-  , last_local_origin_(Pose::Zero())
+  , last_matcher_pose_(Pose::Zero())
   , covar_temp_()
   , map_()
   , running_window_(new FrameType())
@@ -142,9 +142,10 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   inc_matcher_.setOulierRatio(0.99);
 }
 
-NdtSlamAlgortihm::Transform
-NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
-                         const PointCloud &pcl, const ros::Time &update_time)
+NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
+                                                const Covar &covariance,
+                                                const PointCloud &pcl,
+                                                const ros::Time &update_time)
 {
   // PROCESS OF ADDING TO POSE GRAPH
   // 1. program is integrating measurements, transformations and covariances
@@ -164,8 +165,8 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     running_window_->setCellSize(cell_size_);
     frame_temp_->setOrigin(FrameType::Pose(0, 0, 0));
     frame_temp_->setCellSize(cell_size_);
-    position_.setIdentity();
-
+    position_.setZero();
+    last_matcher_pose_.setZero();
     initialized_ = true;
     // enters first scan as it is to running window
     running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
@@ -174,6 +175,7 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     frame_temp_->initialize(pcl);
     window_update_time_ = update_time;
     window_seq_ = 0;
+    addition_.setZero();
     return position_;
   }
   // unused_trans_ = unused_trans_ * motion;
@@ -200,6 +202,23 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     // prepare transformation from successful scan registration
     Transform registration = eigt::convertToTransform<double>(
         inc_matcher_.getFinalTransformation().cast<double>());
+
+    // GRAPH SLAM STUFF////////////////////////////////////////////
+    Pose matcher_pose =
+        eigt::transformPose(running_window_->getOrigin(), registration);
+
+    // calculate pose increase with respect to last known pose in worls of
+    // scanmatching
+    Transform increase = eigt::transBtwPoses(last_matcher_pose_, matcher_pose);
+    last_matcher_pose_ = matcher_pose;
+    // std::cout << "diff trans:"
+    //           << eigt::getPoseFromTransform(increase).transpose() <<
+    //           std::endl;
+    // std::cout << "matcher_pose: " << matcher_pose.transpose() << std::endl;
+    // update and optimize graph
+    updateGraph(increase, Covar::Identity() * 0.0001, pcl, update_time);
+
+    // RUNNING WINDOW STUFF ///////////////////////////////////
     // updating cumulative position. This position meassures
     // transformation is
     // relative to running window origin
@@ -208,26 +227,18 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
     // merge in new data to running window
     running_window_->mergeInTraced(*local, true, false);
     // move running window only horizontaly or verticaly if needed
-    position_cumul_ = running_window_->move(position_cumul_);
+    position_cumul_ = running_window_->move(registration);
 
     // info for output msg
     window_update_time_ = update_time;
     ++window_seq_;
-    // calculate pose increase with respect to last measurement
-    Transform increase =
-        eigt::transBtwPoses(last_local_origin_, local->getOrigin());
-    last_local_origin_ = local->getOrigin();
-    std::cout << "diff trans:"
-              << eigt::getPoseFromTransform(increase).transpose() << std::endl;
-    // update and optimize graph
-    updateGraph(increase, Covar::Identity() * 0.001, local, update_time);
 
   } else {
     ROS_INFO_STREAM("[SLAM ALGORITHM]: unsucessful scanmatching-> using "
                     "odometry");
     // scan-matching failed, use odometry
     // do not merge in scan - avoiding problems whit bad local map
-    position_ = position_ * motion;
+    position_ = eigt::transformPose(position_, motion);
   }
   // unused_trans_.setIdentity();
   return position_;
@@ -235,11 +246,13 @@ NdtSlamAlgortihm::update(const Transform &motion, const Covar &covariance,
 
 void NdtSlamAlgortihm::updateGraph(const Transform &increase,
                                    const Covar &covariance,
-                                   const FrameTypePtr &new_scan,
+                                   const PointCloud &new_scan,
                                    const ros::Time &update_time)
 {
-  transform_temp_ = transform_temp_ * increase;
+  transform_temp_ = eigt::getTransFromPose(eigt::transformPose(
+      eigt::getPoseFromTransform(transform_temp_), increase));
   covar_temp_.addToCovar(covariance, increase);
+
   if (movedEnough(transform_temp_, covar_temp_)) {
     ROS_INFO_STREAM("[SLAM ALGORITHM]: creating new frame");
     // robot moved out of reasonable bounds for single temp
@@ -248,7 +261,7 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     frames_.back().swap(frame_temp_);
     map_.addFrame(frames_.back(), update_time);
     FrameTypeHolder frame_wrap(frames_.back());
-    std::cout << "!!!!!!!!!!!!!" << frames_.back().use_count() << std::endl;
+
     last_node_id_ =
         opt_engine_->addPose(frames_.back()->getOrigin(), frame_wrap);
     // add edge measurement only after first node was inserted
@@ -261,11 +274,10 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     covar_temp_ = CovarianceWrapper();
     transform_temp_.setIdentity();
     first_node_added_ = true;
-    // pcl::visualizePcl<PointType>(running_window_->getMeans(),
-    //                              new_scan->getMeans());
+    pcl::visualizePcl<PointType>(running_window_->getMeans());
     // find loop closures and optimize graph
+    Pose pre_opt_pose = opt_engine_->getPoseLocation(last_node_id_);
     if (opt_engine_->tryLoopClose()) {
-      std::vector<size_t> changed_nodes;
       // optimize graph
       if (opt_engine_->optimalizeIterationaly()) {
         // optimization updates origins in grid through FrameHolder
@@ -274,39 +286,51 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
       }
     }
     // initialize new grid for next round
-    Pose robot = opt_engine_->getPoseLocation(last_node_id_);
+    Pose after_opt_pose = opt_engine_->getPoseLocation(last_node_id_);
+    after_opt_pose = Pose(10, 0, 2);
+    addition_ = Pose(10, 0, 0);
     // std::cout << "robot: " << robot.transpose() << std::endl;
-    // std::cout << "farem: " << new_scan->getOrigin().transpose() << std::endl;
+    // std::cout << "farem: " << new_scan->getOrigin().transpose() <<
+    // std::endl;
     // std::cout << "farem2: " << running_window_->getOrigin().transpose()
     //           << std::endl;
+    // position_ = Pose(10, 0, 2);
+    position_ = eigt::transformPose(pre_opt_pose, last_trans_);
+    // position_ = eigt::transformPose(
+    //     position_, eigt::transBtwPoses(after_opt_pose, pre_opt_pose));
+    PointCloud pcl_out;
+    pcl::transformPointCloud(
+        new_scan, pcl_out,
+        eigt::convertFromTransform(eigt::getTransFromPose(position_)));
+    pcl::visualizePcl<PointType>(frames_.back()->getMeans());
 
-    position_ = eigt::getTransFromPose(robot) * last_trans_;
-
-    // pcl::visualizePcl<PointType>(frame_temp_->getMeans());
-
-    frame_temp_->setOrigin(eigt::getPoseFromTransform(position_));
+    frame_temp_->setOrigin(position_);
     frame_temp_->setCellSize(cell_size_);
-    frame_temp_->mergeInTraced(*new_scan, true, true);
-
+    // frame_temp_->mergeInTraced(*new_scan, true, true);
+    frame_temp_->mergeInTraced(pcl_out, Eigen::Vector3d(0, 0, 0), true);
     // std::cout << "last nodes pose in graph: "
     //           << opt_engine_->getPoseLocation(last_node_id_).transpose()
     //           << std::endl;
+    pcl::visualizePcl<PointType>(frame_temp_->getMeans());
 
   } else {
     // robot is still in bounds of reasonable error from
     // incremental
     // scan matching. We don't want to add to many nodes into
     // pose graph
-    frame_temp_->mergeInTraced(*new_scan, true, true);
-    position_ = position_ * increase;
+    // frame_temp_->mergeInTraced(*new_scan, true, true);
+
+    position_ = eigt::transformPose(position_, increase);
+    PointCloud pcl_out;
+    pcl::transformPointCloud(
+        new_scan, pcl_out,
+        eigt::convertFromTransform(eigt::getTransFromPose(position_)));
+    frame_temp_->mergeInTraced(pcl_out, Eigen::Vector3d(0, 0, 0), true);
+    // if (std::abs(addition_.sum()) > 0)
+    //   pcl::visualizePcl<PointType>(frame_temp_->getMeans());
   }
 
-  std::cout << "transform_temp: "
-            << eigt::getPoseFromTransform(transform_temp_).transpose()
-            << std::endl;
-  std::cout << "position: " << eigt::getPoseFromTransform(position_).transpose()
-            << std::endl
-            << std::endl;
+  std::cout << "position: " << position_.transpose() << std::endl << std::endl;
 }
 
 bool NdtSlamAlgortihm::movedEnough(const Transform &trans,

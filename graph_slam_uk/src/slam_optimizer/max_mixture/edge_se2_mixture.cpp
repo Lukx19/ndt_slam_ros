@@ -96,8 +96,8 @@ void EdgeSE2Mixture::computeError()
   }
 
   bestComponent = best;
+  // cerr << "\nBest component is " << bestComponent << "\n";
   UpdateBelief(bestComponent);
-  // cerr << "\nBest component is "<<bestComponent<<"\n";
 
   // this will be used by the optimizer
   g2o::EdgeSE2::computeError();

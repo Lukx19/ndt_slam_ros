@@ -22,6 +22,11 @@ template <typename PointType>
 void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
                   const typename PointCloud<PointType>::ConstPtr &pcl2);
 
+template <typename PointType>
+void savePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
+             const typename PointCloud<PointType>::ConstPtr &pcl2,
+             const std::string &filename);
+
 ////////////////////IMPLEMENTATION ///////////////
 template <typename PointType, typename Scalar>
 void getMinMax2D(const pcl::PointCloud<PointType> &pcl, Scalar &minx,
@@ -107,6 +112,32 @@ void visualizePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
     boost::this_thread::sleep(boost::posix_time::microseconds(100000));
   }
   viewer->close();
+}
+
+template <typename PointType>
+void savePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
+             const typename PointCloud<PointType>::ConstPtr &pcl2,
+             const std::string &filename)
+{
+  // Initializing point cloud visualizer
+  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(
+      new pcl::visualization::PCLVisualizer("3D Viewer"));
+  viewer->setBackgroundColor(0, 0, 0);
+  // visualize firs cloud
+  pcl::visualization::PointCloudColorHandlerCustom<PointType> first_color(
+      pcl1, 255, 0, 0);
+  viewer->addPointCloud<PointType>(pcl1, first_color, "first cloud");
+  viewer->setPointCloudRenderingProperties(
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "first cloud");
+  // visualize second cloud
+  pcl::visualization::PointCloudColorHandlerCustom<PointType> second_color(
+      pcl2, 0, 255, 0);
+  viewer->addPointCloud<PointType>(pcl2, second_color, "second cloud");
+  viewer->setPointCloudRenderingProperties(
+      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "second cloud");
+  viewer->addCoordinateSystem(1.0, "global");
+  // Wait until visualizer window is closed.
+  viewer->saveScreenshot(filename);
 }
 }
 

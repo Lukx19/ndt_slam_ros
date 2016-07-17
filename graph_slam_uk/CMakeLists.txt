@@ -185,6 +185,10 @@ add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
+  src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
+  src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
   # ${MAX_MIXTURES_SRC_FILES}
   )
 add_dependencies(graph_slam2d ${PROJECT_NAME}_generate_messages_cpp)

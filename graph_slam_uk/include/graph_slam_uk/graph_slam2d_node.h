@@ -3,40 +3,42 @@
 
 #include <ros/ros.h>
 
-#include <sensor_msgs/LaserScan.h>
+#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <sensor_msgs/LaserScan.h>
 #include <sensor_msgs/PointCloud.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <geometry_msgs/PoseWithCovarianceStamped.h>
 
 #include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
+#include <message_filters/synchronizer.h>
+#include <message_filters/time_synchronizer.h>
 
 #include <laser_geometry/laser_geometry.h>
 
-#include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
 #include <tf_conversions/tf_eigen.h>
 
-#include <pcl_conversions/pcl_conversions.h>
-#include <pcl_ros/transforms.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl_ros/transforms.h>
 //#include <pcl/filters/voxel_grid.h>
 
-#include <graph_slam_uk/utils/eigen_tools.h>
-#include <graph_slam_uk/slam_algorithm_interface.h>
 #include <graph_slam_uk/NDTMapMsg.h>
+#include <graph_slam_uk/slam_algorithm_interface.h>
+#include <graph_slam_uk/utils/eigen_tools.h>
 
 namespace slamuk
 {
 class GraphSlamNode
 {
   typedef message_filters::sync_policies::ApproximateTime<
-      nav_msgs::Odometry, sensor_msgs::LaserScan> OdomSyncPolicy;
+      nav_msgs::Odometry, sensor_msgs::LaserScan>
+      OdomSyncPolicy;
   typedef message_filters::sync_policies::ApproximateTime<
       geometry_msgs::PoseWithCovarianceStamped, sensor_msgs::LaserScan>
       PoseSyncPolicy;
@@ -59,7 +61,7 @@ private:
   ros::NodeHandle nh_private_;
   ISlamAlgorithm *algorithm_;
   pose_t last_odom_;
-  transform_t last_pose_;
+  pose_t last_pose_;
 
   // ros interface utils
   laser_geometry::LaserProjection projector_;
@@ -74,7 +76,7 @@ private:
   ros::Publisher occ_map_pub_;
   ros::Publisher win_map_pub_;
   ros::Publisher graph_pub_;
-  transform_t world_tf_trans_;
+  tf::Transform world_tf_trans_;
   uint seq_;
   bool is_ready_;
 
@@ -121,10 +123,11 @@ private:
   void doAlgorithm(const ros::Time &time_stamp, const pose_t &pose,
                    pcl_ptr_t &pcl, const Eigen::Matrix3d &covar);
   void publishTF(const ros::Time &time);
-  void updateTFTrans(pose_t odom_pose, pose_t calc_pose);
+  void updateTFTrans(const pose_t &odom_pose, const pose_t &calc_pose);
   Eigen::Matrix3d arrayToMatrix(const boost::array<double, 36> &array) const;
 
   bool movedEnough(const eigt::transform2d_t<double> &trans) const;
+  tf::Transform eigenPoseToTF(const Eigen::Vector3d &pose) const;
 };
 }
 

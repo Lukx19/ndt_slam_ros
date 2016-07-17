@@ -9,10 +9,10 @@ GraphSlamNode::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
   , nh_private_(n_private)
   , algorithm_(&alg)
   , last_odom_(0, 0, 0)
-  , last_pose_(transform_t::Identity())
+  , last_pose_(pose_t::Zero())
   , odom_sync_(OdomSyncPolicy(10))
   , pose_sync_(PoseSyncPolicy(10))
-  , world_tf_trans_(transform_t::Identity())
+  // , world_tf_trans_()
   , seq_(0)
   , is_ready_(false)
 {
@@ -25,7 +25,7 @@ GraphSlamNode::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
                                                               5, false);
   win_map_pub_ =
       nh_.advertise<graph_slam_uk::NDTMapMsg>(win_pub_topic_, 5, false);
-  const int message_cache = 10;
+  const int message_cache = 1;
   if (subscribe_mode_ == "ODOM") {
     laser_sub_.subscribe(nh_, laser_topic_, message_cache);
     odom_sub_.subscribe(nh_, odom_topic_, message_cache);
@@ -145,7 +145,7 @@ void GraphSlamNode::laser_cb(const sensor_msgs::LaserScan::ConstPtr &laser)
     return;
   }
   Eigen::Matrix3d covar;
-  // add here more sophisticated aproximation of covariance in future
+
   covar << 1e-4, 0, 0, 0, 1e-4, 0, 0, 0, 1e-4;
   doAlgorithm(t, new_pose, pcl, covar);
 }
@@ -195,11 +195,11 @@ bool GraphSlamNode::preparePoseData(const ros::Time &time_stamp,
       eigt::convertToTransform(trans_robot.matrix()));
 
   // check if robot moved enough
-  auto odom_trans_mat = eigt::transBtwPoses(last_odom_, pose);
-  if (!movedEnough(odom_trans_mat)) {
-    ROS_INFO("Graph_slam2d:Robot not moved enough-> droping msgs");
-    return false;
-  }
+  // auto odom_trans_mat = eigt::transBtwPoses(last_odom_, pose);
+  // if (!movedEnough(odom_trans_mat)) {
+  //   ROS_INFO("Graph_slam2d:Robot not moved enough-> droping msgs");
+  //   return false;
+  // }
   return true;
 }
 
@@ -232,27 +232,28 @@ bool GraphSlamNode::prepareLaserData(
   return true;
 }
 
-void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &pose,
+void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
                                 pcl_ptr_t &pcl, const Eigen::Matrix3d &covar)
 {
   // prepare initial data in first received msg pair
   if (!is_ready_) {
     is_ready_ = true;
-    last_odom_ = pose;
+    last_odom_ = odom;
+    last_pose_ = pose_t::Zero();
+    algorithm_->update(transform_t::Identity(), covar, *pcl, time_stamp);
     publishTF(time_stamp);
     return;
   }
-  transform_t current_pose = last_pose_;
-  if (movedEnough(eigt::getTransFromPose(pose))) {
-    current_pose = algorithm_->update(eigt::getTransFromPose(pose), covar, *pcl,
-                                      time_stamp);
-    last_pose_ = current_pose;
-  }
-  updateTFTrans(pose, eigt::getPoseFromTransform(last_pose_));
+  auto odom_trans = eigt::transBtwPoses(last_odom_, odom);
+  last_odom_ = odom;
+
+  pose_t current_pose = last_pose_;
+  current_pose = algorithm_->update(odom_trans, covar, *pcl, time_stamp);
+  last_pose_ = current_pose;
+  updateTFTrans(odom, current_pose);
 
   // PUBLISHING MSGS
 
-  // updateTFTrans(pose,opt_engine_->getPoseLocation(scans_.back()));
   publishTF(time_stamp);
   win_map_pub_.publish(algorithm_->getWindowMap(fixed_frame_));
   nav_msgs::OccupancyGrid occ_map = algorithm_->calcOccupancyGrid(fixed_frame_);
@@ -272,20 +273,31 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &pose,
 void GraphSlamNode::publishTF(const ros::Time &time)
 {
   // publish map tf transform
-  auto w_trans = eigt::getPoseFromTransform(world_tf_trans_);
-  tf::Transform transform;
-  transform.setOrigin(tf::Vector3(w_trans(0), w_trans(1), 0.0));
-  tf::Quaternion q;
-  q.setRPY(0, 0, w_trans(2));
-  transform.setRotation(q);
+  // auto w_trans = eigt::getPoseFromTransform(world_tf_trans_);
+  // tf::Transform transform;
+  // transform.setOrigin(tf::Vector3(w_trans(0), w_trans(1), 0.0));
+  // tf::Quaternion q;
+  // q.setRPY(0, 0, w_trans(2));
+  // transform.setRotation(q);
   tf_broadcast_.sendTransform(
-      tf::StampedTransform(transform, time, fixed_frame_, odom_frame_));
+      tf::StampedTransform(world_tf_trans_, time, fixed_frame_, odom_frame_));
 }
 
-void GraphSlamNode::updateTFTrans(pose_t odom, pose_t slam)
+void GraphSlamNode::updateTFTrans(const pose_t &odom, const pose_t &slam)
 {
-  auto odom_w_frame = eigt::transformPose(odom, world_tf_trans_);
-  world_tf_trans_ = eigt::transBtwPoses(odom_w_frame, slam) * world_tf_trans_;
+  // transform new odometry position with last know SLAM position
+  // auto odom_trans = eigt::transformPose(odom, world_tf_trans_);
+  // find out how much diverged slam pose and odometric pose in this time
+  // update transformation ased on new information
+  // std::cout << "!!!!!!!!!!!!!!!!!!!!: "
+  //           << eigt::getPoseFromTransform(eigt::transBtwPoses(odom, slam))
+  //                  .transpose()
+  //           << std::endl;
+
+  // world_tf_trans_ = eigt::transBtwPoses(odom, slam);
+  tf::Transform odom_to_base = eigenPoseToTF(odom);
+  tf::Transform map_to_base = eigenPoseToTF(slam);
+  world_tf_trans_ = tf::Transform(map_to_base * odom_to_base.inverse());
 }
 
 Eigen::Matrix3d
@@ -303,6 +315,19 @@ bool GraphSlamNode::movedEnough(const eigt::transform2d_t<double> &trans) const
       eigt::getDisplacement(trans) < min_displacement_)
     return false;
   return true;
+}
+
+tf::Transform GraphSlamNode::eigenPoseToTF(const Eigen::Vector3d &pose) const
+{
+  geometry_msgs::Pose g_pose;
+  g_pose.position.x = pose.x();
+  g_pose.position.y = pose.y();
+
+  g_pose.orientation.w = cos(pose.z() * 0.5f);
+  g_pose.orientation.z = sin(pose.z() * 0.5f);
+  tf::Transform res;
+  tf::poseMsgToTF(g_pose, res);
+  return res;
 }
 
 ///////////////// MAIN //////////////////////////////////

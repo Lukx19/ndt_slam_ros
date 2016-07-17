@@ -6,6 +6,9 @@
 #include <graph_slam_uk/utils/eigen_tools.h>
 
 #include <graph_slam_uk/utils/point_cloud_tools.h>
+#include <cstdlib>
+#include <ctime>
+#include <sstream>
 
 namespace slamuk
 {
@@ -17,6 +20,7 @@ public:
   {
     matcher.setStepSize(0.1);
     matcher.setOulierRatio(0.55);
+    srand((unsigned)time(0));
   }
   virtual ~NdtScanmatcher()
   {
@@ -41,17 +45,30 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   matcher.setInputSource(source.getData());
   matcher.setInputTarget(target.getData());
   // Set initial alignment estimate found using robot odometry.
-  Eigen::Matrix<float, 4, 4> init_guess =
-      eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess))
-          .cast<float>();
+  Eigen::Matrix<float, 4, 4> init_guess = Eigen::Matrix4f::Identity();
+  // eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess))
+  //     .cast<float>();
   // Calculating required rigid transform to align the input cloud to the target
   // cloud.
   typename pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_out(
       new pcl::PointCloud<pcl::PointXYZ>());
 
   matcher.align(*pcl_out, init_guess);
+  std::string filename;
+  std::stringstream ss;
+  if (matcher.hasConverged()) {
+    ss << "valid";
+  } else {
+    ss << "invalid";
+  }
+  ss << target.getData()->getTimestamp() << "_" << (rand() % 1000000) + 1
+     << ".png" << std::endl;
+
+  // pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(),
+  // pcl_out,
+  //                                         ss.str());
   // pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
-  //                                              pcl_out);
+  // pcl_out);
 
   ROS_INFO_STREAM(
       "[NDT_SCANMATCHER]:Normal Distributions Transform has converged:"
@@ -59,7 +76,8 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   MatchResult res;
   res.success_ = matcher.hasConverged();
   res.score_ = 1;
-  res.inform_ = matcher.getInformMatrix();
+  res.inform_ = (Eigen::Matrix3d::Identity() * 0.0001).inverse();
+  // matcher.getInformMatrix();
   Eigen::Matrix4f trans = matcher.getFinalTransformation();
   res.transform_ = eigt::convertToTransform<double>(trans.cast<double>());
   return res;

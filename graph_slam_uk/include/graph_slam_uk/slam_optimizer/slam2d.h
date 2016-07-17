@@ -44,9 +44,9 @@ class Slam2D : public IGraphOptimalizer2d<T>
       SlamLinearSolver;
   typedef g2o::VertexSE2 VertexG2O;
   typedef g2o::SE2 PoseG2O;
-  // typedef g2o::EdgeSE2 EdgeG2O;
+  typedef g2o::EdgeSE2 EdgeG2O;
   // typedef VertexSwitchLinear VertexG2O;
-  typedef EdgeSE2Mixture EdgeG2O;
+  typedef EdgeSE2Mixture EdgeG2OLoop;
   typedef RRRLoopProofer<RRRG2OWrapper> LoopProofer;
 
 public:
@@ -139,8 +139,11 @@ protected:
 template <typename T>
 bool Slam2D<T>::optimalize()
 {
+  g2o_opt_->setVerbose(true);
   g2o_opt_->initializeOptimization();
+  // g2o_opt_->computeActiveErrors();
   g2o_opt_->optimize(10);
+  ROS_INFO_STREAM("[SLAM2D]: optimalization done");
   updatePoseGraph();
   return true;
 }
@@ -229,49 +232,43 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
   std::vector<LoopClosure<Slam2d_Policy>> loops =
       loop_detector_.genLoopClosures(node_id);
   // add to graph
-  // LoopProofer::VerticesPairSet all_loops;
-  // LoopProofer::VerticesPairSet good_loops;
-  // LoopProofer::VerticesPairSet bad_loops;
   for (auto &&constrain : loops) {
-    LoopProofer::VerticesPair edgeType;
-    edgeType.first = constrain.vertices_.first;
-    edgeType.second = constrain.vertices_.second;
-    // std::cout << "potential loop: " << edgeType.first << "~>" <<
-    // edgeType.second
-    //           << std::endl;
-    // all_loops.insert(std::move(edgeType));
-    size_t id = addConstrain(edgeType.first, edgeType.second,
-                             Policy::transMatToVec(constrain.t_),
-                             constrain.information_);
+    size_t node_id_from = constrain.vertices_.first;
+    size_t node_id_to = constrain.vertices_.second;
+    typename Policy::Pose trans = Policy::transMatToVec(constrain.t_);
+    // add loop closure edge to graphs
+    ROS_INFO_STREAM("[SLAM2D]: Adding loop constrain betwen nodes:"
+                    << node_id_from << "->" << node_id_to);
+
+    EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to),
+               trans, constrain.information_);
+    size_t id = graph_.addEdge(std::move(e));
+    graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
     graph_.getEdge(id).setType(EdgeType::Type::LOOP);
+
+    // adding G2O edgeType
+    std::vector<typename Policy::InformMatrix> inform_matrices = {
+        constrain.information_, Policy::InformMatrix::Identity() * 5e-10};
+    std::vector<EdgeG2O *> g2o_edges;
+
+    for (auto &&info_mat : inform_matrices) {
+      EdgeG2O *loop = new EdgeG2O();
+      loop->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
+      loop->setInformation(info_mat);
+      loop->vertices()[0] = g2o_opt_->vertex(node_id_from);
+      loop->vertices()[1] = g2o_opt_->vertex(node_id_to);
+      loop->setId(id);
+      g2o_edges.push_back(loop);
+    }
+    std::vector<double> weights = {1, 0.01};
+    EdgeG2OLoop *g2o_loop = new EdgeG2OLoop(g2o_edges, weights);
+
+    g2o_opt_->addEdge(g2o_loop);
+    nodes_to_edge_id_[std::make_pair(node_id_from, node_id_to)] = id;
+
+    std::cout << "loop closure added" << std::endl;
   }
-  // proof found edges
-  // bool has_added = loop_proofer_.optimizeInc(all_loops,bad_loops,good_loops);
-  // if(!has_added)
-  //  return false;
-  // // remove all bad loop closures
-  // for (auto &&id_pair : bad_loops) {
-  //   // get id of the removable edgeType
-  //   size_t edge_id = nodes_to_edge_id_[id_pair];
-  //   // remove from pose graph
-  //   graph_.removeEdge(edge_id);
-  //   auto all_edges = g2o_opt_->vertex(id_pair.first)->edges();
-  //   auto edge_iter = std::find_if(all_edges.begin(), all_edges.end(),
-  //                                 [edge_id](g2o::HyperGraph::EdgeType *e) {
-  //     if (e->id() == edge_id)
-  //       return true;
-  //     else
-  //       return false;
-  //   });
-  //   // remove from g2o
-  //   if (edge_iter != all_edges.end())
-  //     g2o_opt_->removeEdge(*edge_iter);
-  //   else
-  //     ROS_ERROR_STREAM("Loop closure proofer is rejecting edgeType not used
-  //     in "
-  //                      "g2o graph");
-  // }
-  // return true;
+
   if (loops.size() > 0)
     return true;
   return false;

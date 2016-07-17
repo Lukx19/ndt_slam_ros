@@ -339,11 +339,11 @@ void transformGrid()
   GridTypePtr temp_grid(new GridType());
   temp_grid->setCellSize(CELL_SIZE);
 
-  temp_grid->setOrigin(Eigen::Vector3d(0, 0, 0));
+  temp_grid->setOrigin(Eigen::Vector3d(1, 3, 3.12));
 
   temp_grid->mergeIn(*scans[80], Eigen::Vector3d(0, 0, 0), true);
   eigt::transform2d_t<double> trans =
-      eigt::getTransFromPose(Eigen::Vector3d(3, 0, 3.12));
+      eigt::getTransFromPose(Eigen::Vector3d(3, 0, 1.58));
 
   std::cout << trans.matrix();
   std::cout << *temp_grid << std::endl;
