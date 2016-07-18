@@ -31,6 +31,10 @@ pose2d_t<T> transformPose(const pose2d_t<T> &pose,
                           const transform2d_t<T> &trans);
 
 template <typename T = double>
+pose2d_t<T> transformConcat(const pose2d_t<T> &pose,
+                            const transform2d_t<T> &trans);
+
+template <typename T = double>
 transform2d_t<T> transBtwFrames(const pose2d_t<T> &from, const pose2d_t<T> &to);
 // maps from transformation matrix 3x3 to vector
 // [delta_x,delta_y, detla_angle]
@@ -65,11 +69,17 @@ eigt::transform2d_t<T> getTransFromPose(const pose2d_t<T> &trans);
 template <typename T = double>
 T normalizeAngle(T angle);
 
-template <typename Out, typename In>
+template <typename In, typename Out = In>
 Eigen::Matrix<Out, 4, 4> vecToMat3d(const Eigen::Matrix<In, 3, 1> &trans);
 
-template <typename Out, typename In>
+template <typename In, typename Out = In>
 Eigen::Matrix<Out, 3, 3> vecToMat2d(const Eigen::Matrix<In, 3, 1> &trans);
+
+template <typename In, typename Out = In>
+Eigen::Matrix<Out, 3, 1> matToVec2d(const Eigen::Matrix<In, 3, 3> &trans);
+
+template <typename In, typename Out = In>
+Eigen::Matrix<Out, 3, 1> matToVec2d(const Eigen::Matrix<In, 4, 4> &trans);
 }
 // ************************* IMPLEMENTATION****************************
 template <typename T>
@@ -147,6 +157,13 @@ eigt::pose2d_t<T> eigt::transformPose(const pose2d_t<T> &pose,
   return res_pose;
 }
 
+template <typename T = double>
+eigt::pose2d_t<T> eigt::transformConcat(const pose2d_t<T> &pose,
+                                        const transform2d_t<T> &trans)
+{
+  return eigt::getPoseFromTransform(eigt::getTransFromPose(pose) * trans);
+}
+
 template <typename T>
 eigt::pose2d_t<T> eigt::getPoseFromTransform(const transform2d_t<T> &trans)
 {
@@ -214,7 +231,7 @@ T eigt::normalizeAngle(T angle)
   // return angle - 2 * M_PI *std::floor((angle + M_PI) / (2 * M_PI));
 }
 
-template <typename Out, typename In>
+template <typename In, typename Out = In>
 Eigen::Matrix<Out, 4, 4> eigt::vecToMat3d(const Eigen::Matrix<In, 3, 1> &trans)
 {
   Eigen::Matrix<Out, 4, 4> trans_mat = Eigen::Matrix<Out, 4, 4>::Identity();
@@ -229,7 +246,7 @@ Eigen::Matrix<Out, 4, 4> eigt::vecToMat3d(const Eigen::Matrix<In, 3, 1> &trans)
   return trans_mat;
 }
 
-template <typename Out, typename In>
+template <typename In, typename Out = In>
 Eigen::Matrix<Out, 3, 3> eigt::vecToMat2d(const Eigen::Matrix<In, 3, 1> &trans)
 {
   Eigen::Matrix<Out, 3, 3> trans_mat = Eigen::Matrix<Out, 3, 3>::Identity();
@@ -239,6 +256,30 @@ Eigen::Matrix<Out, 3, 3> eigt::vecToMat2d(const Eigen::Matrix<In, 3, 1> &trans)
       static_cast<Out>(trans(0)), static_cast<Out>(trans(1)));
 
   return trans_mat;
+}
+
+template <typename In, typename Out = In>
+Eigen::Matrix<Out, 3, 1> matToVec2d(const Eigen::Matrix<In, 3, 3> &trans)
+{
+  Eigen::Matrix<Out, 3, 1> vec;
+  Eigen::Transform<In, 2, Eigen::Affine, Eigen::ColMajor> trans_mat(trans);
+  Eigen::Matrix<In, 2, 1> translation = trans_mat.translation();
+  vec << static_cast<Out>(translation(0)), static_cast<Out>(translation(1)),
+      static_cast<Out>(
+          std::atan2(trans_mat.rotation()(1, 0), trans_mat.rotation()(0, 0)));
+  return vec;
+}
+
+template <typename In, typename Out = In>
+Eigen::Matrix<Out, 3, 1> matToVec2d(const Eigen::Matrix<In, 4, 4> &trans)
+{
+  Eigen::Matrix<Out, 3, 1> vec;
+  Eigen::Transform<In, 3, Eigen::Affine, Eigen::ColMajor> trans_mat(trans);
+  Eigen::Matrix<In, 3, 1> translation = trans_mat.translation();
+  vec << static_cast<Out>(translation(0)), static_cast<Out>(translation(1)),
+      static_cast<Out>(
+          std::atan2(trans_mat.rotation()(1, 0), trans_mat.rotation()(0, 0)));
+  return vec;
 }
 
 #endif
