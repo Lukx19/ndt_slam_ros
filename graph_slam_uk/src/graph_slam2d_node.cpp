@@ -25,6 +25,9 @@ GraphSlamNode::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
                                                               5, false);
   win_map_pub_ =
       nh_.advertise<graph_slam_uk::NDTMapMsg>(win_pub_topic_, 5, false);
+  map_pcl_pub_ = nh_.advertise<Pcl>(map_pcl_pub_topic_, 1);
+  win_pcl_pub_ = nh_.advertise<Pcl>(win_pcl_pub_topic_, 1);
+
   const int message_cache = 1;
   if (subscribe_mode_ == "ODOM") {
     laser_sub_.subscribe(nh_, laser_topic_, message_cache);
@@ -79,8 +82,15 @@ void GraphSlamNode::initParameters()
 
   map_pub_topic_ =
       nh_private_.param<std::string>("occupancy_map_topic", "/map");
+
+  map_pcl_pub_topic_ =
+      nh_private_.param<std::string>("pcl_map_topic", "/pcl_map");
+
   win_pub_topic_ =
       nh_private_.param<std::string>("window_map_topic", "/window_map");
+
+  win_pcl_pub_topic_ =
+      nh_private_.param<std::string>("window_map_topic_pcl", "/window_pcl");
 
   laser_topic_ = nh_private_.param<std::string>("laser_topic", "/laser");
 
@@ -163,7 +173,7 @@ bool GraphSlamNode::prepareAllData(const ros::Time &time_stamp,
   if (!prepareLaserData(laser, tf_base, pcl)) {
     return false;
   }
-  ROS_INFO("GraphSlam: Messages transformed.");
+  ROS_DEBUG("GraphSlam: Messages transformed.");
   return true;
 }
 
@@ -209,8 +219,8 @@ bool GraphSlamNode::prepareLaserData(
 {
   // project laser message to point cloud class in laser frame_id
   sensor_msgs::PointCloud2 laser_pcl_msg;
-  pcl_t laser_pcl;
-  pcl_t laser_pcl_base;
+  Pcl laser_pcl;
+  Pcl laser_pcl_base;
   /////////////
   projector_.projectLaser(*laser, laser_pcl_msg);
   pcl::moveFromROSMsg(laser_pcl_msg, laser_pcl);
@@ -244,7 +254,8 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
     publishTF(time_stamp);
     return;
   }
-  auto odom_trans = eigt::transBtwPoses(last_odom_, odom);
+  auto odom_trans = eigt::getTransFromPose(last_odom_).inverse() *
+                    eigt::getTransFromPose(odom);
   last_odom_ = odom;
 
   pose_t current_pose = last_pose_;
@@ -255,16 +266,15 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
   // PUBLISHING MSGS
 
   publishTF(time_stamp);
-  win_map_pub_.publish(algorithm_->getWindowMap(fixed_frame_));
-  nav_msgs::OccupancyGrid occ_map = algorithm_->calcOccupancyGrid(fixed_frame_);
-  occ_map.header.frame_id = fixed_frame_;
-  occ_map.header.stamp = ros::Time::now();
-  occ_map_pub_.publish(std::move(occ_map));
+  win_map_pub_.publish(algorithm_->getNDTMap(fixed_frame_));
+  occ_map_pub_.publish(algorithm_->getOccupancyGrid(fixed_frame_));
+  win_pcl_pub_.publish(algorithm_->getPclMap2(fixed_frame_));
+  map_pcl_pub_.publish(algorithm_->getPclMap(fixed_frame_));
   // publish serialized graph
   if (serialize_graph) {
     graph_pub_.publish(algorithm_->getGraphSerialized(fixed_frame_));
     // saveDotGraph();
-    ROS_INFO("Graph_slam2d:GRAPH Markers published.");
+    ROS_DEBUG("Graph_slam2d:GRAPH Markers published.");
   }
   // prepare data for next iteration
   ++seq_;

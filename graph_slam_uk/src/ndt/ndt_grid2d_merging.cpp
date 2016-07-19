@@ -267,6 +267,14 @@ void runningWindow(size_t scan_id)
     std::cout << "INIT MAP: \n" << *map << std::endl << std::endl;
     seq = 0;
     old_origin.setZero();
+    matcher.setOulierRatio(0.3);
+    matcher.setStepSize(0.05);
+    matcher.setCellSize(0.25);
+    matcher.setNumLayers(5);
+
+    matcher_s.setOulierRatio(0.8);
+    // matcher_s.setStepSize(0.01);
+
     return;
   }
   typename PointCloud::Ptr transformed_pcl(new PointCloud());
@@ -278,7 +286,7 @@ void runningWindow(size_t scan_id)
 
   temp_grid->mergeIn(*scans[scan_id], running_win->getOrigin(), true);
   matcher.setInputTarget(running_win);
-  matcher.setInputSource(temp_grid);
+  matcher.setInputSource(temp_grid->getMeans());
   matcher.align(*transformed_pcl, cummulative_trans);
 
   cummulative_trans = matcher.getFinalTransformation();
@@ -376,7 +384,7 @@ void test(size_t start)
     runningWindow(target);
     // testMergeD2D(start);
     std::cout << "start test" << std::endl;
-    for (size_t i = start; i < scans.size(); ++i) {
+    for (size_t i = start; i < scans.size(); i += 3) {
       eigt::transform2d_t<double> real_trans =
           eigt::transBtwPoses(real_poses[target], real_poses[i]);
       // if (eigt::getAngle(real_trans) > MIN_ROTATION ||
@@ -544,8 +552,8 @@ int main(int argc, char **argv)
   // moveWindow();
   // transformGrid();
   // size_t start = 200;
-  // test(0);
-  runSLAM();
-
+  test(0);
+  // runSLAM();
+  testLoopTools();
   return 0;
 }

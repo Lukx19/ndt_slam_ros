@@ -142,14 +142,19 @@ public:
 
   double getRadius() const
   {
-    return std::max(grid_.width() * cell_size_, grid_.height() * cell_size_) /
-           2;
+    return grid_.width() * cell_size_ + grid_.height() * cell_size_ / 4;
   }
   Eigen::Vector2d getCentroid() const
   {
     double x = grid_.right() * cell_size_ - grid_.left() * cell_size_;
-    double y = -(grid_.up() * cell_size_ - grid_.down() * cell_size_);
+    double y = (grid_.up() * cell_size_ - grid_.down() * cell_size_);
     return Eigen::Vector2d(x, y);
+  }
+
+  void clear()
+  {
+    grid_.clear();
+    initialized_ = false;
   }
   NDTGridMsg serialize() const;
 

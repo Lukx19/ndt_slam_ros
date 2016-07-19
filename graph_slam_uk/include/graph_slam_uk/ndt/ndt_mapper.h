@@ -5,6 +5,7 @@
 #include <graph_slam_uk/utils/eigen_tools.h>
 #include <graph_slam_uk/utils/msgs_conversions.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <pcl/point_cloud.h>
 #include <ros/ros.h>
 #include <Eigen/Dense>
 #include <map>
@@ -26,6 +27,7 @@ class NDTMapper
 {
 public:
   typedef NDTGrid2D<CellType, PointType> Grid;
+  typedef typename pcl::PointCloud<PointType> Pcl;
 
 private:
   typedef typename Grid::Ptr NDTGrid2DPtr;
@@ -48,12 +50,18 @@ public:
   }
   nav_msgs::OccupancyGrid calcOccupancyGridMsg() const;
 
+  typename Pcl::Ptr getPclMap() const
+  {
+    return map_pcl_;
+  }
+
 private:
   size_t width_, height_;
   float resolution_;  // [m/cell]
   ros::Time map_recalc_time_;
   cv::Mat map_;
   Grid map_ndt_;
+  typename Pcl::Ptr map_pcl_;
   FrameStorage grids_;
 
   // return id of frame if found. Otherwise exception
@@ -82,6 +90,7 @@ NDTMapper<CellType, PointType>::NDTMapper()
   , resolution_(0.25f)
   , map_(200, 200, CV_8UC1)
   , map_ndt_(Eigen::Vector3d(0, 0, 0))
+  , map_pcl_(new Pcl())
 {
   map_ndt_.setCellSize(resolution_);
 }
@@ -91,6 +100,7 @@ void NDTMapper<CellType, PointType>::addFrame(const NDTGrid2DPtr &frame,
                                               const ros::Time &capture_time)
 {
   grids_.push_back(frame);
+  (*map_pcl_) += (*frame->getMeansTransformed());
   // addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
 }
@@ -99,6 +109,7 @@ template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::addFrame(NDTGrid2DPtr &&frame,
                                               const ros::Time &capture_time)
 {
+  (*map_pcl_) += (*frame->getMeansTransformed());
   grids_.push_back(std::move(frame));
   // addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
@@ -133,16 +144,19 @@ NDTMapper<CellType, PointType>::combineFrames(const NDTGrid2DPtr &a,
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
 {
-  map_ = cv::Scalar(0);
+  // map_ = cv::Scalar(0);
   std::sort(grids_.begin(), grids_.end(),
             [](const NDTGrid2DPtr &a, const NDTGrid2DPtr &b) {
               return a->operator<(*b);
             });
+  map_ndt_.clear();
+  map_pcl_->clear();
   for (auto &&grid : grids_) {
     // addToMap(*grid);
-    map_ndt_.mergeInTraced(*grid, true, true);
+    // map_ndt_.mergeInTraced(*grid, true, true);
+    (*map_pcl_) += (*grid->getMeansTransformed());
   }
-  map_ = frameToMat(map_ndt_.createOccupancyGrid());
+  // map_ = frameToMat(map_ndt_.createOccupancyGrid());
   map_recalc_time_ = calc_time;
 }
 

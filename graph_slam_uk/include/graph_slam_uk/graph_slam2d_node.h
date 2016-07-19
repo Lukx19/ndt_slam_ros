@@ -25,6 +25,7 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl_ros/point_cloud.h>
 #include <pcl_ros/transforms.h>
 //#include <pcl/filters/voxel_grid.h>
 
@@ -47,8 +48,8 @@ class GraphSlamNode
   typedef message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped>
       pose_sub_t;
   typedef Eigen::Vector3d pose_t;
-  typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
-  typedef pcl_t::Ptr pcl_ptr_t;
+  typedef pcl::PointCloud<pcl::PointXYZ> Pcl;
+  typedef Pcl::Ptr pcl_ptr_t;
   typedef eigt::transform2d_t<double> transform_t;
 
 public:
@@ -76,6 +77,8 @@ private:
   ros::Publisher occ_map_pub_;
   ros::Publisher win_map_pub_;
   ros::Publisher graph_pub_;
+  ros::Publisher win_pcl_pub_;
+  ros::Publisher map_pcl_pub_;
   tf::Transform world_tf_trans_;
   uint seq_;
   bool is_ready_;
@@ -89,6 +92,8 @@ private:
   std::string pose_topic_;
   std::string map_pub_topic_;
   std::string win_pub_topic_;
+  std::string map_pcl_pub_topic_;
+  std::string win_pcl_pub_topic_;
   std::string laser_topic_;
   std::string subscribe_mode_;
   // graph serializer info

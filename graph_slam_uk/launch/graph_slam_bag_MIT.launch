@@ -1,6 +1,6 @@
 <launch>
   <group ns="slam">
-    <node pkg="graph_slam_uk" type="graph_slam2d" name="graph_slam2d" respawn="false" output="screen">
+    <node pkg="graph_slam_uk" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
       <!-- <param name="tf_prefix" value="p3dx_0"/> -->
       <param name="robot_base_frame_id" value="base_footprint"/>
       <!-- incomming odometry  tf frame_id without tf_prefix -->

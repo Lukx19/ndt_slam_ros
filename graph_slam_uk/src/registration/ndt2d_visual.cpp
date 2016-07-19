@@ -189,8 +189,8 @@ void testMatch(size_t source_id, size_t target_id)
       static_cast<RobustMatcher *>(matcher)->setInputTarget(target_grid);
     }
     if (mode_type == "basic") {
-      matcher->setInputSource(scans[source_id]);
-      // matcher->setInputSource(source_grid->getMeans());
+      // matcher->setInputSource(scans[source_id]);
+      matcher->setInputSource(source_grid->getMeans());
       static_cast<P2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
   }

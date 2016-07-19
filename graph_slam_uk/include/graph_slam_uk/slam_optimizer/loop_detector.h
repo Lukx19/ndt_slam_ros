@@ -19,11 +19,13 @@ struct EdgeCov {
   size_t node_id_;  // id of node to search
   Covar cov_;       // cumulative covariance
   Transform t_;     // cumulative transformation
+  double distance_;
   size_t hop_;
   EdgeCov()
     : node_id_(0)
     , cov_(Covar::Zero())
     , t_(Transform::Identity())
+    , distance_(0)
     , hop_(0)
     , det_cov_(0)
   {
@@ -56,6 +58,7 @@ struct EdgeCov {
         computeJacc2(co, si) * new_e.cov_ * computeJacc2(co, si).transpose();
     e.det_cov_ = e.cov_.determinant();
     e.t_ = new_e.t_ * this->t_;
+    e.distance_ = this->distance_ + new_e.distance_;
     return e;
   }
 
@@ -135,7 +138,11 @@ private:
 
 public:
   LoopDetector(Graph<P, T> *graph, IScanmatcher2d<T> *matcher)
-    : graph_(graph), matcher_(matcher), min_dist_(4), max_search_depth_(50)
+    : graph_(graph)
+    , matcher_(matcher)
+    , min_dist_(10)
+    , max_dist_(15)
+    , max_search_depth_(50)
   {
   }
   std::vector<LoopClosure<P>> genLoopClosures(Id node_id);
@@ -148,6 +155,7 @@ protected:
 
   const float MATCH_SCORE = 0;
   double min_dist_;
+  double max_dist_;
   size_t max_search_depth_;
   std::vector<internal::ScanInfo> laser_range_;
 
@@ -184,37 +192,49 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
   }
   size_t depth = 0;
   // repeat while some nodes are unvisited
-  while (graph_->nodeCount() != nodes_visited && depth < max_search_depth_) {
-    ++depth;
+  while (graph_->nodeCount() > nodes_visited && depth < max_search_depth_) {
     size_t curr_node_id = fringe.top().node_id_;
+    std::cout << "node: " << curr_node_id << std::endl;
     // enough overlap
     if (isCloseMatch(fringe.top())) {
-      if (far_enough) {
-        // calculate transformation with scanmatching
-        Node &source_n = graph_->getNode(curr_node_id);
-        Node &target_n = graph_->getNode(node_id);
-        // try to match laser scans
-        auto guess_trans =
-            eigt::transBtwPoses(target_n.getPose(), source_n.getPose());
-        guess_trans(0, 2) = guess_trans(1, 2) = 0;
-        MatchResult res = matcher_->match(
-            source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
+      // increase depth. Prevents too many scanmatches
+      ++depth;
+      // if (far_enough) {
+      // calculate transformation with scanmatching
+      Node &source_n = graph_->getNode(curr_node_id);
+      Node &target_n = graph_->getNode(node_id);
+      // try to match laser scans
+      auto guess_trans = eigt::getTransFromPose(target_n.getPose()).inverse() *
+                         eigt::getTransFromPose(source_n.getPose());
+      guess_trans(0, 2) = guess_trans(1, 2) = 0;
 
-        // test if sucesfull match
-        if (res.success_ && res.score_ > MATCH_SCORE) {
-          // create edge
-          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                           << "accepted by matching");
-          all_constrains.push_back(LoopClosure<P>(node_id, curr_node_id,
-                                                  res.inform_, res.transform_));
-        } else {
-          ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
-                                           << "rejected by matching");
-        }
+      MatchResult res = matcher_->match(
+          source_n.getDataObj(), target_n.getDataObj(), guess_trans.matrix());
+      // MatchResult res;
+      // res.success_ = true;
+      // res.score_ = 1000;
+      // res.transform_ = guess_trans;
+      // test if sucesfull match
+      if (res.success_ && res.score_ > MATCH_SCORE) {
+        // create edge
+        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                         << "accepted by matching");
+        all_constrains.push_back(
+            LoopClosure<P>(node_id, curr_node_id, res.inform_, res.transform_));
+        std::cout << "source: " << source_n.getPose().transpose() << std::endl;
+        std::cout << "target: " << target_n.getPose().transpose() << std::endl;
+        std::cout << "calc_trans: "
+                  << eigt::getPoseFromTransform(res.transform_).transpose()
+                  << std::endl;
+
+      } else {
+        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+                                         << "rejected by matching");
       }
-    } else {
-      far_enough = true;
     }
+    // } else {
+    //   far_enough = true;
+    // }
     graph_->getNode(curr_node_id).setVisited(true);
     ++nodes_visited;
     auto f_top = fringe.top();
@@ -282,6 +302,7 @@ std::vector<internal::EdgeCov> LoopDetector<P, T>::genPossibleEdges(
     ec.node_id_ = edge_in->getFrom()->getId();
     ec.cov_ = edge_in->getInformationMatrix().inverse();
     ec.t_ = edge_in->getTransMatrix().inverse();
+    ec.distance_ = ec.t_.translation().norm();
     outp.emplace_back(last_edge + ec);
   }
   return outp;
@@ -335,12 +356,17 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
   // std::cout<<separation.transpose()<<std::endl;
   Eigen::Matrix2d icov = edge.cov_.inverse().block(0, 0, 2, 2);
   double m = (separation.transpose() * icov).dot(separation);
-  double dist = delta_c.norm() - b_params.radius_ - a_params.radius_;
-  // if (dist < min_dist_)
-  //   return false;
+  double dist = delta_c.norm();  // - b_params.radius_ - a_params.radius_;
+
   std::cout << "distance manh:" << m << " dist: " << dist
-            << " det:" << edge.cov_.determinant() << std::endl;
-  if (m < 3)
+            << " distance_traveled:" << edge.distance_ << std::endl;
+  // if (m < 3)
+  //   return true;
+  // else
+  //   return false;
+  if (edge.distance_ < min_dist_)
+    return false;
+  if (std::abs(dist) < max_dist_)
     return true;
   else
     return false;

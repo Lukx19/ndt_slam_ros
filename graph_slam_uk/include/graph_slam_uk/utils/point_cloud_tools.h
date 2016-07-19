@@ -1,6 +1,7 @@
 #ifndef GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 #define GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 
+#include <pcl/io/png_io.h>
 #include <pcl/point_cloud.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <vector>
@@ -119,25 +120,27 @@ void savePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
              const typename PointCloud<PointType>::ConstPtr &pcl2,
              const std::string &filename)
 {
-  // Initializing point cloud visualizer
-  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer(
-      new pcl::visualization::PCLVisualizer("3D Viewer"));
-  viewer->setBackgroundColor(0, 0, 0);
-  // visualize firs cloud
-  pcl::visualization::PointCloudColorHandlerCustom<PointType> first_color(
-      pcl1, 255, 0, 0);
-  viewer->addPointCloud<PointType>(pcl1, first_color, "first cloud");
-  viewer->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "first cloud");
-  // visualize second cloud
-  pcl::visualization::PointCloudColorHandlerCustom<PointType> second_color(
-      pcl2, 0, 255, 0);
-  viewer->addPointCloud<PointType>(pcl2, second_color, "second cloud");
-  viewer->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 4, "second cloud");
-  viewer->addCoordinateSystem(1.0, "global");
-  // Wait until visualizer window is closed.
-  viewer->saveScreenshot(filename);
+  PointCloud<PointXYZRGB> colored_pcl;
+  colored_pcl.reserve(pcl1->size() + pcl2->size());
+  uint8_t r = 255, g = 0, b = 0;
+  for (size_t i = 0; i < pcl1->size(); ++i) {
+    PointXYZRGB pt(r, g, b);
+    pt.x = (*pcl1)[i].x;
+    pt.y = (*pcl1)[i].y;
+    pt.z = (*pcl1)[i].z;
+    colored_pcl.push_back(pt);
+  }
+  r = 0;
+  g = 255;
+  b = 0;
+  for (size_t i = 0; i < pcl2->size(); ++i) {
+    PointXYZRGB pt(r, g, b);
+    pt.x = (*pcl2)[i].x;
+    pt.y = (*pcl2)[i].y;
+    pt.z = (*pcl2)[i].z;
+    colored_pcl.push_back(pt);
+  }
+  io::savePCDFile(filename + ".pcd", colored_pcl);
 }
 }
 

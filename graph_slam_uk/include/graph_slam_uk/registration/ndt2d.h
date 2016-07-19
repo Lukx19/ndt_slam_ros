@@ -244,8 +244,8 @@ protected:
 template <typename PointSource, typename PointTarget, typename CellType>
 NormalDistributionsTransform2DEx<PointSource, PointTarget,
                                  CellType>::NormalDistributionsTransform2DEx()
-  : step_size_(0.01)
-  , outlier_ratio_(0.99)
+  : step_size_(0.05)
+  , outlier_ratio_(0.30)
   , trans_probability_()
   , layer_count_(4)
 {

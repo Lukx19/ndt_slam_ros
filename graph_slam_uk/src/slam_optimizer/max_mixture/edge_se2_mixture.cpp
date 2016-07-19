@@ -96,7 +96,7 @@ void EdgeSE2Mixture::computeError()
   }
 
   bestComponent = best;
-  // cerr << "\nBest component is " << bestComponent << "\n";
+  cerr << "\nBest component is " << bestComponent << "\n";
   UpdateBelief(bestComponent);
 
   // this will be used by the optimizer

@@ -21,8 +21,10 @@
 #include <iostream>
 
 #include <g2o/core/block_solver.h>
+#include <g2o/core/estimate_propagator.h>
 #include <g2o/core/optimization_algorithm_gauss_newton.h>
 #include <g2o/core/sparse_optimizer.h>
+#include <g2o/core/sparse_optimizer_terminate_action.h>
 #include <g2o/solvers/csparse/linear_solver_csparse.h>
 #include <g2o/types/slam2d/edge_se2.h>
 #include <g2o/types/slam2d/vertex_se2.h>
@@ -71,6 +73,11 @@ public:
   {
     linear_solver_->setBlockOrdering(false);
     g2o_opt_->setAlgorithm(solver_gauss_.get());
+    g2o::SparseOptimizerTerminateAction *terminateAction =
+        new g2o::SparseOptimizerTerminateAction;
+    terminateAction->setGainThreshold(1e-6);
+    terminateAction->setMaxIterations(10);
+    g2o_opt_->addPostIterationAction(terminateAction);
   }
 
   ~Slam2D()
@@ -139,11 +146,16 @@ protected:
 template <typename T>
 bool Slam2D<T>::optimalize()
 {
+  // initializeGrapFromOdom();
   g2o_opt_->setVerbose(true);
   g2o_opt_->initializeOptimization();
-  // g2o_opt_->computeActiveErrors();
+  g2o::EstimatePropagatorCostOdometry costFunction(g2o_opt_.get());
+  g2o_opt_->computeInitialGuess(costFunction);
+  g2o_opt_->computeActiveErrors();
   g2o_opt_->optimize(10);
-  ROS_INFO_STREAM("[SLAM2D]: optimalization done");
+
+  g2o_opt_->computeActiveErrors();
+  ROS_INFO_STREAM("[SLAM2D]: optimalization done: " << g2o_opt_->chi2());
   updatePoseGraph();
   return true;
 }
@@ -197,6 +209,7 @@ size_t Slam2D<T>::addConstrain(size_t node_id_from, size_t node_id_to,
              inform_mat);
   size_t id = graph_.addEdge(std::move(e));
   graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
+  graph_.getEdge(id).setType(EdgeType::Type::ODOM);
   // adding G2O edgeType
   EdgeG2O *edge_g2o = new EdgeG2O();
   edge_g2o->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
@@ -360,8 +373,8 @@ void Slam2D<T>::initializeGrapFromOdom()
   }
   while (next_e != nullptr) {
     next_nd = next_e->getTo()->getId();
-    graph_.getNode(next_nd).setPose(
-        eigt::transformPose(pose, next_e->getTransMatrix()));
+    graph_.getNode(next_nd).setPose(eigt::transformConcat(
+        next_e->getFrom()->getPose(), next_e->getTransMatrix()));
     next_e = nullptr;
     for (EdgeType *e : graph_.getNode(next_nd).getEdgesOut()) {
       if (e->getType() == EdgeType::Type::ODOM) {
@@ -380,6 +393,7 @@ void Slam2D<T>::updatePoseGraph()
         dynamic_cast<VertexG2O *>(g2o_opt_->vertex(it->getId()))
             ->estimate()
             .toVector();
+    std::cout << "pose diff: " << new_pose - it->getPose() << std::endl;
     it->setPose(new_pose);
     it->getDataObj().updatePosition(new_pose);
   }

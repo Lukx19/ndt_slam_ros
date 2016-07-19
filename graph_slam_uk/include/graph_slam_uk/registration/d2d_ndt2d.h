@@ -67,7 +67,7 @@ public:
   inline void setNumLayers(size_t num)
   {
     layer_count_ = num;
-    initCellSizes();
+    initCellSizes(getCellSize());
     initParams();
   }
 

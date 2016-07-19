@@ -45,9 +45,10 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   matcher.setInputSource(source.getData());
   matcher.setInputTarget(target.getData());
   // Set initial alignment estimate found using robot odometry.
-  Eigen::Matrix<float, 4, 4> init_guess = Eigen::Matrix4f::Identity();
-  // eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess))
-  //     .cast<float>();
+  // Eigen::Matrix<float, 4, 4> init_guess = Eigen::Matrix4f::Identity();
+  Eigen::Matrix<float, 4, 4> init_guess =
+      eigt::convertFromTransform(eigt::transform2d_t<double>(initial_guess))
+          .cast<float>();
   // Calculating required rigid transform to align the input cloud to the target
   // cloud.
   typename pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_out(
@@ -58,15 +59,15 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   std::stringstream ss;
   if (matcher.hasConverged()) {
     ss << "valid";
+    // pcl::visualizePcl<typename
+    // FrameType::Point>(target.getData()->getMeans(),
+    //                                              pcl_out);
   } else {
     ss << "invalid";
   }
-  ss << target.getData()->getTimestamp() << "_" << (rand() % 1000000) + 1
-     << ".png" << std::endl;
-
-  // pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(),
-  // pcl_out,
-  //                                         ss.str());
+  ss << target.getData()->getTimestamp() << "_" << (rand() % 1000000) + 1;
+  pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(), pcl_out,
+                                          ss.str());
   // pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
   // pcl_out);
 
