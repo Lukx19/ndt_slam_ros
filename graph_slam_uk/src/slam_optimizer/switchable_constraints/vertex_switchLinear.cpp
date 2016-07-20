@@ -33,7 +33,7 @@ void VertexSwitchLinear::setToOriginImpl()
   _estimate = _x;
 }
 
-void VertexSwitchLinear::setEstimate(double& et)
+void VertexSwitchLinear::setEstimate(const double& et)
 {
   _x = et;
   _estimate = _x;

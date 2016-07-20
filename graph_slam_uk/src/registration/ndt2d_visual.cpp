@@ -48,7 +48,7 @@ typedef D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ, pcl::PointXYZ>
 double EPSILON = 0.001;
 double MIN_DISPLACEMENT = 0.4;
 double MIN_ROTATION = 0.3;
-size_t MAX_LINES = 5000;
+size_t MAX_LINES = 10000;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 // std::vector<MatchResult> matches;
@@ -57,6 +57,8 @@ Registration<pcl::PointXYZ, pcl::PointXYZ> *matcher;
 IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> *proofer;
 // SampleConsensusInitialAlignment<pcl::PointXYZ, pcl::PointXYZ> * proofer;
 std::string mode_type;
+
+Eigen::Vector3d total_error_ = Eigen::Vector3d::Identity();
 
 std::vector<std::string> split(std::string data, std::string token)
 {
@@ -139,30 +141,19 @@ void testMatch(size_t source_id, size_t target_id)
 {
   std::chrono::time_point<std::chrono::system_clock> s_proof, e_proof, s_match,
       e_match;
-  eigt::pose2d_t<double> real_trans = eigt::getPoseFromTransform(
-      eigt::transBtwPoses(real_poses[target_id], real_poses[source_id]));
   std::chrono::duration<double> elapsed_seconds;
   pcl_t::Ptr output_pr(new pcl_t);
   pcl_t::Ptr output_m(new pcl_t);
 
   // prepare initial guess
-  Eigen::Matrix4f guess = Eigen::Matrix4f::Identity();
-  // Eigen::Matrix4f guess = eigt::convertFromTransform(eigt::transBtwPoses(
-  //                            real_poses[target_id],
-  //                            real_poses[source_id])).cast<float>();
-  // calculate proof
-  s_proof = std::chrono::system_clock::now();
-  proofer->setInputSource(scans[source_id]);
-  proofer->setInputTarget(scans[target_id]);
-  proofer->align(*output_pr, guess);
-
-  e_proof = std::chrono::system_clock::now();
-  eigt::pose2d_t<double> proof_trans =
-      eigt::getPoseFromTransform(eigt::convertToTransform<double>(
-          proofer->getFinalTransformation().cast<double>()));
-  elapsed_seconds = (e_proof - s_proof);
-  std::cout << "PROOF TRANSFORM:" << proof_trans.transpose()
-            << " calc time: " << elapsed_seconds.count() << std::endl;
+  Eigen::Matrix4f odometry =
+      eigt::convertFromTransform(
+          eigt::getTransFromPose(real_poses[target_id]).inverse() *
+          eigt::getTransFromPose(real_poses[source_id]))
+          .cast<float>();
+  Eigen::Vector3d real_trans = eigt::getPoseFromTransform(
+      eigt::getTransFromPose(real_poses[target_id]).inverse() *
+      eigt::getTransFromPose(real_poses[source_id]));
   ////////////////////////////////////////////////////////
   // calculate my matcher
   s_match = std::chrono::system_clock::now();
@@ -172,9 +163,13 @@ void testMatch(size_t source_id, size_t target_id)
   } else {
     GridTypePtr target_grid(new GridType());
     GridTypePtr source_grid(new GridType());
+    target_grid->setCellSize(0.4);
+    source_grid->setCellSize(0.4);
     target_grid->initializeSimple(*scans[target_id]);
     source_grid->initializeSimple(*scans[source_id]);
     if (mode_type == "d2d") {
+      static_cast<D2DMatcher *>(matcher)->setOulierRatio(0.4);
+      static_cast<D2DMatcher *>(matcher)->setStepSize(0.05);
       static_cast<D2DMatcher *>(matcher)->setInputSource(source_grid);
       static_cast<D2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
@@ -193,116 +188,75 @@ void testMatch(size_t source_id, size_t target_id)
       matcher->setInputSource(source_grid->getMeans());
       static_cast<P2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
+    if (mode_type == "p2d") {
+      matcher->setInputSource(scans[source_id]);
+      static_cast<P2DMatcher *>(matcher)->setInputTarget(target_grid);
+    }
+    if (mode_type == "icpNDT") {
+      matcher->setInputSource(source_grid->getMeans());
+      matcher->setInputTarget(target_grid->getMeans());
+    }
   }
-  matcher->align(*output_m, guess);
+  matcher->align(*output_m);
   e_match = std::chrono::system_clock::now();
 
-  std::cout << "sucess" << matcher->hasConverged() << std::endl;
-  std::cout << "result score: " << matcher->getFitnessScore() << std::endl;
+  // std::cout << "sucess" << matcher->hasConverged() << std::endl;
+  // std::cout << "result score: " << matcher->getFitnessScore() << std::endl;
   eigt::pose2d_t<double> calc_trans =
       eigt::getPoseFromTransform(eigt::convertToTransform<double>(
           matcher->getFinalTransformation().cast<double>()));
 
   elapsed_seconds = (e_match - s_match);
-  std::cout << "CALC TRANSFORM:" << calc_trans.transpose()
-            << " calc time: " << elapsed_seconds.count() << std::endl;
-  std::cout << "DIFF:" << (proof_trans - calc_trans).cwiseAbs().transpose()
-            << std::endl
-            << std::endl;
-
-  ///////////////////////////OUTPUT/////////////////////////
-
-  // Transforming unfiltered, input cloud using found transform.
-  pcl_t::Ptr output(new pcl_t);
-  pcl::transformPointCloud(
-      *scans[source_id], *output,
-      eigt::convertFromTransform(eigt::getTransFromPose(calc_trans))
-          .cast<float>());
-  // Initializing point cloud visualizer
-  boost::shared_ptr<pcl::visualization::PCLVisualizer> viewer_final(
-      new pcl::visualization::PCLVisualizer("3D Viewer"));
-  viewer_final->setBackgroundColor(0, 0, 0);
-
-  // Coloring and visualizing target cloud (red).
-  pcl_t::Ptr target(new pcl_t);
-  auto tpos = Eigen::Matrix4f::
-      Identity();  // eigt::convertFromTransform(eigt::getTransFromPose(real_poses[target_id]).cast<float>());
-  pcl::transformPointCloud(*scans[target_id], *target, tpos);
-  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> target_color(
-      target, 255, 0, 0);
-  viewer_final->addPointCloud<pcl::PointXYZ>(target, target_color, "target "
-                                                                   "cloud");
-  viewer_final->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "target cloud");
-
-  // Coloring and visualizing transformed input cloud (green).
-  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> output_color(
-      output, 0, 255, 0);
-  viewer_final->addPointCloud<pcl::PointXYZ>(output, output_color, "output "
-                                                                   "cloud");
-  viewer_final->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "output cloud");
-
-  // Coloring and visualizing input cloud transformed by odom (blue).
-  pcl_t::Ptr odom(new pcl_t);
-  // auto iguess =
-  // eigt::convertFromTransform(eigt::getTransFromPose(real_poses[source_id]).cast<float>());
-  auto iodom = eigt::convertFromTransform(
-      eigt::transBtwPoses(real_poses[target_id], real_poses[source_id]));
-  pcl::transformPointCloud(*scans[source_id], *odom, iodom);
-  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> odom_color(
-      odom, 100, 0, 255);
-  viewer_final->addPointCloud<pcl::PointXYZ>(odom, odom_color, "odom cloud");
-  viewer_final->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "odom cloud");
-
-  // // Coloring and visualizing proof cloud (gray).
-  // pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>
-  // proof_color (output_pr, 128, 128, 128);
-  // viewer_final->addPointCloud<pcl::PointXYZ> (output_pr, proof_color, "proof
-  // cloud");
-  // viewer_final->setPointCloudRenderingProperties
-  // (pcl::visualization::PCL_VISUALIZER_POINT_SIZE,
-  //                                                 1, "proof cloud");
-
-  // Coloring and visualizing source cloud (gray).
-  pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> source_color(
-      scans[source_id], 128, 128, 128);
-  viewer_final->addPointCloud<pcl::PointXYZ>(scans[source_id], source_color,
-                                             "source cloud");
-  viewer_final->setPointCloudRenderingProperties(
-      pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "source cloud");
-  // Starting visualizer
-  viewer_final->addCoordinateSystem(1.0, "global");
-  viewer_final->initCameraParameters();
-  viewer_final->setCameraPosition(0, 0, 10, 0, 0, 0);
-
-  // Wait until visualizer window is closed.
-  while (!viewer_final->wasStopped()) {
-    viewer_final->spinOnce(100);
-    boost::this_thread::sleep(boost::posix_time::microseconds(100000));
-  }
+  // std::cout << "CALC TRANSFORM:" << calc_trans.transpose()
+  //           << " calc time: " << elapsed_seconds.count() << std::endl;
+  // std::cout << "DIFF:" << (real_trans - calc_trans).cwiseAbs().transpose()
+  //           << std::endl
+  //           << std::endl;
+  total_error_ += (real_trans - calc_trans).cwiseAbs();
 }
 
 void test(size_t start)
 {
   // matches.clear();
   size_t target = 0;
+  size_t iterations = 0;
+  std::chrono::time_point<std::chrono::system_clock> s_total, e_total;
+  std::chrono::duration<double> elapsed_seconds;
+  size_t max_matchings = 1000;
   std::cout << "start test" << std::endl;
+  s_total = std::chrono::system_clock::now();
   for (size_t i = start; i < scans.size(); ++i) {
     eigt::transform2d_t<double> real_trans =
-        eigt::transBtwPoses(real_poses[target], real_poses[i]);
-    if (eigt::getAngle(real_trans) > MIN_ROTATION ||
+        eigt::getTransFromPose(real_poses[target]).inverse() *
+        eigt::getTransFromPose(real_poses[i]);
+
+    if (std::abs(eigt::getAngle(real_trans)) > MIN_ROTATION ||
         eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
-      std::cout << "real trans: "
-                << eigt::getPoseFromTransform(real_trans).transpose()
-                << std::endl;
-      std::cout << "matching " << i << "  " << target << std::endl;
+      // std::cout << "real trans: "
+      //           << eigt::getPoseFromTransform(real_trans).transpose()
+      //           << std::endl;
+      // std::cout << std::abs(eigt::getAngle(real_trans)) << ":"
+      //           << eigt::getDisplacement(real_trans) << std::endl;
       testMatch(i, target);
       target = i;
+      ++iterations;
+      if (iterations > max_matchings)
+        break;
       // return;
     }
   }
+  e_total = std::chrono::system_clock::now();
+  elapsed_seconds = (e_total - s_total);
+  Eigen::Vector3d error = total_error_ / iterations;
+
+  std::cout << "-------------------------------------------------------------"
+               "\n";
+  std::cout << "average error: (x,y,theta)" << error.transpose()
+            << " number of matchings:" << iterations
+            << " average time per match: "
+            << elapsed_seconds.count() / iterations << std::endl;
+  std::cout << "-------------------------------------------------------------"
+               "\n";
 }
 
 void testSkip(size_t start)
@@ -327,7 +281,8 @@ int main(int argc, char **argv)
   std::vector<std::string> args(argv, argv + argc);
   if (args.size() < 3 &&
       (args[2] != "d2d" && args[2] != "basic" && args[2] != "corr" &&
-       args[2] != "robust" && args[2] != "proof")) {
+       args[2] != "robust" && args[2] != "proof" && args[2] != "p2d" &&
+       args[2] != "icpNDT")) {
     std::cout << "Correct format of arguments: \n Path to the folder with "
                  "data.poses, data.scans was not provided\n Calculation engine "
                  "(d2d,basic,corr,robust) \n [Min displacement (m) min "
@@ -360,6 +315,10 @@ int main(int argc, char **argv)
     matcher = new RobustMatcher();
   } else if (args[2] == "proof") {
     matcher = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
+  } else if (args[2] == "p2d") {
+    matcher = new P2DMatcher();
+  } else if ((args[2] == "icpNDT")) {
+    matcher = new IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ>();
   }
   mode_type = args[2];
   // testMatch(4, 2);
@@ -367,8 +326,8 @@ int main(int argc, char **argv)
   // testMatch(6, 0);
   // testMatch(0, 10);
   // testMatch(0, 100);
-  size_t start = 80;
-  test(start);
+  // size_t start = 80;
+  test(0);
   delete matcher;
   delete proofer;
   return 0;

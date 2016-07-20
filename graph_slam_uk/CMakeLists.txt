@@ -169,11 +169,19 @@ add_definitions(
 )
 link_libraries(${G2O_LIBRARIES})
 set(MAX_MIXTURES_SRC_FILES
-  "src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
+  src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
   src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
   src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
   src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
-  ")
+  )
+
+set(SWITCH_CONSTRAINS_SRC_FILES
+  src/slam_optimizer/switchable_constraints/edge_se2Switchable.cpp
+  # src/slam_optimizer/switchable_constraints/edge_se3Switchable.cpp
+  src/slam_optimizer/switchable_constraints/edge_switchPrior.cpp
+  src/slam_optimizer/switchable_constraints/vertex_switchLinear.cpp
+  src/slam_optimizer/switchable_constraints/types_g2o_robust.cpp
+)
 
 add_executable(graph_slam2d_g2o_parser src/slam_optimizer/parser2d.cpp)
 target_link_libraries(graph_slam2d_g2o_parser
@@ -185,11 +193,8 @@ add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
-  src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
-  src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
-  src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
-  src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
-  # ${MAX_MIXTURES_SRC_FILES}
+  ${MAX_MIXTURES_SRC_FILES}
+  ${SWITCH_CONSTRAINS_SRC_FILES}
   )
 add_dependencies(graph_slam2d ${PROJECT_NAME}_generate_messages_cpp)
   #${${PROJECT_NAME}_EXPORTED_TARGETS})
@@ -213,11 +218,8 @@ add_executable(ndt_grid2d_merging
   src/ndt/ndt_grid2d_merging.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
-  src/slam_optimizer/max_mixture/edge_se2_mixture.cpp
-  src/slam_optimizer/max_mixture/edge_se2_pointxy_mixture.cpp
-  src/slam_optimizer/max_mixture/edge_se3_mixture.cpp
-  src/slam_optimizer/max_mixture/types_g2o_mixture.cpp
-  # ${MAX_MIXTURES_SRC_FILES}
+  ${MAX_MIXTURES_SRC_FILES}
+  ${SWITCH_CONSTRAINS_SRC_FILES}
   )
 target_link_libraries (ndt_grid2d_merging
   ${PCL_LIBRARIES}

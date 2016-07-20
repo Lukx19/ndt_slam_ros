@@ -1,7 +1,7 @@
 #ifndef GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 #define GRAPH_SLAM_UK_POINT_CLOUD_TOOLS
 
-#include <pcl/io/png_io.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/point_cloud.h>
 #include <pcl/visualization/pcl_visualizer.h>
 #include <vector>
@@ -140,7 +140,8 @@ void savePcl(const typename PointCloud<PointType>::ConstPtr &pcl1,
     pt.z = (*pcl2)[i].z;
     colored_pcl.push_back(pt);
   }
-  io::savePCDFile(filename + ".pcd", colored_pcl);
+  std::string file_extension = filename + ".pcd";
+  io::savePCDFile(file_extension, colored_pcl);
 }
 }
 

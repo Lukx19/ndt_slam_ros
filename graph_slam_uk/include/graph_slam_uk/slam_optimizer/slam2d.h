@@ -17,6 +17,7 @@
 
 #include <deque>
 #include <map>
+#include <unordered_map>
 
 #include <iostream>
 
@@ -31,6 +32,9 @@
 
 #include <graph_slam_uk/slam_optimizer/max_mixture/types_g2o_mixture.h>
 
+#include <graph_slam_uk/slam_optimizer/switchable_constraints/edge_se2Switchable.h>
+#include <graph_slam_uk/slam_optimizer/switchable_constraints/edge_switchPrior.h>
+#include <graph_slam_uk/slam_optimizer/switchable_constraints/vertex_switchLinear.h>
 namespace slamuk
 {
 template <typename T>
@@ -47,8 +51,10 @@ class Slam2D : public IGraphOptimalizer2d<T>
   typedef g2o::VertexSE2 VertexG2O;
   typedef g2o::SE2 PoseG2O;
   typedef g2o::EdgeSE2 EdgeG2O;
-  // typedef VertexSwitchLinear VertexG2O;
-  typedef EdgeSE2Mixture EdgeG2OLoop;
+
+  typedef EdgeSE2Mixture EdgeG2OMM;
+  // typedefs for switchable constrains
+
   typedef RRRLoopProofer<RRRG2OWrapper> LoopProofer;
 
 public:
@@ -59,6 +65,8 @@ public:
     , prevlast_node_id_(0)
     , first_node_id_(0)
     , first_node_added_(false)
+    , g2o_edge_seq_(0)
+    , g2o_node_seq_(0)
     , graph_()
     , matcher_(std::move(matcher))
     , g2o_opt_(new g2o::SparseOptimizer())
@@ -120,6 +128,9 @@ protected:
   size_t prevlast_node_id_;
   size_t first_node_id_;
   bool first_node_added_;
+  size_t g2o_edge_seq_;
+  size_t g2o_node_seq_;
+
   GraphType graph_;
   std::unique_ptr<IScanmatcher2d<T>> matcher_;
 
@@ -134,7 +145,14 @@ protected:
   LoopProofer loop_proofer_;
 
   std::map<std::pair<size_t, size_t>, size_t> nodes_to_edge_id_;
+  std::unordered_map<size_t, VertexG2O *> id_to_g2o_vertex_;
 
+  void addMaxMixtureEdge(VertexG2O *from, VertexG2O *to,
+                         const Eigen::Vector3d &trans,
+                         const Eigen::Matrix3d &inform_mat);
+  void addSwitchConstrainEdge(VertexG2O *from, VertexG2O *to,
+                              const Eigen::Vector3d &trans,
+                              const Eigen::Matrix3d &inform_mat);
   void initializeGrapFromOdom();
   void updatePoseGraph();
   visualization_msgs::MarkerArray createListMarkers(std::string frame_id) const;
@@ -151,7 +169,7 @@ bool Slam2D<T>::optimalize()
   g2o_opt_->initializeOptimization();
   g2o::EstimatePropagatorCostOdometry costFunction(g2o_opt_.get());
   g2o_opt_->computeInitialGuess(costFunction);
-  g2o_opt_->computeActiveErrors();
+  // g2o_opt_->computeActiveErrors();
   g2o_opt_->optimize(10);
 
   g2o_opt_->computeActiveErrors();
@@ -182,7 +200,7 @@ size_t Slam2D<T>::addPose(const Eigen::Vector3d &position, T &obj)
   VertexG2O::EstimateType xytheta(
       PoseG2O(position(0), position(1), position(2)));
   VertexG2O *pose = new VertexG2O();
-  pose->setId(id);
+  pose->setId(g2o_node_seq_);
   pose->setEstimate(xytheta);
   // initialize ids
   if (!first_node_added_) {
@@ -195,6 +213,8 @@ size_t Slam2D<T>::addPose(const Eigen::Vector3d &position, T &obj)
     last_node_id_ = id;
   }
   g2o_opt_->addVertex(pose);
+  id_to_g2o_vertex_[id] = pose;
+  ++g2o_node_seq_;
   return id;
 }
 
@@ -205,8 +225,12 @@ size_t Slam2D<T>::addConstrain(size_t node_id_from, size_t node_id_to,
 {
   ROS_INFO_STREAM("[SLAM2D]: Adding constrain betwen nodes:"
                   << node_id_from << "->" << node_id_to);
+  Eigen::Matrix3d information;
+  information.setIdentity();
+  information *= 500;
+  information(2, 2) = 5000;
   EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to), trans,
-             inform_mat);
+             information);
   size_t id = graph_.addEdge(std::move(e));
   graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
   graph_.getEdge(id).setType(EdgeType::Type::ODOM);
@@ -214,13 +238,15 @@ size_t Slam2D<T>::addConstrain(size_t node_id_from, size_t node_id_to,
   EdgeG2O *edge_g2o = new EdgeG2O();
   edge_g2o->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
 
-  edge_g2o->setInformation(inform_mat);
+  edge_g2o->setInformation(information);
 
-  edge_g2o->vertices()[0] = g2o_opt_->vertex(node_id_from);
-  edge_g2o->vertices()[1] = g2o_opt_->vertex(node_id_to);
-  edge_g2o->setId(id);
+  edge_g2o->vertices()[0] = id_to_g2o_vertex_[node_id_from];
+  edge_g2o->vertices()[1] = id_to_g2o_vertex_[node_id_to];
+  edge_g2o->setId(g2o_edge_seq_);
+  ++g2o_edge_seq_;
   g2o_opt_->addEdge(edge_g2o);
   nodes_to_edge_id_[std::make_pair(node_id_from, node_id_to)] = id;
+
   return id;
 }
 
@@ -253,30 +279,25 @@ bool Slam2D<T>::tryLoopClose(size_t node_id)
     ROS_INFO_STREAM("[SLAM2D]: Adding loop constrain betwen nodes:"
                     << node_id_from << "->" << node_id_to);
 
-    EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to),
-               trans, constrain.information_);
-    size_t id = graph_.addEdge(std::move(e));
-    graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
-    graph_.getEdge(id).setType(EdgeType::Type::LOOP);
+    // EdgeType e(&graph_.getNode(node_id_from), &graph_.getNode(node_id_to),
+    //            trans, constrain.information_);
+    // size_t id = graph_.addEdge(std::move(e));
+    // graph_.getEdge(id).setState(EdgeType::State::ACTIVE);
+    // graph_.getEdge(id).setType(EdgeType::Type::LOOP);
 
     // adding G2O edgeType
-    std::vector<typename Policy::InformMatrix> inform_matrices = {
-        constrain.information_, Policy::InformMatrix::Identity() * 5e-10};
-    std::vector<EdgeG2O *> g2o_edges;
+    // //constrain.information_
 
-    for (auto &&info_mat : inform_matrices) {
-      EdgeG2O *loop = new EdgeG2O();
-      loop->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
-      loop->setInformation(info_mat);
-      loop->vertices()[0] = g2o_opt_->vertex(node_id_from);
-      loop->vertices()[1] = g2o_opt_->vertex(node_id_to);
-      loop->setId(id);
-      g2o_edges.push_back(loop);
-    }
-    std::vector<double> weights = {1, 0.01};
-    EdgeG2OLoop *g2o_loop = new EdgeG2OLoop(g2o_edges, weights);
+    // addMaxMixtureEdge( id_to_g2o_vertex_[node_id_from],
+    // id_to_g2o_vertex_[node_id_to], trans,
+    // constrain.information_);
 
-    g2o_opt_->addEdge(g2o_loop);
+    // addSwitchConstrainEdge(id_to_g2o_vertex_[node_id_from],
+    //                        id_to_g2o_vertex_[node_id_to], trans,
+    //                        constrain.information_);
+    size_t id =
+        addConstrain(node_id_from, node_id_to, trans, constrain.information_);
+    graph_.getEdge(id).setType(EdgeType::Type::LOOP);
     nodes_to_edge_id_[std::make_pair(node_id_from, node_id_to)] = id;
 
     std::cout << "loop closure added" << std::endl;
@@ -353,6 +374,67 @@ void Slam2D<T>::getGraphSerialized(std::ostream &stream) const
            << std::endl;
   }
 }
+////////////////////////////////////// PRIVATE AND PROTECTED
+template <typename T>
+void Slam2D<T>::addMaxMixtureEdge(VertexG2O *from, VertexG2O *to,
+                                  const Eigen::Vector3d &trans,
+                                  const Eigen::Matrix3d &inform_mat)
+{
+  Eigen::Matrix3d information_valid = Policy::InformMatrix::Identity() * 500;
+  information_valid(2, 2) = 5000;
+  Eigen::Matrix3d information_invalid = Eigen::Matrix3d::Identity() * 5e-9;
+  information_invalid(2, 2) = 1e-9;
+  std::vector<typename Policy::InformMatrix> inform_matrices = {
+      inform_mat, information_invalid};
+  std::vector<EdgeG2O *> g2o_edges;
+
+  for (auto &&info_mat : inform_matrices) {
+    EdgeG2O *loop = new EdgeG2O();
+    loop->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
+    loop->setInformation(info_mat);
+    loop->vertices()[0] = from;
+    loop->vertices()[1] = to;
+    loop->setId(g2o_edge_seq_);
+    g2o_edges.push_back(loop);
+  }
+  // weigths are in reality never used in their implementation of MM
+  std::vector<double> weights = {1, 0.0001};
+  EdgeG2OMM *edge = new EdgeG2OMM(g2o_edges, weights);
+  edge->setId(g2o_edge_seq_);
+  g2o_opt_->addEdge(edge);
+  ++g2o_edge_seq_;
+}
+
+template <typename T>
+void Slam2D<T>::addSwitchConstrainEdge(VertexG2O *from, VertexG2O *to,
+                                       const Eigen::Vector3d &trans,
+                                       const Eigen::Matrix3d &inform_mat)
+{
+  EdgeSE2Switchable *loop = new EdgeSE2Switchable();
+  EdgeSwitchPrior *prior = new EdgeSwitchPrior();
+  VertexSwitchLinear *switch_vertex = new VertexSwitchLinear();
+
+  switch_vertex->setEstimate(1.0);
+  switch_vertex->setId(g2o_node_seq_);
+  g2o_opt_->addVertex(switch_vertex);
+  ++g2o_node_seq_;
+
+  prior->setMeasurement(1.0);
+  prior->setInformation(Eigen::Matrix<double, 1, 1, Eigen::ColMajor>(1));
+  prior->vertices()[0] = switch_vertex;
+  prior->setId(g2o_edge_seq_);
+  g2o_opt_->addEdge(prior);
+  ++g2o_edge_seq_;
+
+  loop->setMeasurement(PoseG2O(trans(0), trans(1), trans(2)));
+  loop->setInformation(inform_mat);
+  loop->vertices()[0] = from;
+  loop->vertices()[1] = to;
+  loop->vertices()[2] = switch_vertex;
+  loop->setId(g2o_edge_seq_);
+  ++g2o_edge_seq_;
+  g2o_opt_->addEdge(loop);
+}
 
 template <typename T>
 void Slam2D<T>::initializeGrapFromOdom()
@@ -388,14 +470,13 @@ void Slam2D<T>::initializeGrapFromOdom()
 template <typename T>
 void Slam2D<T>::updatePoseGraph()
 {
-  for (auto it = graph_.beginNode(); it != graph_.endNode(); ++it) {
+  for (auto id_vertex_pair : id_to_g2o_vertex_) {
     Eigen::Vector3d new_pose =
-        dynamic_cast<VertexG2O *>(g2o_opt_->vertex(it->getId()))
-            ->estimate()
-            .toVector();
-    std::cout << "pose diff: " << new_pose - it->getPose() << std::endl;
-    it->setPose(new_pose);
-    it->getDataObj().updatePosition(new_pose);
+        dynamic_cast<VertexG2O *>(id_vertex_pair.second)->estimate().toVector();
+    auto &node = graph_.getNode(id_vertex_pair.first);
+    std::cout << "pose diff: " << new_pose - node.getPose() << std::endl;
+    node.setPose(new_pose);
+    node.getDataObj().updatePosition(new_pose);
   }
 }
 

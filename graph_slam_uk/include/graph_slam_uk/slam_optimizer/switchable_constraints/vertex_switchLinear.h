@@ -28,7 +28,7 @@ public:
 
   virtual bool read(std::istream& is);
   virtual bool write(std::ostream& os) const;
-  virtual void setEstimate(double& et);
+  virtual void setEstimate(const double& et);
 
   double x() const
   {

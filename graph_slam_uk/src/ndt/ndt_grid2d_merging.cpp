@@ -552,8 +552,8 @@ int main(int argc, char **argv)
   // moveWindow();
   // transformGrid();
   // size_t start = 200;
-  test(0);
-  // runSLAM();
-  testLoopTools();
+  // test(0);
+  runSLAM();
+  // testLoopTools();
   return 0;
 }

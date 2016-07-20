@@ -22,9 +22,10 @@ using namespace Eigen;
 EdgeSE2Switchable::EdgeSE2Switchable() : g2o::BaseMultiEdge<3, g2o::SE2>()
 {
   resize(3);
-  _jacobianOplus[0] = Base::JacobianType(nullptr, 3, 3);
-  _jacobianOplus[1] = Base::JacobianType(nullptr, 3, 3);
-  _jacobianOplus[2] = Base::JacobianType(nullptr, 3, 1);
+  // new (&_jacobianOplus[i])
+  new (&_jacobianOplus[0]) Base::JacobianType(nullptr, 3, 3);
+  new (&_jacobianOplus[1]) Base::JacobianType(nullptr, 3, 3);
+  new (&_jacobianOplus[2]) Base::JacobianType(nullptr, 3, 1);
 }
 // ================================================
 bool EdgeSE2Switchable::read(std::istream& is)

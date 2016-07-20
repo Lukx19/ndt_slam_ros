@@ -6,7 +6,6 @@
 #include <graph_slam_uk/utils/eigen_tools.h>
 
 #include <graph_slam_uk/utils/point_cloud_tools.h>
-#include <cstdlib>
 #include <ctime>
 #include <sstream>
 
@@ -16,11 +15,11 @@ template <typename FrameType>
 class NdtScanmatcher : public IScanmatcher2d<FrameType>
 {
 public:
-  NdtScanmatcher()
+  NdtScanmatcher() : seq_(0), time_((unsigned)time(0))
   {
     matcher.setStepSize(0.1);
     matcher.setOulierRatio(0.55);
-    srand((unsigned)time(0));
+    matcher.setRejectionLimit(0.6);
   }
   virtual ~NdtScanmatcher()
   {
@@ -30,7 +29,9 @@ public:
   match(const FrameType &source, const FrameType &target,
         const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity());
 
-protected:
+private:
+  size_t seq_;
+  size_t time_;
   pcl::D2DNormalDistributionsTransform2DRobust<typename FrameType::Point,
                                                typename FrameType::Point>
       matcher;
@@ -58,14 +59,15 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   std::string filename;
   std::stringstream ss;
   if (matcher.hasConverged()) {
-    ss << "valid";
+    ss << "valid_";
     // pcl::visualizePcl<typename
     // FrameType::Point>(target.getData()->getMeans(),
     //                                              pcl_out);
   } else {
-    ss << "invalid";
+    ss << "invalid_";
   }
-  ss << target.getData()->getTimestamp() << "_" << (rand() % 1000000) + 1;
+  ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
+  ++seq_;
   pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(), pcl_out,
                                           ss.str());
   // pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
@@ -76,8 +78,10 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
       << matcher.hasConverged());
   MatchResult res;
   res.success_ = matcher.hasConverged();
-  res.score_ = 1;
-  res.inform_ = (Eigen::Matrix3d::Identity() * 0.0001).inverse();
+  res.score_ = matcher.getAlignmentQuality();
+  res.inform_ =
+      (Eigen::Matrix3d::Identity() * 5000 /* matcher.getAlignmentQuality()*/);
+  res.inform_(2, 2) = 10000; /* matcher.getAlignmentQuality();*/
   // matcher.getInformMatrix();
   Eigen::Matrix4f trans = matcher.getFinalTransformation();
   res.transform_ = eigt::convertToTransform<double>(trans.cast<double>());

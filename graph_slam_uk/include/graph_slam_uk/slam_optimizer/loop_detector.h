@@ -140,7 +140,7 @@ public:
   LoopDetector(Graph<P, T> *graph, IScanmatcher2d<T> *matcher)
     : graph_(graph)
     , matcher_(matcher)
-    , min_dist_(10)
+    , min_dist_(20)
     , max_dist_(15)
     , max_search_depth_(50)
   {
@@ -153,7 +153,7 @@ protected:
   Graph<P, T> *graph_;
   IScanmatcher2d<T> *matcher_;
 
-  const float MATCH_SCORE = 0;
+  const float MATCH_SCORE = 0.6;
   double min_dist_;
   double max_dist_;
   size_t max_search_depth_;
@@ -195,14 +195,19 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
   while (graph_->nodeCount() > nodes_visited && depth < max_search_depth_) {
     size_t curr_node_id = fringe.top().node_id_;
     std::cout << "node: " << curr_node_id << std::endl;
+    Node &target_n = graph_->getNode(node_id);
+    Node &source_n = graph_->getNode(curr_node_id);
     // enough overlap
-    if (isCloseMatch(fringe.top())) {
+    // calculate l2 distance
+    double dist =
+        (target_n.getPose().head(2) - source_n.getPose().head(2)).norm();
+    std::cout << "distance l2:" << dist << std::endl;
+    if (dist < max_dist_ && isCloseMatch(fringe.top())) {
       // increase depth. Prevents too many scanmatches
       ++depth;
       // if (far_enough) {
       // calculate transformation with scanmatching
-      Node &source_n = graph_->getNode(curr_node_id);
-      Node &target_n = graph_->getNode(node_id);
+
       // try to match laser scans
       auto guess_trans = eigt::getTransFromPose(target_n.getPose()).inverse() *
                          eigt::getTransFromPose(source_n.getPose());
@@ -217,7 +222,7 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
       // test if sucesfull match
       if (res.success_ && res.score_ > MATCH_SCORE) {
         // create edge
-        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+        ROS_INFO_STREAM("loop closure: " << node_id << " -> " << curr_node_id
                                          << "accepted by matching");
         all_constrains.push_back(
             LoopClosure<P>(node_id, curr_node_id, res.inform_, res.transform_));
@@ -226,9 +231,12 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
         std::cout << "calc_trans: "
                   << eigt::getPoseFromTransform(res.transform_).transpose()
                   << std::endl;
+        std::cout << "guess: "
+                  << eigt::getPoseFromTransform(guess_trans).transpose()
+                  << std::endl;
 
       } else {
-        ROS_INFO_STREAM("loop closure: " << curr_node_id << " -> " << node_id
+        ROS_INFO_STREAM("loop closure: " << node_id << " -> " << curr_node_id
                                          << "rejected by matching");
       }
     }
@@ -366,10 +374,12 @@ bool LoopDetector<P, T>::isCloseMatch(const internal::EdgeCov &edge)
   //   return false;
   if (edge.distance_ < min_dist_)
     return false;
-  if (std::abs(dist) < max_dist_)
-    return true;
   else
-    return false;
+    return true;
+  //   if (std::abs(dist) < max_dist_)
+  //     return true;
+  //   else
+  //     return false;
 }
 
 }  // end of slamuk namespace
