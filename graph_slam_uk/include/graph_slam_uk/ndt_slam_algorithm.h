@@ -12,7 +12,6 @@
 #include <ros/ros.h>
 #include <Eigen/Dense>
 
-#include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_mapper.h>
 #include <graph_slam_uk/ndt/output_msgs.h>
@@ -27,10 +26,10 @@ namespace slamuk
 class NdtSlamAlgortihm : public ISlamAlgorithm
 {
   typedef ISlamAlgorithm::PointType PointType;
-  typedef NDTCell<CellPolicy2d> CellType;
-  typedef NDTGrid2D<NDTCell<CellPolicy2d>, PointType> FrameType;
+  typedef NDTCell CellType;
+  typedef NDTGrid2D<NDTCell, PointType> FrameType;
   typedef FrameType::Ptr FrameTypePtr;
-  typedef NDTGrid2DHolder<NDTCell<CellPolicy2d>, PointType> FrameTypeHolder;
+  typedef NDTGrid2DHolder<NDTCell, PointType> FrameTypeHolder;
   typedef NdtScanmatcher<FrameTypeHolder> LoopScanmatcher;
 
 public:

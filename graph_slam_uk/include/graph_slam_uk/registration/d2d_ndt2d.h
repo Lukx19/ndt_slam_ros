@@ -1,7 +1,6 @@
 #ifndef GRAPH_SLAM_UK_NDT_D2D
 #define GRAPH_SLAM_UK_NDT_D2D
 
-#include <graph_slam_uk/ndt/cell_policy2d.h>
 #include <graph_slam_uk/ndt/ndt_cell.h>
 #include <graph_slam_uk/ndt/ndt_grid2d.h>
 #include <graph_slam_uk/registration/ndt_reg_tools.h>
@@ -15,7 +14,7 @@
 namespace pcl
 {
 template <typename PointSource, typename PointTarget,
-          typename CellType = slamuk::NDTCell<slamuk::CellPolicy2d>>
+          typename CellType = slamuk::NDTCell>
 class D2DNormalDistributionsTransform2D
     : public Registration<PointSource, PointTarget>
 {

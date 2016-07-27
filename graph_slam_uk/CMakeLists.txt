@@ -193,6 +193,7 @@ add_executable(graph_slam2d
   src/graph_slam2d_node.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
+  src/ndt/ndt_cell.cpp
   ${MAX_MIXTURES_SRC_FILES}
   ${SWITCH_CONSTRAINS_SRC_FILES}
   )
@@ -218,6 +219,7 @@ add_executable(ndt_grid2d_merging
   src/ndt/ndt_grid2d_merging.cpp
   src/slam_optimizer/rrr_clusterizer.cpp
   src/slam_optimizer/rrr_g20_wrapper.cpp
+  src/ndt/ndt_cell.cpp
   ${MAX_MIXTURES_SRC_FILES}
   ${SWITCH_CONSTRAINS_SRC_FILES}
   )
