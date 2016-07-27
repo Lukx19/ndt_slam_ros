@@ -19,26 +19,24 @@ GraphSlamNode::GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
   initParameters();
   ROS_INFO("Graph_slam2d: Launch params initialized.");
 
-  occ_map_pub_ =
-      nh_.advertise<nav_msgs::OccupancyGrid>(map_pub_topic_, 5, false);
-  graph_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(graph_pub_topic_,
-                                                              5, false);
-  win_map_pub_ =
-      nh_.advertise<graph_slam_uk::NDTMapMsg>(win_pub_topic_, 5, false);
-  map_pcl_pub_ = nh_.advertise<Pcl>(map_pcl_pub_topic_, 1);
-  win_pcl_pub_ = nh_.advertise<Pcl>(win_pcl_pub_topic_, 1);
+  occ_map_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("map", 5, false);
+  graph_pub_ =
+      nh_.advertise<visualization_msgs::MarkerArray>("graph", 5, false);
+  win_map_pub_ = nh_.advertise<graph_slam_uk::NDTMapMsg>("win_ndt", 5, false);
+  map_pcl_pub_ = nh_.advertise<Pcl>("map_pcl", 1);
+  win_pcl_pub_ = nh_.advertise<Pcl>("win_pcl", 1);
 
   const int message_cache = 1;
   if (subscribe_mode_ == "ODOM") {
     laser_sub_.subscribe(nh_, laser_topic_, message_cache);
-    odom_sub_.subscribe(nh_, odom_topic_, message_cache);
+    odom_sub_.subscribe(nh_, "/odom", message_cache);
     // sync messages using approximate algorithm
     odom_sync_.connectInput(odom_sub_, laser_sub_);
     odom_sync_.registerCallback(
         boost::bind(&GraphSlamNode::odom_cb, this, _1, _2));
   } else if (subscribe_mode_ == "POSE") {
     laser_sub_.subscribe(nh_, laser_topic_, message_cache);
-    pose_sub_.subscribe(nh_, pose_topic_, message_cache);
+    pose_sub_.subscribe(nh_, "/pose", message_cache);
     // sync messages using approximate algorithm
     pose_sync_.connectInput(pose_sub_, laser_sub_);
     pose_sync_.registerCallback(
@@ -72,44 +70,33 @@ void GraphSlamNode::initParameters()
 
   odom_frame_ = nh_private_.param<std::string>("odom_farme_id", "odom");
 
-  fixed_frame_ = nh_private_.param<std::string>("fixed_farme_id", "world");
-
-  odom_topic_ = nh_private_.param<std::string>("odom_topic", "/odom");
-
-  pose_topic_ = nh_private_.param<std::string>("pose_topic", "/odom");
+  fixed_frame_ = nh_private_.param<std::string>("map_farme_id", "map");
 
   subscribe_mode_ = nh_private_.param<std::string>("subscribe_mode", "NON");
 
-  map_pub_topic_ =
-      nh_private_.param<std::string>("occupancy_map_topic", "/map");
+  laser_topic_ = "/scan";
 
-  map_pcl_pub_topic_ =
-      nh_private_.param<std::string>("pcl_map_topic", "/pcl_map");
+  float win_radius = static_cast<float>(
+      nh_private_.param<double>("scanmatch_window_radius", 40.0));
+  algorithm_->setRunWindowRadius(win_radius);
 
-  win_pub_topic_ =
-      nh_private_.param<std::string>("window_map_topic", "/window_map");
+  float gen_dist =
+      static_cast<float>(nh_private_.param<double>("node_gen_distance", 2.0));
+  algorithm_->setGenerationDistance(gen_dist);
 
-  win_pcl_pub_topic_ =
-      nh_private_.param<std::string>("window_map_topic_pcl", "/window_pcl");
+  float loop_max_dist =
+      static_cast<float>(nh_private_.param<double>("loop_max_distance", 30.0));
+  algorithm_->setLoopClosureMaxDist(loop_max_dist);
 
-  laser_topic_ = nh_private_.param<std::string>("laser_topic", "/laser");
+  float loop_min_dist =
+      static_cast<float>(nh_private_.param<double>("loop_min_distance", 14.0));
+  algorithm_->setLoopClosureMinDist(loop_min_dist);
 
-  grid_step_ = nh_private_.param<double>("grid_step", 0.5);
-
-  max_range_ = static_cast<float>(
-      nh_private_.param<double>("maximal_laser_range", 30.0));
-
-  min_rotation_ = nh_private_.param<double>("min_rotated_angle", 0);
-
-  min_displacement_ = nh_private_.param<double>("min_traveled_distance", 0);
-
-  iterations_ =
-      static_cast<size_t>(nh_private_.param<int>("optimalizer_iterations", 5));
-
-  epsilon_err_ = nh_private_.param<double>("min_epsilon_change", 0.001);
+  float loop_score_threshold = static_cast<float>(
+      nh_private_.param<double>("loop_score_threshold", 0.6));
+  algorithm_->setLoopClosureScoreThreshold(loop_score_threshold);
 
   serialize_graph = nh_private_.param<bool>("serialize_graph", true);
-  graph_pub_topic_ = nh_private_.param<std::string>("graph_pub_topic", "graph");
 
   if (tf_prefix_ != "") {
     robot_base_frame_ = tf_prefix_ + "/" + robot_base_frame_;
@@ -232,7 +219,7 @@ bool GraphSlamNode::prepareLaserData(
                      << e.what());
     return false;
   }
-  if (laser_pcl_base.size() < 50) {
+  if (laser_pcl_base.size() < 400) {
     ROS_ERROR_STREAM("GraphSlam: Not enough points in laser scan "
                      << laser_pcl_base.size());
     return false;
@@ -321,8 +308,7 @@ GraphSlamNode::arrayToMatrix(const boost::array<double, 36> &array) const
 
 bool GraphSlamNode::movedEnough(const eigt::transform2d_t<double> &trans) const
 {
-  if (eigt::getAngle(trans) < min_rotation_ &&
-      eigt::getDisplacement(trans) < min_displacement_)
+  if (eigt::getAngle(trans) < 0.01 && eigt::getDisplacement(trans) < 0.05)
     return false;
   return true;
 }

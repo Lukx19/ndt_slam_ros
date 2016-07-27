@@ -51,6 +51,9 @@ public:
 
   virtual void setEuclideanMaxError(double epsilon) = 0;
   virtual void setMaxIterations(size_t count) = 0;
+  virtual void setLoopGenerationMinDist(float dist) = 0;
+  virtual void setLoopGenerationMaxDist(float dist) = 0;
+  virtual void setLoopRegistrationScore(float score) = 0;
 
   virtual visualization_msgs::MarkerArray
   getGraphSerialized(std::string world_frame_id) const = 0;
@@ -89,6 +92,8 @@ public:
   virtual MatchResult
   match(const CloudFrame &source, const CloudFrame &target,
         const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity()) = 0;
+
+  virtual void setScoreThreshold(float score);
 };
 
 }  // slamuk namespace

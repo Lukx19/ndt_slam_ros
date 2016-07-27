@@ -6,6 +6,7 @@
 #include <graph_slam_uk/utils/eigen_tools.h>
 
 #include <graph_slam_uk/utils/point_cloud_tools.h>
+#include <pcl/io/pcd_io.h>
 #include <ctime>
 #include <sstream>
 
@@ -20,6 +21,7 @@ public:
     matcher.setStepSize(0.1);
     matcher.setOulierRatio(0.55);
     matcher.setRejectionLimit(0.6);
+    matcher.setRotationRange(3);
   }
   virtual ~NdtScanmatcher()
   {
@@ -28,10 +30,15 @@ public:
   virtual MatchResult
   match(const FrameType &source, const FrameType &target,
         const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity());
+  virtual void setScoreThreshold(float score) override
+  {
+    matcher.setRejectionLimit(score);
+  }
 
 private:
   size_t seq_;
   size_t time_;
+  float score_threshold_;
   pcl::D2DNormalDistributionsTransform2DRobust<typename FrameType::Point,
                                                typename FrameType::Point>
       matcher;
@@ -60,18 +67,22 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
   std::stringstream ss;
   if (matcher.hasConverged()) {
     ss << "valid_";
-    // pcl::visualizePcl<typename
-    // FrameType::Point>(target.getData()->getMeans(),
-    //                                              pcl_out);
   } else {
     ss << "invalid_";
   }
+  // save measured point clouds and solutions to the disk for testing
   ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
   ++seq_;
   pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(), pcl_out,
                                           ss.str());
-  // pcl::visualizePcl<typename FrameType::Point>(target.getData()->getMeans(),
-  // pcl_out);
+  std::cout << ss.str() << std::endl;
+  std::stringstream ss_source;
+  std::stringstream ss_target;
+
+  ss_target << "target_" << time_ << seq_ << ".pcd";
+  ss_source << "source_" << time_ << seq_ << ".pcd";
+  pcl::io::savePCDFile(ss_target.str(), *(target.getData()->getMeans()));
+  pcl::io::savePCDFile(ss_source.str(), *(source.getData()->getMeans()));
 
   ROS_INFO_STREAM(
       "[NDT_SCANMATCHER]:Normal Distributions Transform has converged:"

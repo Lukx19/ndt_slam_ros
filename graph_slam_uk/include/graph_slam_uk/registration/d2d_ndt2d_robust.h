@@ -231,7 +231,7 @@ D2DNormalDistributionsTransform2DRobust<PointSource, PointTarget, CellType>::
     D2DNormalDistributionsTransform2DRobust()
   : cell_size_(0.25), alignment_quality_(0), rejection_limit_(0.4)
 {
-  d2d_.setCellSize(0.25);
+  d2d_.setCellSize(cell_size_);
   d2d_.setMaximumIterations(10);
 }
 //////////////////

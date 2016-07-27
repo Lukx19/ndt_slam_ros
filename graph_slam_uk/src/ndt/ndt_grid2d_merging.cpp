@@ -22,6 +22,7 @@
 #include <vector>
 
 #include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/utils/point_cloud_tools.h>
 #include <graph_slam_uk/utils/string_tools.h>
 
 using namespace slamuk;
@@ -36,11 +37,16 @@ typedef pcl::NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>
     SimpleMatcher;
 typedef NdtSlamAlgortihm SLAM;
 
+double OUTLIER = 0.8;
+size_t LAYERS = 4;
+double STEP_SIZE = 0.01;
+size_t SKIP = 3;
+
 double EPSILON = 0.001;
 double MIN_DISPLACEMENT = 0.1;
 double MIN_ROTATION = 0.1;
 size_t MAX_LINES = 5000;
-float CELL_SIZE = 0.25;
+float CELL_SIZE = 0.4;
 bool initialized = false;
 std::vector<typename PointCloud::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
@@ -258,6 +264,7 @@ void runningWindow(size_t scan_id)
     map->setCellSize(CELL_SIZE);
     map->setOrigin(Eigen::Vector3d(0, 0, 0));
     map->initialize(*scans[scan_id]);
+    running_win->setCellSize(CELL_SIZE);
     running_win->initialize(*scans[scan_id]);
     *all_points += *scans[scan_id];
     initial_trans =
@@ -267,14 +274,15 @@ void runningWindow(size_t scan_id)
     std::cout << "INIT MAP: \n" << *map << std::endl << std::endl;
     seq = 0;
     old_origin.setZero();
-    matcher.setOulierRatio(0.3);
-    matcher.setStepSize(0.05);
-    matcher.setCellSize(0.25);
-    matcher.setNumLayers(5);
+    matcher.setOulierRatio(OUTLIER);
+    matcher.setStepSize(STEP_SIZE);
+    matcher.setCellSize(0.4);
+    matcher.setNumLayers(LAYERS);
 
-    matcher_s.setOulierRatio(0.8);
-    // matcher_s.setStepSize(0.01);
-
+    matcher_s.setOulierRatio(OUTLIER);
+    matcher_s.setStepSize(STEP_SIZE);
+    matcher_s.setNumLayers(LAYERS);
+    matcher_s.setCellSize(0.4);
     return;
   }
   typename PointCloud::Ptr transformed_pcl(new PointCloud());
@@ -285,17 +293,17 @@ void runningWindow(size_t scan_id)
   temp_grid->setOrigin(running_win->getOrigin());
 
   temp_grid->mergeIn(*scans[scan_id], running_win->getOrigin(), true);
-  matcher.setInputTarget(running_win);
-  matcher.setInputSource(temp_grid->getMeans());
-  matcher.align(*transformed_pcl, cummulative_trans);
+  // matcher.setInputTarget(running_win);
+  // matcher.setInputSource(temp_grid);
+  // matcher.align(*transformed_pcl, cummulative_trans);
 
-  cummulative_trans = matcher.getFinalTransformation();
+  // cummulative_trans = matcher.getFinalTransformation();
 
-  // matcher_s.setInputTarget(running_win);
-  // matcher_s.setInputSource(temp_grid->getMeans());
-  // matcher_s.align(*transformed_pcl, cummulative_trans);
+  matcher_s.setInputTarget(running_win);
+  matcher_s.setInputSource(temp_grid->getMeans());
+  matcher_s.align(*transformed_pcl, cummulative_trans);
 
-  // cummulative_trans = matcher_s.getFinalTransformation();
+  cummulative_trans = matcher_s.getFinalTransformation();
 
   // if (flag == true) {
   //   flag = false;
@@ -305,8 +313,11 @@ void runningWindow(size_t scan_id)
   eigt::transform2d_t<double> cumul_trans2d =
       eigt::convertToTransform<float>(cummulative_trans).cast<double>();
 
+  pcl::transformPointCloud(*scans[scan_id], *transformed_pcl,
+                           eigt::convertFromTransform(cumul_trans2d));
   temp_grid->transform(cumul_trans2d);
   running_win->mergeInTraced(*temp_grid, true, false);
+  // running_win->mergeInTraced(*transformed_pcl, running_win->getOrigin());
   map->mergeInTraced(*temp_grid, true, true);
 
   cumul_trans2d = running_win->move(cumul_trans2d);
@@ -371,8 +382,26 @@ void runSLAM()
         eigt::transBtwPoses(real_poses[target], real_poses[i]);
     algo.update(odom_trans, SLAM::Covar::Identity(), *scans[i],
                 ros::Time(static_cast<double>(i)));
+    algo.getOccupancyGrid("aaaa");
+    algo.getPclMap("aaa");
+    algo.getPclMap2("aaa");
     target = i;
   }
+}
+
+void mappingKnownPoses()
+{
+  GridTypePtr merge_map(new GridType());
+  merge_map->setCellSize(0.25);
+  std::cout << "start test" << std::endl;
+  for (size_t i = 7000; i < scans.size() - 10000; i += 1) {
+    Eigen::Vector3d glob_pose = eigt::getPoseFromTransform(
+        eigt::getTransFromPose(real_poses[0]).inverse() *
+        eigt::getTransFromPose(real_poses[i]));
+    merge_map->mergeInTraced(*scans[i], glob_pose, true);
+  }
+  std::cout << *merge_map << std::endl;
+  pcl::visualizePcl<pcl::PointXYZ>(merge_map->getMeansTransformed());
 }
 
 void test(size_t start)
@@ -384,17 +413,20 @@ void test(size_t start)
     runningWindow(target);
     // testMergeD2D(start);
     std::cout << "start test" << std::endl;
-    for (size_t i = start; i < scans.size(); i += 3) {
-      eigt::transform2d_t<double> real_trans =
-          eigt::transBtwPoses(real_poses[target], real_poses[i]);
-      // if (eigt::getAngle(real_trans) > MIN_ROTATION ||
-      //     eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
-      // std::cout << "displace: " << eigt::getDisplacement(real_trans)
-      //           << "rot: " << eigt::getAngle(real_trans) << std::endl;
-      // testMergeD2D(i);
-      target = i;
-      runningWindow(i);
-      // }
+    {
+      pcl::ScopeTime t_recalc("calc time");
+      for (size_t i = start; i < scans.size(); i += SKIP) {
+        eigt::transform2d_t<double> real_trans =
+            eigt::transBtwPoses(real_poses[target], real_poses[i]);
+        // if (eigt::getAngle(real_trans) > MIN_ROTATION ||
+        //     eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
+        // std::cout << "displace: " << eigt::getDisplacement(real_trans)
+        //           << "rot: " << eigt::getAngle(real_trans) << std::endl;
+        // testMergeD2D(i);
+        target = i;
+        runningWindow(i);
+        // }
+      }
     }
   }
   std::cout << "Running win: " << seq << " \n"
@@ -503,9 +535,9 @@ void testMapMerging()
     ++t;
   }
   merged_map.recalc(ros::Time(100));
-  cv::namedWindow("MAP", cv::WINDOW_NORMAL);
-  cv::imshow("MAP", merged_map.getOccupancyMap());
-  cv::waitKey(0);
+  // cv::namedWindow("MAP", cv::WINDOW_NORMAL);
+  // cv::imshow("MAP", merged_map.getOccupancyMap());
+  // cv::waitKey(0);
   for (size_t i = 0; i < 300; ++i) {
     GridTypePtr temp_grid(new GridType(Eigen::Vector3d(0, 0, 0)));
     temp_grid->mergeInTraced(*scans[80], temp_grid->getOrigin());
@@ -515,10 +547,6 @@ void testMapMerging()
     pcl::ScopeTime t_recalc("recalc:time 100");
     merged_map.recalc(ros::Time(1000));
   }
-
-  cv::namedWindow("MAP", cv::WINDOW_NORMAL);
-  cv::imshow("MAP", merged_map.getOccupancyMap());
-  cv::waitKey(0);
 }
 
 int main(int argc, char **argv)
@@ -532,9 +560,15 @@ int main(int argc, char **argv)
   }
   if (args.size() >= 3)
     MAX_LINES = std::stoi(args[2]);
-  float win_size = 3;
+  float win_size = 15;
   if (args.size() >= 4)
     win_size = std::stof(args[3]);
+  if (args.size() >= 8) {
+    OUTLIER = std::stod(args[4]);
+    STEP_SIZE = std::stod(args[5]);
+    SKIP = std::stoi(args[6]);
+    LAYERS = std::stoi(args[7]);
+  }
   preparePoseData(args[1]);
   prepareLaserScans(args[1]);
   running_win = GridTypePtr(new GridType());
@@ -553,7 +587,8 @@ int main(int argc, char **argv)
   // transformGrid();
   // size_t start = 200;
   // test(0);
-  runSLAM();
+  // runSLAM();
   // testLoopTools();
+  mappingKnownPoses();
   return 0;
 }

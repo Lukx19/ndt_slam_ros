@@ -1,13 +1,13 @@
 #ifndef GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION
 #define GRAPH_SLAM_UK_CORRELATIVE_ESTIMATION
 
-#include <ros/ros.h>
-#include <pcl/registration/registration.h>
-#include <pcl/filters/voxel_grid_covariance.h>
-#include <Eigen/Dense>
+#include <graph_slam_uk/registration/correlative_estimation_tools.h>
 #include <graph_slam_uk/utils/eigen_tools.h>
 #include <pcl/common/time.h>
-#include <graph_slam_uk/registration/correlative_estimation_tools.h>
+#include <pcl/filters/voxel_grid_covariance.h>
+#include <pcl/registration/registration.h>
+#include <ros/ros.h>
+#include <Eigen/Dense>
 
 namespace pcl
 {
@@ -40,8 +40,8 @@ protected:
 
 public:
   typedef boost::shared_ptr<CorrelativeEstimation<PointSource, PointTarget>> Ptr;
-  typedef boost::shared_ptr<
-      const CorrelativeEstimation<PointSource, PointTarget>> ConstPtr;
+  typedef boost::shared_ptr<const CorrelativeEstimation<PointSource, PointTarget>>
+      ConstPtr;
   typedef Eigen::Vector3d VectorTrans;
 
   CorrelativeEstimation();
@@ -167,7 +167,8 @@ void CorrelativeEstimation<PointSource, PointTarget>::computeTransformation(
     rotations.push_back(theta);
   }
   {
-    pcl::ScopeTime t_init("[CorrelativeEstimation]: total calculation time:");
+    // pcl::ScopeTime t_init("[CorrelativeEstimation]: total calculation
+    // time:");
 
     pcl::PointCloud<PointSource> rot_pcl;  // cloud with points after applied
                                            // rotation

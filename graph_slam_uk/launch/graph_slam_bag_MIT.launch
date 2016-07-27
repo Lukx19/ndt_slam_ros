@@ -6,22 +6,20 @@
       <!-- incomming odometry  tf frame_id without tf_prefix -->
       <param name="odom_farme_id" value="odom_combined"/>
       <!-- calculated map frame_id name -->
-      <param name="fixed_farme_id" value="map"/>
-      <!-- topic to listen on for odometry messages -->
-      <param name="odom_topic" value="/base_odometry/odom"/>
-      <!--  where to publish calculated pointcloud -->
-      <param name="pcl_map_topic" value="map"/>
-      <!-- where to listen for incomming laser msgs -->
-      <param name="laser_topic" value="/base_scan"/>
+      <param name="map_farme_id" value="map"/>
+
+      <remap from="/scan" to="/base_scan" />
+      <!-- ODOM, POSE, default:NON -->
+      <param name="subscribe_mode" value="NON"/>
+
       <!-- Maximal allowe range of laser sensor. Data exceeding this number will be dropped -->
-       <param name="maximal_laser_range" type="double" value="30.0"/>
-       <param name="optimalizer_iterations" type="int" value="7"/>
-       <param name="min_epsilon_change" type="double" value="0.001"/>
-       <param name="min_rotated_angle" type="double" value="0.8"/>
-       <param name="min_traveled_distance" type="double" value="0.25"/>
+       <param name="scanmatch_window_radius" type="double" value="80.0"/>
+       <param name="node_gen_distance" type="double" value="2.0"/>
+       <param name="loop_max_distance" type="double" value="20.0"/>
+       <param name="loop_min_distance" type="double" value="20.0"/>
+       <param name="loop_score_threshold" type="double" value="0.6"/>
 
        <param name="serialize_graph" type="bool" value="true"/>
-       <param name="graph_pub_topic" type="string" value="graph"/>
     </node>
   </group>
 </launch>

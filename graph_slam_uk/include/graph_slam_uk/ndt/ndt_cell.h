@@ -264,11 +264,12 @@ void NDTCell<Policy>::updateOccupancy(const Vector &start, const Vector &end,
   }
   // std::cout << "UpdateOccupancy: start: " << start.transpose()
   //           << " end: " << end.transpose() << "adding pts: " << new_points
-  //           << "cell mean: " << mean_.transpose() << std::endl;
+  // << "cell mean: " << mean_.transpose() << std::endl;
   if ((mean_ - end).cwiseAbs().sum() < 0.01) {
     // we are at the end keep occupancy
     updateOccupancy(MAX_OCCUPANCY);
     // std::cout << "END\n";
+    return;
   }
   // } else {
   //   updateOccupancy(MIN_OCCUPANCY);
@@ -276,35 +277,35 @@ void NDTCell<Policy>::updateOccupancy(const Vector &start, const Vector &end,
   //   // std::cout << "REMOVE\n";
   // }
 
-  // Vector pt_out;
-  // double lik = calcMaxLikelihoodOnLine(start, end, pt_out);
+  Vector pt_out;
+  double lik = calcMaxLikelihoodOnLine(start, end, pt_out);
   // std::cout << "lik: " << lik << " point: " << pt_out.transpose() <<
   // std::endl;
-  // double l2_target = (pt_out - end).norm();
+  double l2_target = (pt_out - end).norm();
 
-  // double dist = (start - pt_out).norm();
-  // // double sigma_dist =
-  // //     0.5 * (dist / 30.0);  /// test for distance based sensor noise
-  // // double snoise = sigma_dist + SENSOR_NOISE;
-  // double snoise = SENSOR_NOISE;
-  // /// This is the probability of max lik point being endpoint
-  // double thr = exp(-0.5 * (l2_target * l2_target) / (snoise * snoise));
-  // lik = lik * (1.0 - thr);
+  double dist = (start - pt_out).norm();
+  // double sigma_dist =
+  //     0.5 * (dist / 30.0);  /// test for distance based sensor noise
+  // double snoise = sigma_dist + SENSOR_NOISE;
+  double snoise = SENSOR_NOISE;
+  /// This is the probability of max lik point being endpoint
+  double thr = exp(-0.5 * (l2_target * l2_target) / (snoise * snoise));
+  lik = lik * (1.0 - thr);
   // std::cout << "threashold: " << thr << std::endl;
-  // // if (lik < 0.45) {
-  // //   // cell is observed as empty
-  // //   // gaussian_ = false;
-  // //   // updateOccupancy(0);
-  // //   return;
-  // // }
-  // lik = 0.1 * lik + 0.5;  /// scaling to have lik in range [0,0.5]
-  // double logodd_lik = log((1.0 - lik) / lik);
+  // if (lik < 0.45) {
+  //   // cell is observed as empty
+  //   // gaussian_ = false;
+  //   // updateOccupancy(0);
+  //   return;
+  // }
+  lik = 0.1 * lik + 0.5;  /// scaling to have lik in range [0,0.5]
+  double logodd_lik = log((1.0 - lik) / lik);
   // std::cout << "\nnew occup: " << new_points * logodd_lik << std::endl
   //           << std::endl;
-  // updateOccupancy(new_points * logodd_lik);
-  // if (occup_ <= 0) {
-  //   gaussian_ = false;
-  // }
+  updateOccupancy(new_points * logodd_lik);
+  if (occup_ <= 0) {
+    gaussian_ = false;
+  }
 }
 
 template <class Policy>
@@ -383,7 +384,7 @@ double NDTCell<Policy>::calcMaxLikelihoodOnLine(const Vector &start,
   if (sigma == 0)
     return 1.0;
   // maximalization of parameter t
-  double t = a.cwiseProduct(b).sum() / sigma;
+  double t = -a.cwiseProduct(b).sum() / sigma;
 
   pt = l * t + end;  // spot on line with maximal likelihood with respect to
                      // gaussian in this cell

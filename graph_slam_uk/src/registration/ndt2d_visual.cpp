@@ -29,6 +29,7 @@
 #include <Eigen/Dense>
 
 #include <graph_slam_uk/utils/eigen_tools.h>
+#include <graph_slam_uk/utils/point_cloud_tools.h>
 
 using namespace pcl;
 using namespace slamuk;
@@ -48,7 +49,7 @@ typedef D2DNormalDistributionsTransform2DRobust<pcl::PointXYZ, pcl::PointXYZ>
 double EPSILON = 0.001;
 double MIN_DISPLACEMENT = 0.4;
 double MIN_ROTATION = 0.3;
-size_t MAX_LINES = 10000;
+size_t MAX_LINES = 1000000;
 std::vector<pcl_t::Ptr> scans;
 std::vector<Eigen::Vector3d> real_poses;
 // std::vector<MatchResult> matches;
@@ -163,28 +164,33 @@ void testMatch(size_t source_id, size_t target_id)
   } else {
     GridTypePtr target_grid(new GridType());
     GridTypePtr source_grid(new GridType());
-    target_grid->setCellSize(0.4);
-    source_grid->setCellSize(0.4);
+    target_grid->setCellSize(0.25);
+    source_grid->setCellSize(0.25);
     target_grid->initializeSimple(*scans[target_id]);
     source_grid->initializeSimple(*scans[source_id]);
     if (mode_type == "d2d") {
       static_cast<D2DMatcher *>(matcher)->setOulierRatio(0.4);
       static_cast<D2DMatcher *>(matcher)->setStepSize(0.05);
+      static_cast<D2DMatcher *>(matcher)->setNumLayers(1);
       static_cast<D2DMatcher *>(matcher)->setInputSource(source_grid);
       static_cast<D2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
     if (mode_type == "corr") {
-      // matcher->setInputSource(source_grid->getMeans());
-      // matcher->setInputTarget(target_grid->getMeans());
-      matcher->setInputSource(scans[source_id]);
-      matcher->setInputTarget(scans[target_id]);
+      matcher->setInputSource(source_grid->getMeans());
+      matcher->setInputTarget(target_grid->getMeans());
     }
     if (mode_type == "robust") {
       static_cast<RobustMatcher *>(matcher)->setInputSource(source_grid);
       static_cast<RobustMatcher *>(matcher)->setInputTarget(target_grid);
     }
+
+    if (mode_type == "corr_full") {
+      matcher->setInputSource(scans[source_id]);
+      matcher->setInputTarget(scans[target_id]);
+    }
     if (mode_type == "basic") {
       // matcher->setInputSource(scans[source_id]);
+      static_cast<P2DMatcher *>(matcher)->setNumLayers(1);
       matcher->setInputSource(source_grid->getMeans());
       static_cast<P2DMatcher *>(matcher)->setInputTarget(target_grid);
     }
@@ -213,6 +219,7 @@ void testMatch(size_t source_id, size_t target_id)
   //           << std::endl
   //           << std::endl;
   total_error_ += (real_trans - calc_trans).cwiseAbs();
+  // pcl::visualizePcl<pcl::PointXYZ>(scans[target_id], output_m);
 }
 
 void test(size_t start)
@@ -230,7 +237,7 @@ void test(size_t start)
         eigt::getTransFromPose(real_poses[target]).inverse() *
         eigt::getTransFromPose(real_poses[i]);
 
-    if (std::abs(eigt::getAngle(real_trans)) > MIN_ROTATION ||
+    if (std::abs(eigt::getAngle(real_trans)) > MIN_ROTATION &&
         eigt::getDisplacement(real_trans) > MIN_DISPLACEMENT) {
       // std::cout << "real trans: "
       //           << eigt::getPoseFromTransform(real_trans).transpose()
@@ -281,8 +288,8 @@ int main(int argc, char **argv)
   std::vector<std::string> args(argv, argv + argc);
   if (args.size() < 3 &&
       (args[2] != "d2d" && args[2] != "basic" && args[2] != "corr" &&
-       args[2] != "robust" && args[2] != "proof" && args[2] != "p2d" &&
-       args[2] != "icpNDT")) {
+       args[2] != "corr_full" && args[2] != "robust" && args[2] != "proof" &&
+       args[2] != "p2d" && args[2] != "icpNDT")) {
     std::cout << "Correct format of arguments: \n Path to the folder with "
                  "data.poses, data.scans was not provided\n Calculation engine "
                  "(d2d,basic,corr,robust) \n [Min displacement (m) min "
@@ -310,7 +317,10 @@ int main(int argc, char **argv)
     matcher = new D2DMatcher();
   } else if (args[2] == "corr") {
     matcher = new CorrMatcher();
-    static_cast<CorrMatcher *>(matcher)->setCoarseStep(0.25);
+    static_cast<CorrMatcher *>(matcher)->setCoarseStep(0.5);
+  } else if (args[2] == "corr_full") {
+    matcher = new CorrMatcher();
+    static_cast<CorrMatcher *>(matcher)->setCoarseStep(0.5);
   } else if (args[2] == "robust") {
     matcher = new RobustMatcher();
   } else if (args[2] == "proof") {

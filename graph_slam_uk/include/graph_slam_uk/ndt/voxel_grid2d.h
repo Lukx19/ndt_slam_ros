@@ -433,7 +433,6 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   Point start_in;
   bool end_indise = false;
   Point delta;
-  double max_length = (end - start).norm();
   double minx =
       -static_cast<double>(width_left_) * cell_size_ - cell_size_half_;
   double maxx = width_right_ * cell_size_ + cell_size_half_;
@@ -459,15 +458,14 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   Point p = start_in;
   size_t idx_old = calcIndex(start_in);
   size_t idx_current = calcIndex(start_in);
-  size_t idx_final;
-  if (end_indise)
-    idx_final = calcIndex(end_in);
 
   if (cells_[idx_current].get() == nullptr) {
     cells_[idx_current].reset(new CellType());
   }
   res.push_back(cells_[idx_current].get());
-  while (true) {
+  double total_dist = 0;
+  for (size_t i = 0; i < 2 * static_cast<size_t>(std::floor(length)) - 1; ++i) {
+    // total_dist += delta_dist;
     // if program  is still in the same cell like last time just step forward
     if (idx_current != idx_old) {
       if (cells_[idx_current].get() == nullptr) {
@@ -478,10 +476,6 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
     }
     p += delta;
     if (p(0) >= maxx || p(0) <= minx || p(1) >= maxy || p(1) <= miny)
-      return res;
-    if (end_indise && idx_current == idx_final)
-      return res;
-    if ((p - start).norm() > max_length)
       return res;
     idx_old = idx_current;
     idx_current = calcIndex(p);
@@ -814,7 +808,8 @@ bool VoxelGrid2D<CellType>::linesIntersection(const Eigen::Vector2d& p,
     return true;
   }
 
-  // 5. Otherwise, the two line segments are not parallel but do not intersect.
+  // 5. Otherwise, the two line segments are not parallel but do not
+  // intersect.
   return false;
 }
 

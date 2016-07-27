@@ -81,6 +81,17 @@ public:
     return (cell_sizes_.back());
   }
 
+  inline void setNumLayers(size_t num)
+  {
+    layer_count_ = num;
+    initCellSizes(getCellSize());
+    initParams();
+  }
+
+  inline size_t getNumLayers()
+  {
+    return layer_count_;
+  }
   /** \brief Get the point cloud outlier ratio.
     * \return outlier ratio
     */
@@ -97,7 +108,21 @@ public:
     outlier_ratio_ = outlier_ratio;
     initParams();
   }
+  /** \brief Get the newton line search maximum step length.
+  * \return maximum step length
+  */
+  inline double getStepSize() const
+  {
+    return (step_size_);
+  }
 
+  /** \brief Set/change the newton line search maximum step length.
+    * \param[in] step_size maximum step length
+    */
+  inline void setStepSize(double step_size)
+  {
+    step_size_ = step_size;
+  }
   /** \brief Get the registration alignment probability.
     * \return transformation probability
     */
@@ -394,7 +419,7 @@ NormalDistributionsTransform2DEx<PointSource, PointTarget, CellType>::calcScore(
   for (size_t i = 0; i < trans_source.size(); ++i) {
     Eigen::Vector2d pt(trans_source[i].x, trans_source[i].y);
 
-    TargetVec neighbors = ndt_grid.getKNearestNeighbors(pt, 2);
+    TargetVec neighbors = ndt_grid.getKNearestNeighbors(pt, 4);
 
     for (size_t nb = 0; nb < neighbors.size(); nb++) {
       res += calcPointScore(source[i], neighbors[nb], trans_source[i],

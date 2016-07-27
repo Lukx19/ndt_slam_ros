@@ -116,7 +116,9 @@ public:
 
   virtual void setEuclideanMaxError(double epsilon);
   virtual void setMaxIterations(size_t count);
-
+  virtual void setLoopGenerationMinDist(float dist);
+  virtual void setLoopGenerationMaxDist(float dist);
+  virtual void setLoopRegistrationScore(float score);
   virtual visualization_msgs::MarkerArray
   getGraphSerialized(std::string world_frame_id) const;
   virtual void getGraphSerialized(std::ostream &stream) const;
@@ -351,6 +353,23 @@ template <typename T>
 void Slam2D<T>::setMaxIterations(size_t count)
 {
   iterations_ = count;
+}
+template <typename T>
+void Slam2D<T>::setLoopGenerationMinDist(float dist)
+{
+  loop_detector_.setMinLoopDistance(dist);
+}
+
+template <typename T>
+void Slam2D<T>::setLoopGenerationMaxDist(float dist)
+{
+  loop_detector_.setMaxLoopDistance(dist);
+}
+
+template <typename T>
+void Slam2D<T>::setLoopRegistrationScore(float score)
+{
+  matcher_->setScoreThreshold(score);
 }
 
 template <typename T>

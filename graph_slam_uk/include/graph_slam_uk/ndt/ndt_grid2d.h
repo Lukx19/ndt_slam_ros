@@ -197,6 +197,8 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(double timestamp)
   , initialized_(false)
   , timestamp_(timestamp)
   , grid_()
+  , kdtree_()
+  , means_(new PointCloud())
 {
   grid_.setCellSize(cell_size_);
 }
@@ -305,7 +307,9 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const PointCloud &pcl,
   PointCloud trans_pcl;
   // transforming input pcl to reference frame of this grid
   pcl::transformPointCloud(pcl, trans_pcl, eigt::convertFromTransform(trans));
-  mergeInTraced(createGrid(trans_pcl), false, resize);
+  auto grid = createGrid(trans_pcl);
+  grid.setOrigin(origin);
+  mergeInTraced(std::move(grid), false, resize);
 }
 
 template <typename CellType, typename PointType>
@@ -314,18 +318,16 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
 {
   // all valid cells. Including cells without proper gaussian
   std::vector<CellType> occupied_cells = grid.grid_.getValidCells();
-  Eigen::Vector3d origin2(0, 0, 0);
+  eigt::transform2d_t<double> trans =
+      eigt::transBtwFrames(grid.origin_, this->origin_);
+  Eigen::Vector2d origin2 = trans * Eigen::Vector2d(0, 0);
   if (transform) {
-    eigt::transform2d_t<double> trans =
-        eigt::transBtwFrames(grid.origin_, this->origin_);
     // we need to transform each cell to its new position
     transformNDTCells(occupied_cells, trans);
-    origin2 = eigt::transformPose(
-        grid.origin_, eigt::transBtwPoses(grid.origin_, this->origin_));
   }
   // conversion from x y theta pose to x,y,z coordinates for 3dCell interface
   typename CellType::Vector start(origin2(0), origin2(1), 0);
-
+  // std::cout << "start: " << start.transpose() << std::endl;
   // go over all cells in grid, whichh is merging in.
   for (auto &&cell : occupied_cells) {
     if (cell.hasGaussian()) {
@@ -341,7 +343,9 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
     }
   }
   mergeIn(occupied_cells, resize);
-  // mergeIn(grid.grid_.getValidCells(), resize);
+  // std::cout << *this << std::endl << std::endl;
+  // char a;
+  // std::cin >> a;
 }
 
 template <typename CellType, typename PointType>
@@ -463,7 +467,7 @@ template <typename CellType, typename PointType>
 OccupancyGrid NDTGrid2D<CellType, PointType>::createOccupancyGrid() const
 {
   OccupancyGrid oc_grid;
-  Eigen::Vector2d corner_origin(-grid_.left() * cell_size_,
+  Eigen::Vector2d corner_origin(-static_cast<double>(grid_.left()) * cell_size_,
                                 grid_.up() * cell_size_);
   eigt::transform2d_t<double> trans =
       eigt::transBtwFrames(origin_, Eigen::Vector3d(0, 0, 0));

@@ -1,0 +1,9 @@
+<launch>
+  <group ns="gmapping">
+    <node pkg="gmapping" type="slam_gmapping" name="gmapping" respawn="true" output="screen">
+      <remap from="scan" to="/laser"/>
+      <param name="base_frame" value="base_link"/>
+      <param name="odom_frame" value="odom"/>
+    </node>
+  </group>
+</launch>

@@ -148,12 +148,19 @@ public:
   std::vector<LoopClosure<P>> genLoopClosures(Id node_id);
   std::vector<Id> addToGraph(const std::vector<LoopClosure<P>> &edges);
   void removeFromGraph(const std::vector<Id> &edges);
+  void setMinLoopDistance(float dist)
+  {
+    min_dist_ = dist;
+  }
+  void setMaxLoopDistance(float dist)
+  {
+    max_dist_ = dist;
+  }
 
 protected:
   Graph<P, T> *graph_;
   IScanmatcher2d<T> *matcher_;
 
-  const float MATCH_SCORE = 0.6;
   double min_dist_;
   double max_dist_;
   size_t max_search_depth_;
@@ -220,7 +227,7 @@ std::vector<LoopClosure<P>> LoopDetector<P, T>::genLoopClosures(Id node_id)
       // res.score_ = 1000;
       // res.transform_ = guess_trans;
       // test if sucesfull match
-      if (res.success_ && res.score_ > MATCH_SCORE) {
+      if (res.success_) {
         // create edge
         ROS_INFO_STREAM("loop closure: " << node_id << " -> " << curr_node_id
                                          << "accepted by matching");

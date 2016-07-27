@@ -1,0 +1,20 @@
+<launch>
+  <group ns="slam">
+    <node pkg="graph_slam_uk" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
+      <!-- <param name="tf_prefix" value="p3dx_0"/> -->
+      <param name="robot_base_frame_id" value="base_link"/>
+      <!-- incomming odometry  tf frame_id without tf_prefix -->
+      <param name="odom_farme_id" value="odom"/>
+      <!-- calculated map frame_id name -->
+      <param name="fixed_farme_id" value="map"/>
+      <!--  where to publish calculated pointcloud -->
+      <param name="pcl_map_topic" value="map"/>
+      <!-- where to listen for incomming laser msgs -->
+      <param name="laser_topic" value="/laser"/>
+
+
+       <param name="serialize_graph" type="bool" value="true"/>
+       <param name="graph_pub_topic" type="string" value="graph"/>
+    </node>
+  </group>
+</launch>

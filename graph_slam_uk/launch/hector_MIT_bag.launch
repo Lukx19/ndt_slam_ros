@@ -1,0 +1,11 @@
+<launch>
+  <group ns="hector">
+    <node pkg="hector_mapping" type="hector_mapping" name="hector_mapping" respawn="true" output="screen">
+      <remap from="scan" to="/base_scan/"/>
+      <param name="base_frame" value="base_footprint"/>
+      <param name="odom_frame" value="odom_combined"/>
+      <param name="laser_max_dist" value="60"/>
+      <param name="map_update_angle_thresh" value="0.2"/>
+    </node>
+  </group>
+</launch>

@@ -10,7 +10,6 @@
 #include <Eigen/Dense>
 #include <map>
 #include <memory>
-#include <opencv2/opencv.hpp>
 
 /*
 Grid needs to have implemented:
@@ -25,11 +24,11 @@ namespace slamuk
 template <typename CellType, typename PointType>
 class NDTMapper
 {
-public:
+private:
   typedef NDTGrid2D<CellType, PointType> Grid;
   typedef typename pcl::PointCloud<PointType> Pcl;
 
-private:
+public:
   typedef typename Grid::Ptr NDTGrid2DPtr;
   typedef typename Grid::ConstPtr NDTGrid2DConstPtr;
   typedef typename Grid::Pose Pose;
@@ -44,53 +43,37 @@ public:
   NDTGrid2DPtr combineFrames(const NDTGrid2DPtr &a, const NDTGrid2DPtr &b);
   void recalc(const ros::Time &calc_time);
 
-  const cv::Mat &getOccupancyMap() const
-  {
-    return map_;
-  }
   nav_msgs::OccupancyGrid calcOccupancyGridMsg() const;
 
   typename Pcl::Ptr getPclMap() const
   {
-    return map_pcl_;
+    return means_;
   }
 
 private:
   size_t width_, height_;
   float resolution_;  // [m/cell]
   ros::Time map_recalc_time_;
-  cv::Mat map_;
+  OccupancyGrid map_;
   Grid map_ndt_;
-  typename Pcl::Ptr map_pcl_;
   FrameStorage grids_;
-
+  typename Pcl::Ptr means_;
   // return id of frame if found. Otherwise exception
   typename FrameStorage::iterator getFrameIterator(const NDTGrid2DPtr &frame);
   void addToMap(const Grid &frame);
-  cv::Mat frameToMat(const OccupancyGrid &occ_grid) const;
-  std::pair<size_t, size_t> calcCoordinates(double x, double y, size_t width,
-                                            size_t height,
-                                            double cell_size) const;
 };
 
 // ////////IMPLEMENTATION////
 
-// template <typename CellType, typename PointType>
-// typename NDTMapper<CellType, PointType>::Grid *
-// NDTMapper<CellType, PointType>::addFrame(const Grid &frame)
-// {
-//   grids_.push_back(frame);
-//   addToMap(grids_.back());
-//   return grids_.back().get();
-// }
 template <typename CellType, typename PointType>
 NDTMapper<CellType, PointType>::NDTMapper()
   : width_(200)
   , height_(200)
   , resolution_(0.25f)
-  , map_(200, 200, CV_8UC1)
+  , map_()
   , map_ndt_(Eigen::Vector3d(0, 0, 0))
-  , map_pcl_(new Pcl())
+  , grids_()
+  , means_(new Pcl())
 {
   map_ndt_.setCellSize(resolution_);
 }
@@ -100,19 +83,23 @@ void NDTMapper<CellType, PointType>::addFrame(const NDTGrid2DPtr &frame,
                                               const ros::Time &capture_time)
 {
   grids_.push_back(frame);
-  (*map_pcl_) += (*frame->getMeansTransformed());
-  // addToMap(*grids_.back());
+  addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
+  map_ = map_ndt_.createOccupancyGrid();
+  means_ = map_ndt_.getMeansTransformed();
+  std::cout << "node added" << std::endl;
 }
 
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::addFrame(NDTGrid2DPtr &&frame,
                                               const ros::Time &capture_time)
 {
-  (*map_pcl_) += (*frame->getMeansTransformed());
   grids_.push_back(std::move(frame));
-  // addToMap(*grids_.back());
+  addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
+  map_ = map_ndt_.createOccupancyGrid();
+  means_ = map_ndt_.getMeansTransformed();
+  std::cout << "node added" << std::endl;
 }
 
 template <typename CellType, typename PointType>
@@ -144,56 +131,23 @@ NDTMapper<CellType, PointType>::combineFrames(const NDTGrid2DPtr &a,
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
 {
-  // map_ = cv::Scalar(0);
   std::sort(grids_.begin(), grids_.end(),
             [](const NDTGrid2DPtr &a, const NDTGrid2DPtr &b) {
               return a->operator<(*b);
             });
   map_ndt_.clear();
-  map_pcl_->clear();
-  for (auto &&grid : grids_) {
-    // addToMap(*grid);
-    // map_ndt_.mergeInTraced(*grid, true, true);
-    (*map_pcl_) += (*grid->getMeansTransformed());
+  for (const NDTGrid2DPtr &grid : grids_) {
+    addToMap(*grid);
   }
-  // map_ = frameToMat(map_ndt_.createOccupancyGrid());
+  map_ = map_ndt_.createOccupancyGrid();
+  means_ = map_ndt_.getMeansTransformed();
   map_recalc_time_ = calc_time;
 }
 
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::addToMap(const Grid &frame)
 {
-  OccupancyGrid occ_grid = frame.createOccupancyGrid();
-  resolution_ = occ_grid.resolution_;
-  cv::Mat src = frameToMat(occ_grid);
-  // cv::Mat trans_src(frame_mat.size(),frame_mat.type());
-  float angle = occ_grid.origin_(2);
-  std::cout << angle << std::endl;
-  // get rotation matrix for rotating the image around its center
-  cv::Point2f center(occ_grid.centroid_(0), occ_grid.centroid_(1));
-  cv::Mat rot = cv::getRotationMatrix2D(center, -angle, 1.0);
-  // std::cout << "rot: \n" << rot << std::end;
-  // determine bounding rectangle
-  cv::Rect bbox = cv::RotatedRect(center, src.size() * 4, angle).boundingRect();
-  // adjust transformation matrix
-  rot.at<double>(0, 2) += bbox.width / 2.0 - center.x;
-  rot.at<double>(1, 2) += bbox.height / 2.0 - center.y;
-  cv::Mat rotated;
-  cv::warpAffine(src, rotated, rot, bbox.size(), cv::INTER_NEAREST);
-  cv::namedWindow("TEST", cv::WINDOW_NORMAL);
-
-  cv::imshow("TEST", src);
-  cv::waitKey(0);
-
-  cv::imshow("TEST", rotated);
-  cv::waitKey(0);
-  // blend rotated frame with global map
-  auto coords_pair = calcCoordinates(occ_grid.origin_(0), occ_grid.origin_(1),
-                                     width_, height_, occ_grid.resolution_);
-  std::cout << coords_pair.first << "   " << coords_pair.second << std::endl;
-  cv::Rect roi(coords_pair.first, coords_pair.second, rotated.cols,
-               rotated.rows);
-  addWeighted(map_(roi), 0.3, rotated, 0.7, 0.0, map_(roi));
+  map_ndt_.mergeInTraced(frame, true, true);
 }
 
 template <typename CellType, typename PointType>
@@ -201,37 +155,16 @@ nav_msgs::OccupancyGrid
 NDTMapper<CellType, PointType>::calcOccupancyGridMsg() const
 {
   nav_msgs::OccupancyGrid occ_msg;
-  occ_msg.info.height = height_;
-  occ_msg.info.width = width_;
-  occ_msg.info.resolution = resolution_;
-  occ_msg.info.origin = EigenToPoseMsg(Eigen::Vector3d::Zero());
+  occ_msg.info.height = map_.height_;
+  occ_msg.info.width = map_.width_;
+  occ_msg.info.resolution = map_.resolution_;
+  occ_msg.info.origin = EigenToPoseMsg(map_.origin_);
   occ_msg.info.map_load_time = map_recalc_time_;
-  for (int row = 0; row < map_.rows; ++row) {
-    for (int col = 0; col < map_.cols; ++col) {
-      if (map_.at<int>(row, col) == 0 || map_.at<int>(row, col) > 101)
-        occ_msg.data.push_back(-1);
-      else
-        occ_msg.data.push_back(
-            static_cast<uint8_t>(map_.at<int>(row, col) - 1));
-    }
-  }
+  occ_msg.data = map_.cells_;
   return occ_msg;
 }
 
 //// PROTECTED ////////
-template <typename CellType, typename PointType>
-cv::Mat
-NDTMapper<CellType, PointType>::frameToMat(const OccupancyGrid &occ_grid) const
-{
-  cv::Mat frame_mat(occ_grid.height_, occ_grid.width_, CV_8UC1);
-  for (size_t i = 0; i < occ_grid.cells_.size(); ++i) {
-    if (occ_grid.cells_[i] == -1 || occ_grid.cells_[i] > 100)
-      frame_mat.data[i] = 0;
-    else
-      frame_mat.data[i] = occ_grid.cells_[i] + 1;
-  }
-  return frame_mat;
-}
 
 template <typename CellType, typename PointType>
 typename NDTMapper<CellType, PointType>::FrameStorage::iterator
@@ -241,20 +174,6 @@ NDTMapper<CellType, PointType>::getFrameIterator(const NDTGrid2DPtr &frame)
   if (iter == grids_.end())
     throw std::invalid_argument("Id of frame doesn't exist");
   return iter;
-}
-
-template <typename CellType, typename PointType>
-std::pair<size_t, size_t> NDTMapper<CellType, PointType>::calcCoordinates(
-    double x, double y, size_t width, size_t height, double cell_size) const
-{
-  std::pair<size_t, size_t> coords;
-  double minx = cell_size * (static_cast<double>(width) / 2);
-  double maxy = cell_size * (static_cast<double>(height) / 2);
-  coords.first =
-      static_cast<size_t>(std::floor((x - minx + cell_size / 2) / cell_size));
-  coords.second =
-      static_cast<size_t>(std::floor((-y + maxy + cell_size / 2) / cell_size));
-  return coords;
 }
 
 }  // end of namespace slamuk

@@ -88,25 +88,11 @@ private:
   std::string robot_base_frame_;
   std::string odom_frame_;
   std::string tf_prefix_;
-  std::string odom_topic_;
-  std::string pose_topic_;
-  std::string map_pub_topic_;
-  std::string win_pub_topic_;
-  std::string map_pcl_pub_topic_;
-  std::string win_pcl_pub_topic_;
   std::string laser_topic_;
   std::string subscribe_mode_;
   // graph serializer info
   bool serialize_graph;
   std::string graph_pub_topic_;
-  // // scanmatching atributes
-  float max_range_;
-  double grid_step_;
-  double min_rotation_;
-  double min_displacement_;
-  // // optimalizer atributes
-  size_t iterations_;
-  double epsilon_err_;
 
   void initParameters();
 
