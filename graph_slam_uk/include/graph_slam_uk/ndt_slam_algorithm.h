@@ -137,7 +137,7 @@ protected:
   // matcher used only for incremental matching against running window
   pcl::NormalDistributionsTransform2DEx<PointType, PointType, CellType>
       inc_matcher_;
-  // pcl::NormalDistributionsTransform2DEx<PointType, PointType, CellType>
+  // pcl::D2DNormalDistributionsTransform2D<PointType, PointType, CellType>
   //     inc_matcher_;
 
   unsigned int window_seq_;
@@ -157,7 +157,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   : initialized_(false)
   , first_node_added_(false)
   , win_radius_(80.0f)
-  , min_distance_(0.1)
+  , min_distance_(0.2)
   , min_rotation_(0.1)
   , max_uncertanity_in_window_(1000000.0)
   , max_euclidean_distance_traveled_(1.5)
@@ -179,7 +179,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , window_seq_(0)
 {
   inc_matcher_.setStepSize(0.01);
-  inc_matcher_.setOulierRatio(0.8);
+  inc_matcher_.setOulierRatio(0.7);
   inc_matcher_.setNumLayers(4);
 }
 
@@ -218,7 +218,11 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
     window_seq_ = 0;
     return eigt::getPoseFromTransform(position_);
   }
-
+  unused_trans_ = unused_trans_ * motion;
+  if (!movedEnough(unused_trans_)) {
+    return eigt::getPoseFromTransform(position_ * motion);
+  }
+  unused_trans_.setIdentity();
   FrameTypePtr local = FrameTypePtr(new FrameType());
   PointCloud::Ptr pcl_out(new PointCloud());
   local->setCellSize(cell_size_);
@@ -227,7 +231,7 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   // std::cout << *local << std::endl;
   inc_matcher_.setInputTarget(running_window_);
   inc_matcher_.setInputSource(local->getMeans());
-
+  // inc_matcher_.setInputSource(local);
   inc_matcher_.align(
       *pcl_out,
       eigt::convertFromTransform(position_cumul_ * motion).cast<float>());
@@ -245,10 +249,17 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
 
     // calculate pose increase with respect to last known pose in worls of
     // scanmatching
-    // Transform increase = eigt::getTransFromPose(last_matcher_pose_).inverse()
-    // *
-    //                      eigt::getTransFromPose(matcher_pose);
-    Transform increase = motion;
+    Transform increase = eigt::getTransFromPose(last_matcher_pose_).inverse() *
+                         eigt::getTransFromPose(matcher_pose);
+    std::cout << eigt::getAngle(increase)
+              << " dis: " << eigt::getDisplacement(increase) << std::endl
+              << std::endl;
+    if (eigt::getAngle(increase) < 0.01 &&
+        eigt::getDisplacement(increase) < 0.01) {
+      // increase = motion;
+      std::cout << "ODOM" << std::endl;
+    }
+
     last_matcher_pose_ = matcher_pose;
 
     // update and optimize graph

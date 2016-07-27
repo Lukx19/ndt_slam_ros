@@ -12,8 +12,7 @@
       <!-- ODOM, POSE, default:NON -->
       <param name="subscribe_mode" value="NON"/>
 
-      <!-- Maximal allowe range of laser sensor. Data exceeding this number will be dropped -->
-       <param name="scanmatch_window_radius" type="double" value="80.0"/>
+       <param name="scanmatch_window_radius" type="double" value="30.0"/>
        <param name="node_gen_distance" type="double" value="2.0"/>
        <param name="loop_max_distance" type="double" value="20.0"/>
        <param name="loop_min_distance" type="double" value="20.0"/>

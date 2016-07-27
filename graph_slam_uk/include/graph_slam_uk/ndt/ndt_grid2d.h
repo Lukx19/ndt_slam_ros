@@ -483,8 +483,10 @@ OccupancyGrid NDTGrid2D<CellType, PointType>::createOccupancyGrid() const
   for (const auto &cell_it : grid_) {
     if (cell_it.get() == nullptr)
       oc_grid.cells_.push_back(-1);
+    else if (cell_it->getOccupancyRaw() > 0.8)
+      oc_grid.cells_.push_back(99);
     else
-      oc_grid.cells_.push_back(cell_it->getOccupancy());
+      oc_grid.cells_.push_back(0);
   }
   return oc_grid;
 }
