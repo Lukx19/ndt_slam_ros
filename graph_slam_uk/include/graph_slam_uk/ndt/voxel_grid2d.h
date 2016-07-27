@@ -7,14 +7,14 @@
 #include <memory>
 #include <vector>
 
-/*
-* CellType should have these methods implemented:
-* operator+=
-  operator=
-*/
-
 namespace slamuk
 {
+/**
+ * @brief      Generic 2D voxel grid implementation.
+ *
+ * @tparam     CellType  Type of cell used in the grid. It needs to have
+ *                       implemented operator += and operator=
+ */
 template <typename CellType>
 class VoxelGrid2D
 {
@@ -40,36 +40,110 @@ public:
   // destructive = true);
   // bool addCell(size_t row, size_t col,CellTypePtr && cell, bool destructive =
   // true);
+
+  /**
+   * @brief      Adds a cell on the specified position
+   *
+   * @param[in]  posistion  The position
+   * @param[in]  cell       The cell
+   * @param[in]  merging    If true than operator += is used otherwise operator=
+   */
   void addCell(const Point& posistion, const CellType& cell,
                bool merging = true);
+
+  /**
+   * @brief      Adds a cell on the specified position
+   *
+   * @param[in]  posistion  The position
+   * @param[in]  <unnamed>  { parameter_description }
+   * @param[in]  merging    If true than operator += is used otherwise operator=
+   */
   void addCell(const Point& posistion, CellType&& cell, bool merging = true);
+
+  /**
+   * @brief      Removes a cell at position
+   *
+   * @param[in]  posistion  The position
+   *
+   * @return     { description_of_the_return_value }
+   */
   bool removeCell(const Point& posistion);
-  // CellType & getCell(size_t row, size_t col);
+
+  /**
+   * @brief      Determines if point is inside of the grid's boundaries.
+   *
+   * @param[in]  pt    The point
+   *
+   * @return     True if inside, False otherwise.
+   */
   bool isInside(const Point& pt) const;
 
-  // CellVector getNeighbors(size_t row, size_t col, size_t radius) const;
-  // return all initialized neighbors in radius including cell where pt belongs
+  /**
+   * @brief      Gets the all cells around point in given radius.
+   *
+   * @param[in]  pt      The point
+   * @param[in]  radius  The radius in cell size multiples.
+   *
+   * @return     The neighbors.
+   */
   CellPtrVector getNeighbors(const Point& pt, size_t radius) const;
 
+  /**
+   * @brief      Determine if the cell at point position is occupied.
+   *
+   * @param[in]  pt    The point
+   *
+   * @return     true if cell is occupied, false otherwise
+   */
   bool cellExists(const Point& pt) const;
+
   CellType& operator[](const Point& pt);
   CellType* getCellPtr(const Point& pt) const;
   std::pair<double, double> getCentroid(const Point& pt) const;
-  // returns all initialized cells by values. Should be used for creation of new
-  // grids
+
+  /**
+   * @brief      Gets all initialized cells in the grid.
+   *
+   * @return     The cells.
+   */
   CellVector getValidCells() const;
   CellPtrVector getValidCellsPtr() const;
   // enlarges grid in all directions to size based on parameters. If parameters
   // are smaller than current state no enlarging or resizing is done.
+
+  /**
+   * @brief      Enlarges the grid in all directions to the size based on
+   *             parameters. If parameters are smaller than current state no
+   *             enlarging or resizing is done.
+   *
+   * @param[in]  minx  New size to the left
+   * @param[in]  miny  New size downwards
+   * @param[in]  maxx  New size to the right
+   * @param[in]  maxy  New size upwards
+   */
   void enlarge(float minx, float miny, float maxx, float maxy)
   {
     enlargeGrid(calcIncLeft(minx), calcIncRight(maxx), calcIncUp(maxy),
                 calcIncDown(miny));
   }
-  // return all cells laying on the ray. Uninitialized cells are created with
-  // default constructor
+
+  /**
+   * @brief      Do ray-tracing from the start point to the end point.
+   *
+   * @param[in]  start  The start of ray-tracing
+   * @param[in]  end    The end of ray-tracing
+   *
+   * @return     All cells laying on the ray
+   */
   CellPtrVector rayTrace(const Point& start, const Point& end);
-  // starts at 0,0
+
+  /**
+   * @brief      Do ray-tracing from the origin of the grid to the end point.
+   *
+   * @param[in]  end   The end of the ray
+   *
+   * @return     All cells laying on the ray
+   */
   CellPtrVector rayTrace(const Point& end)
   {
     return rayTrace(Point(0, 0), end);
@@ -92,12 +166,23 @@ public:
   void clear();
 
   /////////////////Parameters
+
+  /**
+   * @brief      Sets the cell size.
+   *
+   * @param[in]  cell_size  The cell size
+   */
   void setCellSize(float cell_size)
   {
     cell_size_ = cell_size;
     cell_size_half_ = cell_size / 2;
   }
 
+  /**
+   * @brief      Gets the cell size.
+   *
+   * @return     The cell size.
+   */
   float getCellSize() const
   {
     return cell_size_;

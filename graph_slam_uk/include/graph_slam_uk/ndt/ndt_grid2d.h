@@ -13,6 +13,12 @@
 
 namespace slamuk
 {
+/**
+ * @brief      Datastructure representing NDT grid.
+ *
+ * @tparam     CellType   Type of NDT cell
+ * @tparam     PointType  Type of PCL point type used for initialization.
+ */
 template <typename CellType, typename PointType>
 class NDTGrid2D
 {
@@ -34,20 +40,96 @@ public:
 public:
   explicit NDTGrid2D(double timestamp = 0.0);
   NDTGrid2D(const Eigen::Vector3d &origin, double timestamp = 0.0);
-  /////////////IMPLEMENTATION oF INDTGrid2D
-  // pcl should be in world coordinate frame
+
+  /**
+   * @brief      Creates NDT grid from point cloud and update occupancy of empty
+   *             spaces.
+   *
+   * @param[in]  pcl   The pcl
+   */
   void initialize(const PointCloud &pcl);
+
+  /**
+   * @brief      Creates NDT grid from point cloud without occupancy update.
+   *
+   * @param[in]  pcl   The pcl
+   */
   void initializeSimple(const PointCloud &pcl);
+
+  /**
+   * @brief      Merges in point cloud based on it origin in wolrd coordiate
+   *             system.
+   *
+   * @param[in]  pcl     The pcl
+   * @param[in]  origin  The origin of the point cloud
+   * @param[in]  resize  Set ture if you want to enlarge grid based to fit
+   *                     inputed point cloud
+   */
   void mergeIn(const PointCloud &pcl, const Pose &origin, bool resize = true);
+
+  /**
+   * @brief      Merge in another NDt grid.
+   *
+   * @param[in]  grid       The grid
+   * @param[in]  transform  Set true if you want to apply change bases
+   *                        transformation to all cells in inserted grid
+   * @param[in]  resize     Set ture if you want to enlarge grid based to fit
+   *                     inputed NDT grid's cells
+   */
   void mergeIn(const SelfType &grid, bool transform = true, bool resize = true);
+
+  /**
+   * @brief      Merge in all cells from vector.
+   *
+   * @param[in]  cells   The cells
+   * @param[in]  resize  Set ture if you want to enlarge grid base to fit
+   *                     all cells.
+   */
   void mergeIn(const std::vector<CellType> &cells, bool resize);
 
+  /**
+   * @brief      Merges in point cloud based on it origin in wolrd coordiate
+   *             system. Apply occupancy update to identifie empty space.
+   *
+   * @param[in]  pcl     The pcl
+   * @param[in]  origin  The origin of the point cloud
+   * @param[in]  resize  Set ture if you want to enlarge grid based to fit
+   *                     inputed point cloud
+   */
   void mergeInTraced(const PointCloud &pcl, const Pose &origin,
                      bool resize = true);
+
+  /**
+   * @brief      Merge in another NDt grid. Apply occupancy update to identifie
+   * empty space.
+   *
+   * @param[in]  grid       The grid
+   * @param[in]  transform  Set true if you want to apply change bases
+   *                        transformation to all cells in inserted grid
+   * @param[in]  resize     Set ture if you want to enlarge grid based to fit
+   *                     inputed NDT grid's cells
+   */
   void mergeInTraced(const SelfType &grid, bool transform, bool resize = true);
 
   // enlarges grid in all directions to size based on parameters. If parameters
   // are smaller than current state no enlarging or resizing is done.
+  //
+  // @param[in]  left   The left
+  // @param[in]  down   The down
+  // @param[in]  right  The right
+  // @param[in]  up     { parameter_description }
+  //
+
+  /**
+   * @brief      Enlarges grid in all directions to size based on parameters. If
+   *             parameters are smaller than current state no enlarging or
+   *             resizing is done.
+   *
+   * @param[in]  left   The left direction
+   * @param[in]  down   The down direction
+   * @param[in]  right  The right direction
+   * @param[in]  up     The up direction
+   */
   void enlarge(float left, float down, float right, float up)
   {
     grid_.enlarge(left, down, right, up);
@@ -65,58 +147,146 @@ public:
    * @return     residual (unused) transformation
    */
   Transform move(const Transform &transform);
+
+  /**
+   * @brief      Transforms whole grid.
+   *
+   * @param[in]  transform  The transform
+   */
   void transform(const Transform &transform);
+
+  /**
+   * @brief      Creates an occupancy grid message.
+   *
+   * @return     The occupancy message.
+   */
   OccupancyGrid createOccupancyGrid() const;
 
+  /**
+   * @brief      Sets the cell size.
+   *
+   * @param[in]  cell_size  The cell size
+   */
   void setCellSize(float cell_size)
   {
     cell_size_ = cell_size;
     grid_.setCellSize(cell_size);
   }
+
+  /**
+   * @brief      Gets the cell size.
+   *
+   * @return     The cell size.
+   */
   float getCellSize() const
   {
     return cell_size_;
   }
 
+  /**
+   * @brief      Gets the origin.
+   *
+   * @return     The origin.
+   */
   Eigen::Vector3d getOrigin() const
   {
     return origin_;
   }
+
+  /**
+   * @brief      Sets the origin.
+   *
+   * @param[in]  origin  The origin
+   */
   void setOrigin(const Eigen::Vector3d &origin)
   {
     origin_ = origin;
   }
 
+  /**
+   * @brief      Gets the time stamp.
+   *
+   * @return     The timestamp.
+   */
   double getTimestamp() const
   {
     return timestamp_;
   }
+  /**
+   * @brief      Sets the time-stamp.
+   *
+   * @param[in]  timestamp  The time-stamp
+   */
   void setTimestamp(double timestamp)
   {
     timestamp_ = timestamp;
   }
+
+  /**
+   * @brief      The comparator based on time-stamp of creation.
+   *
+   * @param[in]  other  The other grid
+   *
+   * @return     true if current grid is smaller than other grid
+   */
   bool operator<(const NDTGrid2D &other) const
   {
     return timestamp_ < other.timestamp_;
   }
-  /////////////// IMPLEMENTATION of IScanmatchableGrid
-  // returns only cells with gaussian inside. Includes all cells in radius plus
+
+  // returns only cells with Gaussian inside. Includes all cells in radius plus
   // cell where pt belongs.
+
+  /**
+   * @brief      The radius search around certain point. Returns only cells with
+   *             Gaussian inside. Includes all cells in radius plus cell where
+   *             pt belongs.
+   *
+   * @param[in]  pt      The point
+   * @param[in]  radius  The radius
+   *
+   * @return     The neighbors.
+   */
   CellPtrVector getNeighbors(const Eigen::Vector2d &pt, float radius) const;
 
+  /**
+   * @brief      Gets the k nearest neighbors with Gaussian information inside.
+   *
+   * @param[in]  pt    The point
+   * @param[in]  K     The number of nearest neighbors
+   *
+   * @return     The k nearest neighbors.
+   */
   CellPtrVector getKNearestNeighbors(const Eigen::Vector2d &pt, size_t K) const;
 
-  // multiple 2 means 2x2 grids will be merged to one cell. Multiple 3  means
-  // 4x4 grids will be merged together
-  // multiple - multiple of cell_sizes
+  /**
+   * @brief      Creates a coarser grid based on selected cell size. Apply
+   *             merging of cells. It is advised to use multiples of 2 from the
+   *             base cell size.
+   *
+   * @param[in]  cell_size  The cell size
+   *
+   * @return     { description_of_the_return_value }
+   */
   SelfType createCoarserGrid(float cell_size) const;
 
-  // Point cloud is in local coordinate system of this frame
+  /**
+   * @brief      Gets the point cloud with all means in the grid
+   *
+   * @return     The means.
+   */
   const typename PointCloud::Ptr getMeans() const
   {
     return means_;
   }
-  // point cloud is transformed to world coordinate frame
+
+  /**
+   * @brief      Gets the means transformed to from local grid centric
+   * coordinate
+   *             system into global coordinate system.
+   *
+   * @return     The means in global frame.
+   */
   const typename PointCloud::Ptr getMeansTransformed() const
   {
     typename PointCloud::Ptr res(new PointCloud());
@@ -126,24 +296,91 @@ public:
     return res;
   }
 
+  /**
+   * @brief      Gets all cells containing Gaussian distribution.
+   *
+   * @return     The gaussian cells.
+   */
   CellPtrVector getGaussianCells() const;
 
   /////////////// ADITIONAL
+
+  /**
+   * @brief      Returns cell occupying cell at point.
+   *
+   * @param[in]  pt    The point
+   *
+   * @return     The cell.
+   */
   const CellType &operator[](const PointType &pt) const;
+
+  /**
+     * @brief      Returns cell occupying cell at point.
+     *
+     * @param[in]  pt    The point
+     *
+     * @return     The cell.
+     */
   const CellType &operator[](const Eigen::Vector2d &pt) const;
+
+  /**
+     * @brief      Returns cell occupying cell at point.
+     *
+     * @param[in]  pt    The point
+     *
+     * @return     The cell.
+     */
   CellType &operator[](const PointType &pt);
+  /**
+   * @brief      Returns cell occupying cell at point.
+   *
+   * @param[in]  pt    The point
+   *
+   * @return     The cell.
+   */
   CellType &operator[](const Eigen::Vector2d &pt);
+
+  /**
+   * @brief      Determines if point is inside the bounds of grid.
+   *
+   * @param[in]  pt    The point
+   *
+   * @return     True if inside, False otherwise.
+   */
   bool isInside(const PointType &pt);
+  /**
+ * @brief      Determines if point is inside the bounds of grid.
+ *
+ * @param[in]  pt    The point
+ *
+ * @return     True if inside, False otherwise.
+ */
   bool isInside(const Eigen::Vector2d &pt) const;
+
+  /**
+   * @brief      Makes a shared pointer from this grid.
+   *
+   * @return     The shared pointer.
+   */
   Ptr makeShared() const
   {
     return Ptr(new SelfType(*this));
   }
 
+  /**
+   * @brief      Gets the radius of farthest cells from centroid of this grid.
+   *
+   * @return     The radius.
+   */
   double getRadius() const
   {
     return grid_.width() * cell_size_ + grid_.height() * cell_size_ / 4;
   }
+  /**
+   * @brief      Gets the centroid of the grid.
+   *
+   * @return     The centroid.
+   */
   Eigen::Vector2d getCentroid() const
   {
     double x = grid_.right() * cell_size_ - grid_.left() * cell_size_;
@@ -151,11 +388,20 @@ public:
     return Eigen::Vector2d(x, y);
   }
 
+  /**
+   * @brief      Removes all cells. Capacity and size stays the same
+   */
   void clear()
   {
     grid_.clear();
     initialized_ = false;
   }
+
+  /**
+   * @brief      Grid to message serialization.
+   *
+   * @return     message
+   */
   NDTGridMsg serialize() const;
 
   template <typename Cell, typename Pt>

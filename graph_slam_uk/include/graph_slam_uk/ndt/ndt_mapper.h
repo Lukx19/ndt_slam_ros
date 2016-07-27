@@ -11,16 +11,15 @@
 #include <map>
 #include <memory>
 
-/*
-Grid needs to have implemented:
-operator<
-setOrigin(Pose)
-setTimestamp(double)
-getTimestamp(double)
-
-*/
 namespace slamuk
 {
+/**
+ * @brief      {The class merging individual ndt_grids into one map}
+ *
+ * @tparam     CellType   { type of NDT cell}
+ * @tparam     PointType  { type of PCL point used for initialization of
+ * ndt_grid}
+ */
 template <typename CellType, typename PointType>
 class NDTMapper
 {
@@ -36,15 +35,67 @@ public:
 
 public:
   NDTMapper();
+
+  /**
+   * @brief      Adds a frame to the map. Map is updated.
+   *
+   * @param[in]  frame         The frame
+   * @param[in]  capture_time  The capture time
+   */
   void addFrame(const NDTGrid2DPtr &frame, const ros::Time &capture_time);
+
+  /**
+   * @brief      Adds a frame frame to the map. Map is updated.
+   *
+   * @param[in]  frame    The frame
+   * @param[in]  capture_time  The capture time
+   */
   void addFrame(NDTGrid2DPtr &&frame, const ros::Time &capture_time);
+
+  /**
+   * @brief      Removes a frame.
+   *
+   * @param[in]  frame  The frame
+   */
   void removeFrame(const NDTGrid2DConstPtr &frame);
+
+  /**
+   * @brief      Changes frames origin. Do not recalculate the whole map.
+   *
+   * @param[in]  frame     The frame
+   * @param[in]  new_pose  The new pose
+   */
   void updateFrame(const NDTGrid2DPtr &frame, const Pose &new_pose);
+
+  /**
+   * @brief      Merge two frames into one.
+   *
+   * @param[in]  a     The first frame
+   * @param[in]  b     The second frame
+   *
+   * @return     The pointer to new created frame used in map.
+   */
   NDTGrid2DPtr combineFrames(const NDTGrid2DPtr &a, const NDTGrid2DPtr &b);
+
+  /**
+   * @brief      Redraws whole map.
+   *
+   * @param[in]  calc_time  The calculate time of recalculation
+   */
   void recalc(const ros::Time &calc_time);
 
+  /**
+   * @brief      Calculates the occupancy grid message.
+   *
+   * @return     The occupancy grid message.
+   */
   nav_msgs::OccupancyGrid calcOccupancyGridMsg() const;
 
+  /**
+   * @brief      Gets the PCL map representation.
+   *
+   * @return     The PCL map.
+   */
   typename Pcl::Ptr getPclMap() const
   {
     return means_;
@@ -164,7 +215,7 @@ NDTMapper<CellType, PointType>::calcOccupancyGridMsg() const
   return occ_msg;
 }
 
-//// PROTECTED ////////
+//// PRIVATE ////////
 
 template <typename CellType, typename PointType>
 typename NDTMapper<CellType, PointType>::FrameStorage::iterator
