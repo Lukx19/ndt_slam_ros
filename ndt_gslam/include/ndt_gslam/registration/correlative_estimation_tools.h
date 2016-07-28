@@ -54,16 +54,29 @@ public:
   {
     return half_size_;
   }
+  /**
+   * @brief      Gets cell at index
+   *
+   * @param[in]  idx   The index
+   *
+   * @return     the cell
+   */
   const CellType &operator[](size_t idx) const
   {
     return kernel_[idx];
   }
-  /** return correct byte based on coordinates relative to the center of kernel
-  * kernel:
-  *  2    14   2           [-1,-1 ]    [-1,1]
-  * 14   100  14 -------->        [0,0]
-  *  2    14   2 [row,col] [1,-1]     [1,1]
-  */
+  /**
+   * @brief      return correct byte based on coordinates relative to the
+   *             center of kernel kernel:
+   *             2    14   2           [-1,-1 ]  [-1,1]
+   *             14   100  14 -------->      [0,0]
+   *             2    14   2           [1,-1]     [1,1]
+   *
+   * @param[in]  row   The row
+   * @param[in]  col   The col
+   *
+   * @return     The cell
+   */
   const CellType &operator()(int row, int col) const
   {
     return kernel_[static_cast<size_t>((row + half_size_) * size_ + col +
@@ -119,6 +132,12 @@ inline std::ostream &operator<<(std::ostream &out, const SmoothingKernel &k)
 }
 
 ////////////////////////////////////////////// LOOK UP TABLE///////
+
+/**
+ * @brief      Fast lookup table for correlation registration
+ *
+ * @tparam     PointType   basic types
+ */
 template <typename PointType>
 class LookUpTable
 {
@@ -137,13 +156,67 @@ public:
     , border_size_(0)
   {
   }
+  /**
+   * @brief      Initialize point cloud from point cloud.
+   *
+   * @param[in]  target         The target pointc loud
+   * @param[in]  grid_step      The grid step
+   * @param[in]  std_deviation  The standard deviation of sensor noise
+   */
   void initGrid(const pcl::PointCloud<PointType> &target, float grid_step,
                 float std_deviation);
+
+  /**
+   * @brief      Calculates score of point cloud
+   *
+   * @param[in]  pcl   The pcl
+   *
+   * @return     The score.
+   */
   double getScore(const pcl::PointCloud<PointType> &pcl) const;
+
+  /**
+   * @brief      Calculates score from indexes
+   *
+   * @param[in]  pcl   The indexes
+   *
+   * @return     The score.
+   */
   double getScore(const std::vector<IndexPoint> &pcl) const;
+
+  /**
+   * @brief      Gets the maximum score.
+   *
+   * @return     The maximum score.
+   */
   double getMaxScore() const;
+
+  /**
+   * @brief      Converts point cloud to vector of indexes
+   *
+   * @param[in]  pcl   The pcl
+   *
+   * @return     vector of indexes
+   */
   std::vector<IndexPoint> toIndexes(const pcl::PointCloud<PointType> &pcl) const;
+
+  /**
+   * @brief      Translate indexes in place.
+   *
+   * @param      indexes  The indexes
+   * @param[in]  dx       translation in x axis in number of cells
+   * @param[in]  dy       translation in y axis in number of cells
+   */
   void moveIndexes(std::vector<IndexPoint> &indexes, int dx, int dy) const;
+
+  /**
+   * @brief Translate indexes in x and y direction
+   *
+   * @param[in]  source  The source indexes
+   * @param      out     The transformed indexes
+   * @param[in]  dx      translation in x axis
+   * @param[in]  dy      translation in y axis
+   */
   void transformIndexes(const std::vector<IndexPoint> &source,
                         std::vector<IndexPoint> &out, float dx, float dy) const;
 

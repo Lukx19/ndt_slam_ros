@@ -19,10 +19,20 @@ public:
   explicit NDTGrid2DHolder(const GridPtr &data) : data_(data)
   {
   }
+  /**
+   * @brief      Gets the centroid of the ndt grid
+   *
+   * @return     The centroid.
+   */
   Eigen::Vector2d getCentroid() const
   {
     return data_->getCentroid();
   }
+  /**
+   * @brief      Gets the radius measured from centroid
+   *
+   * @return     The radius.
+   */
   double getRadius() const
   {
     return data_->getRadius();
@@ -32,6 +42,11 @@ public:
     return data_;
   }
 
+  /**
+   * @brief      Updates origin of the NDT grid
+   *
+   * @param[in]  new_pose  The new pose
+   */
   void updatePosition(const Eigen::Vector3d &new_pose)
   {
     data_->setOrigin(new_pose);

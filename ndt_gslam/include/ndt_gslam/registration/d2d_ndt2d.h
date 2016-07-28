@@ -74,11 +74,12 @@ public:
   {
     return layer_count_;
   }
-  /** \brief Set/change the voxel grid cell size for the finnest grid. Other
-   * grids
-   * will have higher length of cell (coarse)
-    * \param[in] cel_size cell size in meters
-    */
+  /**
+   * @brief      Set/change the voxel grid cell size for the finnest grid. Other
+   *             grids will have higher length of cell (coarse)
+   *
+   * @param[in]  cell_size  cell size in meters
+   */
   inline void setCellSize(float cell_size)
   {
     if (initCellSizes(cell_size)) {
@@ -86,37 +87,50 @@ public:
     }
   }
 
+  /**
+   * @brief      Gets the cell size.
+   *
+   * @return     The cell size.
+   */
   inline float getCellSize() const
   {
     return (cell_sizes_.back());
   }
 
-  /** \brief Get the newton line search maximum step length.
-    * \return maximum step length
+  /**
+    * @brief      Get the newton line search maximum step length.
+    *
+    * @return     maximum step length
     */
   inline double getStepSize() const
   {
     return (step_size_);
   }
 
-  /** \brief Set/change the newton line search maximum step length.
-    * \param[in] step_size maximum step length
+  /**
+    * @brief      Set/change the newton line search maximum step length.
+    *
+    * @param[in]  step_size  maximum step length
     */
   inline void setStepSize(double step_size)
   {
     step_size_ = step_size;
   }
 
-  /** \brief Get the point cloud outlier ratio.
-    * \return outlier ratio
+  /**
+    * @brief      Get the point cloud outlier ratio.
+    *
+    * @return     outlier ratio
     */
   inline double getOulierRatio() const
   {
     return (outlier_ratio_);
   }
 
-  /** \brief Set/change the point cloud outlier ratio.
-    * \param[in] outlier_ratio outlier ratio
+  /**
+    * @brief      Set/change the point cloud outlier ratio.
+    *
+    * @param[in]  outlier_ratio  outlier ratio
     */
   inline void setOulierRatio(double outlier_ratio)
   {
@@ -124,37 +138,61 @@ public:
     initParams();
   }
 
+  /**
+   * @brief      Enables the multithreading.
+   *
+   * @param[in]  thread_count  The thread count
+   */
   void enableMultithreading(unsigned int thread_count)
   {
     threads_ = thread_count;
   }
 
-  /** \brief Get the registration alignment probability.
-    * \return transformation probability
+  /**
+    * @brief      Get the registration alignment probability.
+    *
+    * @return     transformation probability
     */
   inline double getTransformationProbability() const
   {
     return (trans_probability_);
   }
 
-  /** \brief Get the number of iterations required to calculate alignment.
-    * \return final number of iterations
+  /**
+    * @brief      Get the number of iterations required to calculate alignment.
+    *
+    * @return     final number of iterations
     */
   inline int getFinalNumIteration() const
   {
     return (nr_iterations_);
   }
 
+  /**
+   * @brief      Gets the covariance.
+   *
+   * @return     The covariance.
+   */
   inline Eigen::Matrix3d getCovariance() const
   {
     return covariance_;
   }
 
+  /**
+   * @brief      Gets the information matrix.
+   *
+   * @return     The information matrix.
+   */
   inline Eigen::Matrix3d getInformMatrix() const
   {
     return inform_matrix_;
   }
 
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  cloud  The cloud
+   */
   virtual void setInputTarget(const PclTargetConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
@@ -164,6 +202,11 @@ public:
     target_grid_ = GridTargetConstPtr(tmp);
   }
 
+  /**
+   * @brief      Sets the input source.
+   *
+   * @param[in]  cloud  The cloud
+   */
   virtual void setInputSource(const PclSourceConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputSource(cloud);
@@ -173,7 +216,11 @@ public:
     source_grid_ = GridSourceConstPtr(tmp);
   }
 
-  // using Registration<PointSource, PointTarget>::setInputSource;
+  /**
+   * @brief      Sets the input source.
+   *
+   * @param[in]  grid  The grid
+   */
   virtual void setInputSource(const GridSourceConstPtr &grid)
   {
     source_grid_ = grid;
@@ -182,7 +229,11 @@ public:
     // setCellSize(source_grid_->getCellSize());
   }
 
-  // using Registration<PointSource, PointTarget>::setInputTarget;
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  grid  The grid
+   */
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
     target_grid_ = grid;
@@ -240,9 +291,10 @@ protected:
 
   unsigned int threads_;
 
-  /** \brief Initialize fitting parameters for normal distrubution in cells for
-   * every resolution.
-  */
+  /**
+   * @brief      Initialize fitting parameters for normal distrubution in cells
+   *             for every resolution.
+   */
   virtual inline void initParams()
   {
     params_.clear();
@@ -251,14 +303,17 @@ protected:
           ndt_reg::FittingParams(outlier_ratio_, 1 / cell_sizes_[i]));
     }
   }
-  /** \brief Initialize cell_sizes. First grid will have cells of base_size
-  * length.base_size
-  * Other layers have cell sizes in multiples of 2. e.g.
-  * 0.25, 0.5, 1, 2
-   * Numer of layers is chosen based on layer_count parameter. Cell sizes
-  * are sorted from coarsest grid to finest grid size
-  * \return Returns true if made any changes to cell_sizes_
-  */
+  /**
+   * @brief      Initialize cell_sizes. First grid will have cells of base_size
+   *             length.base_size Other layers have cell sizes in multiples of
+   *             2. e.g. 0.25, 0.5, 1, 2 Numer of layers is chosen based on
+   *             layer_count parameter. Cell sizes are sorted from coarsest grid
+   *             to finest grid size
+   *
+   * @param[in]  base_size  The base size
+   *
+   * @return     Returns true if made any changes to cell_sizes_
+   */
   virtual inline bool initCellSizes(float base_size)
   {
     if (cell_sizes_.size() > 0 && cell_sizes_.back() == base_size &&
@@ -272,18 +327,22 @@ protected:
     return true;
   }
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    * \param[in] guess the initial gross estimation of the transformation
+  /**
+    * @brief      Estimate the transformation and returns the transformed source
+    *             (input) as output.
+    *
+    * @param[out] output  the resultant input transfomed point cloud dataset
+    * @param[in]  guess   the initial gross estimation of the transformation
     */
   virtual void computeTransformation(PclSource &output,
                                      const Eigen::Matrix4f &guess);
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    */
+  /**
+   * @brief      Estimate the transformation and returns the transformed source
+   *             (input) as output.
+   *
+   * @param[out] output  the resultant input transfomed point cloud dataset
+   */
   virtual void computeTransformation(PclSource &output)
   {
     computeTransformation(output, Eigen::Matrix4f::Identity());

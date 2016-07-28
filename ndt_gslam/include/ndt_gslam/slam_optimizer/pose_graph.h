@@ -32,7 +32,22 @@ public:
   Graph()
   {
   }
+  /**
+   * @brief      Adds an edge to the graph
+   *
+   * @param[in]  edge  The new edge
+   *
+   * @return     unique id of this new edge
+   */
   Id addEdge(E&& edge);
+
+  /**
+   * @brief      Adds a node to the graph
+   *
+   * @param[in]  node  The new node
+   *
+   * @return     uniwue id of the new node
+   */
   Id addNode(N&& node);
   bool removeEdge(size_t id);
   // bool removeNode(const size_t id);
@@ -360,17 +375,7 @@ public:
     : id_(0), visited_(false), pose_(pose), object_(obj)
   {
   }
-  // Node(const Node<P, T>& other)
-  // {
-  //   std::cout << "Node copy constructor\n";
-  //   clone(other);
 
-  // };
-  // Node<P,T> & operator=(const Node<P,T> & other){
-  //   std::cout << "Node copy assignemnt\n";
-  //   clone(other);
-  //   return *this;
-  // }
 private:
   void clone(const Node<P, T>& other)
   {

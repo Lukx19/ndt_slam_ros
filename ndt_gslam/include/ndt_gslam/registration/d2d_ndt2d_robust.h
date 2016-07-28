@@ -55,6 +55,11 @@ public:
   {
   }
 
+  /**
+   * @brief      Sets the input source.
+   *
+   * @param[in]  cloud  The cloud
+   */
   virtual void setInputSource(const PclSourceConstPtr &cloud)
   {
     d2d_.setInputSource(cloud);
@@ -62,6 +67,11 @@ public:
     Registration<PointSource, PointTarget>::setInputSource(cloud);
   }
 
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  cloud  The cloud
+   */
   virtual void setInputTarget(const PclTargetConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
@@ -69,6 +79,11 @@ public:
     corr_est_.setInputTarget(cloud);
   }
 
+  /**
+   * @brief      Sets the input source.
+   *
+   * @param[in]  grid  The grid
+   */
   virtual void setInputSource(const GridSourceConstPtr &grid)
   {
     d2d_.setInputSource(grid);
@@ -77,6 +92,11 @@ public:
     Registration<PointSource, PointTarget>::setInputSource(pcl);
   }
 
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  grid  The grid
+   */
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
     PclTargetConstPtr pcl = grid->getMeans();
@@ -87,6 +107,11 @@ public:
     corr_est_.setCoarseStep(cell_size_);
   }
 
+  /**
+   * @brief      Sets the score threshold for correct match
+   *
+   * @param[in]  limit  The limit
+   */
   void setRejectionLimit(float limit)
   {
     if (limit < 1 && limit > 0)
@@ -95,90 +120,149 @@ public:
       throw std::invalid_argument("Rejection limit in robust scan-matching out "
                                   "of bounds [0,1]");
   }
+  /**
+   * @brief      Sets the number of layers used in D2D
+   *
+   * @param[in]  num   The number of layers
+   */
   void setNumLayers(size_t num)
   {
     d2d_.setNumLayers(num);
   }
 
+  /**
+   * @brief      Gets the number layers.
+   *
+   * @return     The number layers.
+   */
   size_t getNumLayers()
   {
     return d2d_.getNumLayers();
   }
-  /** \brief Set/change the voxel grid cell size for largest grid(finest).
-   * Other grids
-   * will have smaller longer cell size (coarser)
-    * \param[in] base_size side length of voxels
-    */
+  /**
+   * @brief      Set/change the voxel grid cell size for largest grid(finest).
+   *             Other grids will have smaller longer cell size (coarser)
+   *
+   * @param[in]  base_size  side length of voxels
+   */
   void setCellSize(float base_size)
   {
     d2d_.setCellSize(base_size);
     cell_size_ = base_size;
   }
 
-  /** \brief Get voxel grid resolution.
-    * \return side length of the moast coarse
+  /**
+    * @brief      Get voxel grid resolution.
+    *
+    * @return     side length of the moast coarse
     */
   float getCellSize() const
   {
     return cell_size_;
   }
 
-  /** \brief Get the newton line search maximum step length.
-    * \return maximum step length
+  /**
+    * @brief      Get the newton line search maximum step length.
+    *
+    * @return     maximum step length
     */
   double getStepSize() const
   {
     return d2d_.getStepSize();
   }
 
-  /** \brief Set/change the newton line search maximum step length.
-    * \param[in] step_size maximum step length
+  /**
+    * @brief      Set/change the newton line search maximum step length.
+    *
+    * @param[in]  step_size  maximum step length
     */
   void setStepSize(double step_size)
   {
     d2d_.setStepSize(step_size);
   }
 
+  /**
+   * @brief      Gets the outlier ratio of D2D algorithm
+   *
+   * @return     The outlier ratio.
+   */
   double getOutlierRatio() const
   {
     return d2d_.getOutlierRatio();
   }
 
+  /**
+   * @brief      Sets the oulier ratio of D2D
+   *
+   * @param[in]  step_size  The step size
+   */
   void setOulierRatio(double step_size)
   {
     d2d_.setOulierRatio(step_size);
   }
 
+  /**
+   * @brief      Gets the alignment quality.
+   *
+   * @return     The alignment quality.
+   */
   float getAlignmentQuality() const
   {
     return alignment_quality_;
   }
-  /** \brief Get the number of iterations required to calculate alignment.
-    * \return final number of iterations
+  /**
+    * @brief      Get the number of iterations required to calculate alignment.
+    *
+    * @return     final number of iterations
     */
   int getFinalNumIteration() const
   {
     return d2d_.getFinalNumIteration();
   }
 
+  /**
+   * @brief      Gets the covariance.
+   *
+   * @return     The covariance.
+   */
   Eigen::Matrix3d getCovariance() const
   {
     return d2d_.getCovariance();
   }
 
+  /**
+   * @brief      Gets the information matrix.
+   *
+   * @return     The inform matrix.
+   */
   Eigen::Matrix3d getInformMatrix() const
   {
     return d2d_.getInformMatrix();
   }
 
+  /**
+   * @brief      Sets the translation range.
+   *
+   * @param[in]  range  The range
+   */
   void setTranslationRange(float range)
   {
     corr_est_.setTranslationRange(range);
   }
+  /**
+   * @brief      Sets the rotation range.
+   *
+   * @param[in]  range  The range
+   */
   void setRotationRange(float range)
   {
     corr_est_.setRotationRange(range);
   }
+  /**
+   * @brief      Enables the multithreading.
+   *
+   * @param[in]  thread_count  The thread count
+   */
   void enableMultithreading(unsigned int thread_count)
   {
     d2d_.enableMultithreading(thread_count);
@@ -204,19 +288,23 @@ protected:
   float alignment_quality_;
   float rejection_limit_;
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transformed point cloud dataset
-    */
+  /**
+   * @brief      Estimate the transformation and returns the transformed source
+   *             (input) as output.
+   *
+   * @param[out] output  the resultant input transformed point cloud dataset
+   */
   virtual void computeTransformation(PclSource &output)
   {
     computeTransformation(output, Eigen::Matrix4f::Identity());
   }
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transformed point cloud dataset
-    * \param[in] guess the initial gross estimation of the transformation
+  /**
+    * @brief      Estimate the transformation and returns the transformed source
+    *             (input) as output.
+    *
+    * @param[out] output  the resultant input transformed point cloud dataset
+    * @param[in]  guess   the initial gross estimation of the transformation
     */
   virtual void computeTransformation(PclSource &output,
                                      const Eigen::Matrix4f &guess);

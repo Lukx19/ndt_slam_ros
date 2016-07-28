@@ -52,6 +52,11 @@ public:
   {
   }
 
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  cloud  The cloud
+   */
   virtual void setInputTarget(const PclTargetConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
@@ -61,6 +66,11 @@ public:
     target_grid_ = GridTargetConstPtr(tmp);
   }
 
+  /**
+   * @brief      Sets the input target.
+   *
+   * @param[in]  grid  The grid
+   */
   virtual void setInputTarget(const GridTargetConstPtr &grid)
   {
     target_grid_ = grid;
@@ -68,6 +78,11 @@ public:
     Registration<PointSource, PointTarget>::setInputTarget(pcl);
   }
 
+  /**
+   * @brief      Sets the cell size of the finest grid
+   *
+   * @param[in]  cell_size  The cell size
+   */
   inline void setCellSize(float cell_size)
   {
     if (initCellSizes(cell_size)) {
@@ -75,11 +90,21 @@ public:
     }
   }
 
+  /**
+   * @brief      Gets the cell size.
+   *
+   * @return     The cell size.
+   */
   inline float getCellSize() const
   {
     return (cell_sizes_.back());
   }
 
+  /**
+   * @brief      Sets the number of layers.
+   *
+   * @param[in]  num   The number
+   */
   inline void setNumLayers(size_t num)
   {
     layer_count_ = num;
@@ -87,62 +112,89 @@ public:
     initParams();
   }
 
+  /**
+   * @brief      Gets the number of layers.
+   *
+   * @return     The number layers.
+   */
   inline size_t getNumLayers()
   {
     return layer_count_;
   }
-  /** \brief Get the point cloud outlier ratio.
-    * \return outlier ratio
+  /**
+    * @brief      Get the point cloud outlier ratio.
+    *
+    * @return     outlier ratio
     */
   inline double getOulierRatio() const
   {
     return (outlier_ratio_);
   }
 
-  /** \brief Set/change the point cloud outlier ratio.
-    * \param[in] outlier_ratio outlier ratio
+  /**
+    * @brief      Set/change the point cloud outlier ratio.
+    *
+    * @param[in]  outlier_ratio  outlier ratio
     */
   inline void setOulierRatio(double outlier_ratio)
   {
     outlier_ratio_ = outlier_ratio;
     initParams();
   }
-  /** \brief Get the newton line search maximum step length.
-  * \return maximum step length
-  */
+  /**
+   * @brief      Get the newton line search maximum step length.
+   *
+   * @return     maximum step length
+   */
   inline double getStepSize() const
   {
     return (step_size_);
   }
 
-  /** \brief Set/change the newton line search maximum step length.
-    * \param[in] step_size maximum step length
+  /**
+    * @brief      Set/change the newton line search maximum step length.
+    *
+    * @param[in]  step_size  maximum step length
     */
   inline void setStepSize(double step_size)
   {
     step_size_ = step_size;
   }
-  /** \brief Get the registration alignment probability.
-    * \return transformation probability
+  /**
+    * @brief      Get the registration alignment probability.
+    *
+    * @return     transformation probability
     */
   inline double getTransformationProbability() const
   {
     return (trans_probability_);
   }
 
-  /** \brief Get the number of iterations required to calculate alignment.
-    * \return final number of iterations
+  /**
+    * @brief      Get the number of iterations required to calculate alignment.
+    *
+    * @return     final number of iterations
     */
   inline int getFinalNumIteration() const
   {
     return (nr_iterations_);
   }
 
+  /**
+   * @brief      Gets the covariance.
+   *
+   * @return     The covariance.
+   */
   inline Eigen::Matrix3d getCovariance() const
   {
     return covariance_;
   }
 
+  /**
+   * @brief      Gets the information matrix.
+   *
+   * @return     The information matrix.
+   */
   inline Eigen::Matrix3d getInformMatrix() const
   {
     return inform_matrix_;
@@ -187,19 +239,23 @@ protected:
   size_t layer_count_;
   GridTargetConstPtr target_grid_;
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    */
+  /**
+   * @brief      Estimate the transformation and returns the transformed source
+   *             (input) as output.
+   *
+   * @param[out] output  the resultant input transfomed point cloud dataset
+   */
   virtual void computeTransformation(PclSource &output)
   {
     computeTransformation(output, Eigen::Matrix4f::Identity());
   }
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    * \param[in] guess the initial gross estimation of the transformation
+  /**
+    * @brief      Estimate the transformation and returns the transformed source
+    *             (input) as output.
+    *
+    * @param[out] output  the resultant input transfomed point cloud dataset
+    * @param[in]  guess   the initial gross estimation of the transformation
     */
   virtual void computeTransformation(PclSource &output,
                                      const Eigen::Matrix4f &guess);
@@ -231,25 +287,33 @@ protected:
     return true;
   }
 
-  /** \brief Estimate score, hessian and gradient for selected source point
-   * cloud based on given transformation.
-    * \param[in] ndt_grid NDT target grid used as registration target.
-    * \param[in] source Source point cloud used to register agains NDT target
-   * grid
-    * \param[in] trans Transformation used for projecting points of source to
-   * grid cells of NDT grid
-    * \return Estimated parameters score, gradient, hessian.
+  /**
+    * @brief      Estimate score, hessian and gradient for selected source point
+    *             cloud based on given transformation.
+    *
+    * @param[in]  ndt_grid  NDT target grid used as registration target.
+    * @param[in]  source    Source point cloud used to register agains NDT
+    *                       target grid
+    * @param[in]  trans     Transformation used for projecting points of source
+    *                       to grid cells of NDT grid
+    * @param[in]  param     The parameter
+    *
+    * @return     Estimated parameters score, gradient, hessian.
     */
   virtual ndt_reg::ScoreAndDerivatives<3, double>
   calcScore(const GridTarget &ndt_grid, const PclSource &source,
             const Eigen::Vector3d &trans, const ndt_reg::FittingParams &param);
-  /** \brief Estimate score, hessian and gradient for selected point.
-    * \param[in] cell NDT target grid cell for selected point.
-    * \param[in] trans_pt Transformed source cloud point.
-    * \param[in] pt Source cloud point befor transformation.
-    * \param[in] cos_theta Cosine of transformation angle.
-    * \param[in] sin_theta Sine of transformation angle.
-    * \return Estimated parameters score, gradient, hessian.
+  /**
+    * @brief      Estimate score, hessian and gradient for selected point.
+    *
+    * @param[in]  pt         Source cloud point befor transformation.
+    * @param[in]  cell       NDT target grid cell for selected point.
+    * @param[in]  trans_pt   Transformed source cloud point.
+    * @param[in]  cos_theta  Cosine of transformation angle.
+    * @param[in]  sin_theta  Sine of transformation angle.
+    * @param[in]  param      The parameter
+    *
+    * @return     Estimated parameters score, gradient, hessian.
     */
   virtual ndt_reg::ScoreAndDerivatives<3, double>
   calcPointScore(const PointSource &pt, const CellType *cell,

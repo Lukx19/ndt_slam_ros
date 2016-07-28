@@ -51,6 +51,7 @@ ScoreAndDerivatives<N, T> operator+(const ScoreAndDerivatives<N, T> &lhs,
 }
 
 //////////////////////////////////// PARAMETERS FOR FITTING OF COVARIANCE
+
 struct FittingParams {
   double gauss_d1_;
   double gauss_d2_;
@@ -264,6 +265,16 @@ double auxilaryFunction_dPsiMT(double g_a, double g_0, double mu = 1.e-4)
   return (g_a - mu * g_0);
 }
 
+/**
+ * @brief      Converts vector representation of the transformation into matrix
+ *             representation
+ *
+ * @param[in]  trans  The transformation
+ *
+ * @tparam     T      Scalar of the matrix
+ *
+ * @return     transformation matrix
+ */
 template <typename T = float>
 Eigen::Matrix<T, 4, 4> vecToMat(const Eigen::Vector3d &trans)
 {
@@ -279,6 +290,16 @@ Eigen::Matrix<T, 4, 4> vecToMat(const Eigen::Vector3d &trans)
   return trans_mat;
 }
 
+/**
+ * @brief      Convert matrix representation of translation into vector
+ *             representation of the pose
+ *
+ * @param[in]  trans  The transformation
+ *
+ * @tparam     T      Scalar of the matrix
+ *
+ * @return     The pose
+ */
 template <typename T = float>
 Eigen::Vector3d matToVec(const Eigen::Matrix<T, 4, 4> &trans)
 {

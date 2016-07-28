@@ -6,6 +6,14 @@
 
 namespace slamuk
 {
+/**
+ * @brief      Splits string based on token
+ *
+ * @param[in]  data   The data
+ * @param[in]  token  The token
+ *
+ * @return     parts of the data between tokens
+ */
 std::vector<std::string> split(const std::string& data,
                                const std::string& token);
 

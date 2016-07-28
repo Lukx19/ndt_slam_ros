@@ -24,22 +24,11 @@ public:
   static TransformMatrix vecToTransMat(const Pose &p)
   {
     return eigt::getTransFromPose(p);
-
-    //  TransformMatrixRaw mat;
-    // // Pose p = std::forward<const Pose>(pose);
-    // //Pose  p= pose;
-    //  mat<<cos(p(2)), -sin(p(2)), p(0),
-    //       sin(p(2)), cos(p(2)),  p(1),
-    //       0,             0,              1;
-    //  return TransformMatrix(mat);
   }
 
   static Pose transMatToVec(const TransformMatrix &trans)
   {
     return eigt::getPoseFromTransform(trans);
-    // Pose pose;
-    // pose<<trans(0,2),trans(1,2), atan2(trans(1,0),trans(0,0));
-    // return pose;
   }
 
   static JacobianPair calcJacobianBlocks(const Pose &xi, const Pose &xj,

@@ -46,29 +46,56 @@ public:
 
   CorrelativeEstimation();
 
-  /** \brief Empty destructor */
+  /**
+   * @brief      Empty destructor
+   */
   virtual ~CorrelativeEstimation()
   {
   }
 
+  /**
+   * @brief      Sets the cell size of the coarse grid.
+   *
+   * @param[in]  step  The step
+   */
   inline void setCoarseStep(float step)
   {
     coarse_step_ = step;
   }
 
+  /**
+   * @brief      Gets Sets the cell size of the coarse grid.
+   *
+   * @return     The coarse step.
+   */
   inline float getCoarseStep() const
   {
     return coarse_step_;
   }
 
+  /**
+   * @brief      Sets the translation range.
+   *
+   * @param[in]  range  The range
+   */
   void setTranslationRange(float range)
   {
     translation_range_ = range;
   }
+  /**
+   * @brief      Sets the rotation range.
+   *
+   * @param[in]  range  The range
+   */
   void setRotationRange(float range)
   {
     rotation_range_ = range;
   }
+  /**
+   * @brief      Enables the multithreading.
+   *
+   * @param[in]  thread_count  The thread count
+   */
   void enableMultithreading(unsigned int thread_count)
   {
     threads_ = thread_count;
@@ -89,19 +116,23 @@ protected:
   ml_corr::LookUpTable<PointTarget> coarse_lookup_;
   ml_corr::LookUpTable<PointTarget> fine_lookup_;
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    */
+  /**
+   * @brief      Estimate the transformation and returns the transformed source
+   *             (input) as output.
+   *
+   * @param[out] output  the resultant input transfomed point cloud dataset
+   */
   virtual void computeTransformation(PclSource &output)
   {
     computeTransformation(output, Eigen::Matrix4f::Identity());
   }
 
-  /** \brief Estimate the transformation and returns the transformed source
-   * (input) as output.
-    * \param[out] output the resultant input transfomed point cloud dataset
-    * \param[in] guess the initial gross estimation of the transformation
+  /**
+    * @brief      Estimate the transformation and returns the transformed source
+    *             (input) as output.
+    *
+    * @param[out] output  the resultant input transfomed point cloud dataset
+    * @param[in]  guess   the initial gross estimation of the transformation
     */
   virtual void computeTransformation(PclSource &output,
                                      const Eigen::Matrix4f &guess);
