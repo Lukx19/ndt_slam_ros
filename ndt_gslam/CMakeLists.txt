@@ -201,7 +201,9 @@ target_link_libraries(graph_slam2d
    ${EIGEN3_LIBRARIES}
 )
 
-add_executable(ndt2d_visual src/registration/ndt2d_visual.cpp)
+add_executable(ndt2d_visual
+  src/registration/ndt2d_visual.cpp
+  src/ndt/ndt_cell.cpp)
 target_link_libraries (ndt2d_visual
   ${PCL_LIBRARIES}
   ${catkin_LIBRARIES}

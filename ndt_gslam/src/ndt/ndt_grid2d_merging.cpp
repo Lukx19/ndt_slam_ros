@@ -1,5 +1,4 @@
 #include <laser_geometry/laser_geometry.h>
-#include <ndt_gslam/ndt/cell_policy2d.h>
 #include <ndt_gslam/ndt/ndt_cell.h>
 #include <ndt_gslam/ndt/ndt_grid2d.h>
 #include <ndt_gslam/ndt/ndt_mapper.h>
@@ -28,7 +27,7 @@
 using namespace slamuk;
 
 typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
-typedef NDTGrid2D<NDTCell<CellPolicy2d>, pcl::PointXYZ> GridType;
+typedef NDTGrid2D<NDTCell, pcl::PointXYZ> GridType;
 typedef GridType::ConstPtr GridTypeConstPtr;
 typedef GridType::Ptr GridTypePtr;
 typedef pcl::D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ>
@@ -521,7 +520,7 @@ void testDynamicEnviro()
 
 void testMapMerging()
 {
-  NDTMapper<NDTCell<CellPolicy2d>, pcl::PointXYZ> merged_map;
+  NDTMapper<NDTCell, pcl::PointXYZ> merged_map;
   std::vector<GridTypePtr> grids;
   grids.emplace_back(new GridType(Eigen::Vector3d(0, 0, 2)));
   grids.emplace_back(new GridType(Eigen::Vector3d(0, 4, 0)));
