@@ -22,7 +22,6 @@
 #include <ndt_gslam/registration/d2d_ndt2d_robust.h>
 #include <ndt_gslam/registration/ndt2d.h>
 
-#include <ndt_gslam/ndt/cell_policy2d.h>
 #include <ndt_gslam/ndt/ndt_cell.h>
 #include <ndt_gslam/ndt/ndt_grid2d.h>
 
@@ -35,7 +34,7 @@ using namespace pcl;
 using namespace slamuk;
 
 typedef pcl::PointCloud<pcl::PointXYZ> pcl_t;
-typedef NDTGrid2D<NDTCell<CellPolicy2d>, pcl::PointXYZ> GridType;
+typedef NDTGrid2D<NDTCell, pcl::PointXYZ> GridType;
 typedef GridType::ConstPtr GridTypeConstPtr;
 typedef GridType::Ptr GridTypePtr;
 typedef NormalDistributionsTransform2DEx<pcl::PointXYZ, pcl::PointXYZ>
