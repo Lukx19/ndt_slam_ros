@@ -19,3 +19,41 @@ This is experimental version of NDT scanmatching frontend with Graph based backe
 - run bag in one terminal
 - run ndt-glsm in second terminal
     - roslaunch ndt_gslam graph_slam_bag_MIT.launch
+    
+## NDT registration algorithms as a plugin to PointCloud library
+### Basic usage
+    #include <ndt_gslam/registration/d2d_ndt2d.h>
+
+    int main(int argc, char ** argv)
+    {
+        typedef pcl::PointCloud<pcl::PointXYZ> Pcl;
+        Pcl:Ptr target(new Pcl());
+        Pcl:Ptr source(new Pcl());
+        Pcl out_pcl;
+
+        pcl::D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ> matcher;
+        matcher.setInputSource(source);
+        matcher.setInputTarget(target);
+        matcher.align(out_pcl);
+        matcher.getFinalTransformation();
+    }
+
+### Usage with NDT frames
+    #include <ndt_gslam/registration/d2d_ndt2d.h>
+    #include <ndt_gslam/ndt/ndt_grid2d.h>
+    #include <ndt_gslam/ndt/ndt_cell.h>
+
+    int main(int argc, char ** argv)
+    {
+        typedef slamuk::NDTGrid2D<slamuk::NDTCell, pcl::PointXYZ> NDTFrame;
+        NDTFrame::Ptr target(new NDTFrame());
+        NDTFrame::Ptr source(new NDTFrame());
+        pcl::PointCloud<pcl::PointXYZ> out_pcl;
+
+        pcl::D2DNormalDistributionsTransform2D<pcl::PointXYZ, pcl::PointXYZ> matcher;
+        matcher.setInputSource(source);
+        matcher.setInputTarget(target);
+        matcher.align(out_pcl);
+        matcher.getFinalTransformation();
+    }
+The same API can be used for other registration algorithms in this package.
