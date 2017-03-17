@@ -82,7 +82,8 @@ private:
   tf::Transform world_tf_trans_;
   uint seq_;
   bool is_ready_;
-
+  float z_min_;
+  float z_max_;
   // parameters from launch file***********
   std::string fixed_frame_;
   std::string robot_base_frame_;

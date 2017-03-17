@@ -1,0 +1,95 @@
+# Microsoft Xbox 360 wired controller
+teleop:
+  piloting:
+    type: topic
+    message_type: "geometry_msgs/Twist"
+    topic_name: cmd_vel
+    deadman_buttons: []
+    axis_mappings:
+      -
+        axis: 4  # Right thumb stick (up/down)
+        target: linear.x
+        scale: 0.5
+        offset: 0.0
+      -
+        axis: 3  # Right thumb stick (left/right)
+        target: linear.y
+        scale: 0.5
+        offset: 0.0
+      -
+        axis: 7  # Left thumb stick (up/down)
+        target: linear.z
+        scale: 1.0
+        offset: 0.0
+      -
+        axis: 0  # Left thumb stick (left/right)
+        target: angular.z
+        scale: 1.0
+        offset: 0.0
+  camera:
+    type: topic
+    message_type: "geometry_msgs/Twist"
+    topic_name: camera_control
+    deadman_buttons: []
+    axis_mappings:
+      -
+        axis: 7  # Left D-Pad (up/down)
+        target: angular.y
+        scale: 40.0
+        offset: 0.0
+      -
+        axis: 6  # Left D-Pad (left/right)
+        target: angular.z
+        scale: -40.0
+        offset: 0.0
+  takeoff:
+    type: topic
+    message_type: "std_msgs/Empty"
+    topic_name: takeoff
+    deadman_buttons: [0]  # A
+    axis_mappings: []
+  land:
+    type: topic
+    message_type: "std_msgs/Empty"
+    topic_name: land
+    deadman_buttons: [1]  # B
+    axis_mappings: []
+  emergency:
+    type: topic
+    message_type: "std_msgs/Empty"
+    topic_name: reset
+    deadman_buttons: [2] # X
+    axis_mappings: []
+  start_recording:
+    type: topic
+    message_type: "std_msgs/Bool"
+    topic_name: record
+    deadman_buttons: [5] # RB
+    message_value:
+       -
+         target: data
+         value: true
+  stop_recording:
+    type: topic
+    message_type: "std_msgs/Bool"
+    topic_name: record
+    deadman_buttons: [4] # LB
+    message_value:
+       -
+         target: data
+         value: false
+  take_snapshot:
+    type: topic
+    message_type: "std_msgs/Empty"
+    topic_name: snapshot
+    deadman_buttons: [3] # Y
+    axis_mappings: []
+  flip:
+    type: topic
+    message_type: "std_msgs/UInt8"
+    topic_name: flip
+    deadman_buttons: [8]  # Xbox
+    message_value:
+       -
+         target: data
+         value: 0

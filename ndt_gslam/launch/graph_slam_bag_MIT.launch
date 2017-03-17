@@ -1,6 +1,6 @@
 <launch>
   <group ns="slam">
-    <node pkg="ndt_gslam" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
+    <node pkg="ndt_gslam" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen" launch-prefix="gdb -ex run --args">
       <!-- <param name="tf_prefix" value="p3dx_0"/> -->
       <param name="robot_base_frame_id" value="base_footprint"/>
       <!-- incomming odometry  tf frame_id without tf_prefix -->
@@ -8,7 +8,7 @@
       <!-- calculated map frame_id name -->
       <param name="map_farme_id" value="map"/>
 
-      <remap from="/scan" to="/base_scan" />
+      <!-- <remap from="/scan" to="/base_scan" /> -->
       <!-- ODOM, POSE, default:NON -->
       <param name="subscribe_mode" value="NON"/>
 

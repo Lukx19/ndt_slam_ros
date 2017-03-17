@@ -133,7 +133,7 @@ catkin_package(
 # c++11 support required
 #set(CMAKE_CXX_COMPILER "clang++")
 #set(CMAKE_C_COMPILER "clang")
-set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3")
+set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3 -ggdb")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)

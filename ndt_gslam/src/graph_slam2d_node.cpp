@@ -98,6 +98,10 @@ void GraphSlamNode::initParameters()
 
   serialize_graph = nh_private_.param<bool>("serialize_graph", true);
 
+  z_min_ = static_cast<float>(nh_private_.param<double>("z_min", 0.0));
+  ROS_INFO_STREAM("!!!!!!!!!!!!!!!" << z_min_);
+  z_max_ = static_cast<float>(nh_private_.param<double>("z_max", 0.3));
+  ROS_INFO_STREAM("!!!!!!!!!!!!!!!" << z_max_);
   if (tf_prefix_ != "") {
     robot_base_frame_ = tf_prefix_ + "/" + robot_base_frame_;
     odom_frame_ = tf_prefix_ + "/" + odom_frame_;
@@ -190,7 +194,7 @@ bool GraphSlamNode::preparePoseData(const ros::Time &time_stamp,
   tf::transformTFToEigen(tf_odom, trans_robot);
   pose = eigt::getPoseFromTransform(
       eigt::convertToTransform(trans_robot.matrix()));
-
+  ROS_INFO_STREAM(pose.transpose());
   return true;
 }
 
@@ -218,14 +222,28 @@ bool GraphSlamNode::prepareLaserData(
                      << laser_pcl_base.size());
     return false;
   }
+  size_t count1 = 0;
+  size_t count05 = 0;
+  // filtering points which are only in certain height
+  pcl_ptr_t filtered_pcl(new Pcl());
+  ROS_INFO_STREAM("cloud height: " << laser_pcl_base[0].z << "range: " << z_min_
+                                   << " -> " << z_max_);
+  for (auto &&point : laser_pcl_base) {
+    if (point.z < z_max_ && point.z >= z_min_) {
+      filtered_pcl->push_back(pcl::PointXYZ(point.x, point.y, 0));
+    }
+  }
+  ROS_INFO_STREAM("points: " << filtered_pcl->size());
   // make copy of pointcloud wrapped in shared ptr
-  pcl = laser_pcl_base.makeShared();
+  pcl = filtered_pcl;
   return true;
 }
 
 void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
                                 pcl_ptr_t &pcl, const Eigen::Matrix3d &covar)
 {
+  if (pcl->size() == 0)
+    return;
   // prepare initial data in first received msg pair
   if (!is_ready_) {
     is_ready_ = true;
@@ -240,6 +258,7 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
   last_odom_ = odom;
 
   pose_t current_pose = last_pose_;
+  ROS_INFO_STREAM(eigt::getPoseFromTransform(odom_trans).transpose());
   current_pose = algorithm_->update(odom_trans, covar, *pcl, time_stamp);
   last_pose_ = current_pose;
   updateTFTrans(odom, current_pose);

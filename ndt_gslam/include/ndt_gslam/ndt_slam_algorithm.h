@@ -140,6 +140,7 @@ protected:
   //     inc_matcher_;
 
   unsigned int window_seq_;
+  size_t update_skip_;
   ros::Time window_update_time_;
   std::vector<FrameTypePtr> frames_;
 
@@ -176,6 +177,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
         std::unique_ptr<LoopScanmatcher>(new LoopScanmatcher())))
   , inc_matcher_()
   , window_seq_(0)
+  , update_skip_(0)
 {
   inc_matcher_.setStepSize(0.01);
   inc_matcher_.setOulierRatio(0.7);
@@ -215,13 +217,20 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
     frame_temp_->initialize(pcl);
     window_update_time_ = update_time;
     window_seq_ = 0;
+    update_skip_ = 0;
     return eigt::getPoseFromTransform(position_);
   }
+  ++update_skip_;
   unused_trans_ = unused_trans_ * motion;
   if (!movedEnough(unused_trans_)) {
     return eigt::getPoseFromTransform(position_ * motion);
   }
+  ROS_INFO_STREAM("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << pcl.size());
   unused_trans_.setIdentity();
+  // if (update_skip_ < 2) {
+  //   return eigt::getPoseFromTransform(position_ * motion);
+  // }
+  update_skip_ = 0;
   FrameTypePtr local = FrameTypePtr(new FrameType());
   PointCloud::Ptr pcl_out(new PointCloud());
   local->setCellSize(cell_size_);
