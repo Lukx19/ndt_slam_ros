@@ -226,7 +226,7 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   PointCloud::Ptr pcl_out(new PointCloud());
   local->setCellSize(cell_size_);
   local->setOrigin(running_window_->getOrigin());
-  local->initialize(pcl);
+  local->initializeSimple(pcl);
   // std::cout << *local << std::endl;
   inc_matcher_.setInputTarget(running_window_);
   inc_matcher_.setInputSource(local->getMeans());
@@ -309,7 +309,6 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     frames_.back().swap(frame_temp_);
     map_.addFrame(frames_.back(), update_time);
     FrameTypeHolder frame_wrap(frames_.back());
-    size_t backup_id = last_node_id_;
 
     last_node_id_ =
         opt_engine_->addPose(frames_.back()->getOrigin(), frame_wrap);

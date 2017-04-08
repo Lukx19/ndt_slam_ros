@@ -100,7 +100,7 @@ public:
                      bool resize = true);
 
   /**
-   * @brief      Merge in another NDt grid. Apply occupancy update to identifie
+   * @brief      Merge in another NDt grid. Apply occupancy update to identify
    * empty space.
    *
    * @param[in]  grid       The grid
@@ -110,15 +110,6 @@ public:
    *                     inputed NDT grid's cells
    */
   void mergeInTraced(const SelfType &grid, bool transform, bool resize = true);
-
-  // enlarges grid in all directions to size based on parameters. If parameters
-  // are smaller than current state no enlarging or resizing is done.
-  //
-  // @param[in]  left   The left
-  // @param[in]  down   The down
-  // @param[in]  right  The right
-  // @param[in]  up     { parameter_description }
-  //
 
   /**
    * @brief      Enlarges grid in all directions to size based on parameters. If
@@ -499,7 +490,7 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
   if (resize || !initialized_) {
     initialized_ = true;
     float minx, miny, maxx, maxy;
-    pcl::getMinMaxNDT2D(cells, minx, miny, maxx, maxy);
+    pcl::getMinMaxNDT2D(cells, &minx, &miny, &maxx, &maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
       if (cell.hasGaussian()) {
@@ -904,15 +895,14 @@ NDTGrid2D<CellType, PointType>::createGrid(const PointCloud &pcl) const
   localGrid.setCellSize(cell_size_);
   localGrid.setOrigin(this->origin_);
   float minx, miny, maxx, maxy;
-  pcl::getMinMax2D(pcl, minx, miny, maxx, maxy);
+  pcl::getMinMax2D(pcl, &minx, &miny, &maxx, &maxy);
   localGrid.enlarge(minx, miny, maxx, maxy);
   for (size_t i = 0; i < pcl.size(); ++i) {
-    if (std::isnan(pcl[i].x) || std::isnan(pcl[i].y) || std::isnan(pcl[i].z))
-      continue;
+    if (std::isnan(pcl[i].x) || std::isnan(pcl[i].y))
+     continue;
     localGrid.addPoint(pcl[i]);
   }
-  localGrid.computeNDTCells();
-  std::vector<CellType> occupied_cells = localGrid.grid_.getValidCells();
+  //std::vector<CellType> occupied_cells = localGrid.grid_.getValidCells();
   // for (auto &&cell : occupied_cells) {
   //   //std::cout << "valid cell: " << cell.toString() << std::endl;
   // }
@@ -949,7 +939,7 @@ NDTGrid2D<CellType, PointType>::getKNearestNeighborsVoxel(
   // sort elements based on distance from point from parameter
   std::sort(radius_cells.begin(), radius_cells.end(), [&point](CellType *a,
                                                                CellType *b) {
-    return (a->getMean() - point).norm() < (a->getMean() - point).norm();
+    return (a->getMean() - point).norm() < (b->getMean() - point).norm();
   });
   res.reserve(K);
   std::move(radius_cells.begin(), radius_cells.begin() + K,

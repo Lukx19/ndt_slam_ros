@@ -65,12 +65,12 @@ void NDTCell::computeGaussian()
   float occup_addition =
       static_cast<float>(points_vec_.size()) * LOG_LIKE_OCCUPANCY;
   updateOccupancy(occup_addition);
-  if (occup_ <= 0) {
-    gaussian_ = false;
-    points_ = points_vec_.size();
-    return;
-  }
-  if (points_vec_.size() < 6) {
+  // if (occup_ <= 0) {
+  //   gaussian_ = false;
+  //   points_ = points_vec_.size();
+  //   return;
+  // }
+  if (points_vec_.size() < 3) {
     gaussian_ = false;
     points_ = points_vec_.size();
     return;
