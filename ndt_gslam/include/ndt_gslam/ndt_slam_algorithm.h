@@ -160,7 +160,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , min_rotation_(0.1)
   , max_uncertanity_in_window_(1000000.0)
   , max_euclidean_distance_traveled_(1.5)
-  , cell_size_(0.25)
+  , cell_size_(0.4)
   , last_node_id_(0)
   , last_trans_(Transform::Identity())
   , unused_trans_(Transform::Identity())
@@ -170,8 +170,8 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , last_matcher_pose_(Pose::Zero())
   , covar_temp_()
   , map_()
-  , running_window_(new FrameType())
-  , frame_temp_(new FrameType())
+  , running_window_(new FrameType(cell_size_,FrameType::Pose(0, 0, 0)))
+  , frame_temp_(new FrameType(cell_size_,FrameType::Pose(0, 0, 0)))
   , opt_engine_(new Slam2D<FrameTypeHolder>(
         std::unique_ptr<LoopScanmatcher>(new LoopScanmatcher())))
   , inc_matcher_()
@@ -180,6 +180,8 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   inc_matcher_.setStepSize(0.01);
   inc_matcher_.setOulierRatio(0.7);
   inc_matcher_.setNumLayers(4);
+  running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
+                           win_radius_);
 }
 
 NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
@@ -201,16 +203,8 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   // 9. add edge between last two nodes in graph with values saved in step 3
   // 10. execute 4. and repeat process
   if (!initialized_) {
-    running_window_->setOrigin(FrameType::Pose(0, 0, 0));
-    running_window_->setCellSize(cell_size_);
-    frame_temp_->setOrigin(FrameType::Pose(0, 0, 0));
-    frame_temp_->setCellSize(cell_size_);
-    position_.setIdentity();
-    last_matcher_pose_.setZero();
     initialized_ = true;
     // enters first scan as it is to running window
-    running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
-                             win_radius_);
     running_window_->initialize(pcl);
     frame_temp_->initialize(pcl);
     window_update_time_ = update_time;
@@ -222,10 +216,8 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
     return eigt::getPoseFromTransform(position_ * motion);
   }
   unused_trans_.setIdentity();
-  FrameTypePtr local = FrameTypePtr(new FrameType());
+  FrameTypePtr local = FrameTypePtr(new FrameType(cell_size_,running_window_->getOrigin()));
   PointCloud::Ptr pcl_out(new PointCloud());
-  local->setCellSize(cell_size_);
-  local->setOrigin(running_window_->getOrigin());
   local->initializeSimple(pcl);
   // std::cout << *local << std::endl;
   inc_matcher_.setInputTarget(running_window_);
@@ -304,8 +296,7 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     ROS_INFO_STREAM("[SLAM ALGORITHM]: creating new frame");
     // robot moved out of reasonable bounds for single temp
     // frame
-    frames_.emplace_back(new FrameType());
-    frames_.back()->setCellSize(cell_size_);
+    frames_.emplace_back(new FrameType(cell_size_));
     frames_.back().swap(frame_temp_);
     map_.addFrame(frames_.back(), update_time);
     FrameTypeHolder frame_wrap(frames_.back());
@@ -341,7 +332,6 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     // pcl::visualizePcl<PointType>(frames_.back()->getMeans());
 
     frame_temp_->setOrigin(eigt::getPoseFromTransform(position_));
-    frame_temp_->setCellSize(cell_size_);
     // frame_temp_->mergeInTraced(*new_scan, true, true);
     frame_temp_->mergeInTraced(new_scan, frame_temp_->getOrigin(), true);
     // std::cout << "last nodes pose in graph: "

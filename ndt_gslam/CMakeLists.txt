@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
     message_generation
 )
 
+find_package(OpenMP REQUIRED)
 find_package(PCL 1.7 REQUIRED)
 find_package(Boost REQUIRED COMPONENTS program_options system)
 find_package(Eigen3 REQUIRED)

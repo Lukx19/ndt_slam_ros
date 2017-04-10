@@ -38,8 +38,8 @@ public:
   typedef boost::shared_ptr<const SelfType> ConstPtr;
 
 public:
-  explicit NDTGrid2D(double timestamp = 0.0);
-  NDTGrid2D(const Eigen::Vector3d &origin, double timestamp = 0.0);
+ explicit NDTGrid2D(float cell_size=0.4, double timestamp = 0.0);
+  NDTGrid2D(float cell_size,const Eigen::Vector3d &origin, double timestamp = 0.0);
 
   /**
    * @brief      Creates NDT grid from point cloud and update occupancy of empty
@@ -152,17 +152,6 @@ public:
    * @return     The occupancy message.
    */
   OccupancyGrid createOccupancyGrid() const;
-
-  /**
-   * @brief      Sets the cell size.
-   *
-   * @param[in]  cell_size  The cell size
-   */
-  void setCellSize(float cell_size)
-  {
-    cell_size_ = cell_size;
-    grid_.setCellSize(cell_size);
-  }
 
   /**
    * @brief      Gets the cell size.
@@ -428,28 +417,26 @@ protected:
 
 // //////////////////IMPLEMENTATION ///////////
 template <typename CellType, typename PointType>
-NDTGrid2D<CellType, PointType>::NDTGrid2D(double timestamp)
+NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,double timestamp)
   : origin_(Eigen::Vector3d::Zero())
-  , cell_size_(0.25)
+  , cell_size_(cell_size)
   , initialized_(false)
   , timestamp_(timestamp)
-  , grid_()
+  , grid_(cell_size)
   , kdtree_()
   , means_(new PointCloud())
 {
-  grid_.setCellSize(cell_size_);
 }
 
 template <typename CellType, typename PointType>
-NDTGrid2D<CellType, PointType>::NDTGrid2D(const Eigen::Vector3d &origin,
+NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,const Eigen::Vector3d &origin,
                                           double timestamp)
   : origin_(origin)
-  , cell_size_(0.25)
+  , cell_size_(cell_size)
   , initialized_(false)
   , timestamp_(timestamp)
-  , grid_()
+  , grid_(cell_size)
 {
-  grid_.setCellSize(cell_size_);
 }
 
 template <typename CellType, typename PointType>
@@ -735,8 +722,7 @@ NDTGrid2D<CellType, PointType>::createCoarserGrid(float cell_size) const
   if (cell_size < cell_size_)
     cell_size = cell_size_;
 
-  SelfType coarse_grid;
-  coarse_grid.setCellSize(cell_size);
+  SelfType coarse_grid(cell_size);
   auto cells = grid_.getValidCells();
   coarse_grid.mergeIn(cells, true);
   return coarse_grid;
@@ -891,9 +877,7 @@ template <typename CellType, typename PointType>
 typename NDTGrid2D<CellType, PointType>::SelfType
 NDTGrid2D<CellType, PointType>::createGrid(const PointCloud &pcl) const
 {
-  SelfType localGrid;
-  localGrid.setCellSize(cell_size_);
-  localGrid.setOrigin(this->origin_);
+  SelfType localGrid(cell_size_, this->origin_);
   float minx, miny, maxx, maxy;
   pcl::getMinMax2D(pcl, &minx, &miny, &maxx, &maxy);
   localGrid.enlarge(minx, miny, maxx, maxy);

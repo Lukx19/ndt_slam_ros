@@ -29,7 +29,7 @@ public:
   typedef Eigen::Matrix<size_t, 2, 1> CentroidIds;
   // typedef std::unique_ptr<CellType> CellTypePtr;
 public:
-  explicit VoxelGrid2D();
+  explicit VoxelGrid2D(float cell_size);
 
   VoxelGrid2D(const VoxelGrid2D& other);
   VoxelGrid2D(VoxelGrid2D&& other) = default;
@@ -168,17 +168,6 @@ public:
   /////////////////Parameters
 
   /**
-   * @brief      Sets the cell size.
-   *
-   * @param[in]  cell_size  The cell size
-   */
-  void setCellSize(float cell_size)
-  {
-    cell_size_ = cell_size;
-    cell_size_half_ = cell_size / 2;
-  }
-
-  /**
    * @brief      Gets the cell size.
    *
    * @return     The cell size.
@@ -286,9 +275,9 @@ private:
 
 ////////////////////////IMPLEMENTATION//////////
 template <typename CellType>
-VoxelGrid2D<CellType>::VoxelGrid2D()
-  : cell_size_(0.25f)
-  , cell_size_half_(0.125f)
+VoxelGrid2D<CellType>::VoxelGrid2D(float cell_size)
+  : cell_size_(cell_size)
+  , cell_size_half_(cell_size/2)
   , width_left_(0)
   , width_right_(0)
   , height_up_(0)

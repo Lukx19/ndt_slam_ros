@@ -122,11 +122,10 @@ NDTMapper<CellType, PointType>::NDTMapper()
   , height_(200)
   , resolution_(0.25f)
   , map_()
-  , map_ndt_(Eigen::Vector3d(0, 0, 0))
+  , map_ndt_(resolution_,Eigen::Vector3d(0, 0, 0))
   , grids_()
   , means_(new Pcl())
 {
-  map_ndt_.setCellSize(resolution_);
 }
 
 template <typename CellType, typename PointType>

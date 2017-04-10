@@ -196,8 +196,7 @@ public:
   virtual void setInputTarget(const PclTargetConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputTarget(cloud);
-    GridSource *tmp = new GridSource();
-    tmp->setCellSize(cell_sizes_.back());
+    GridSource *tmp = new GridSource(cell_sizes_.back());
     tmp->initializeSimple(*cloud);
     target_grid_ = GridTargetConstPtr(tmp);
   }
@@ -210,8 +209,7 @@ public:
   virtual void setInputSource(const PclSourceConstPtr &cloud)
   {
     Registration<PointSource, PointTarget>::setInputSource(cloud);
-    GridSource *tmp = new GridSource();
-    tmp->setCellSize(cell_sizes_.back());
+    GridSource *tmp = new GridSource(cell_sizes_.back());
     tmp->initializeSimple(*cloud);
     source_grid_ = GridSourceConstPtr(tmp);
   }
