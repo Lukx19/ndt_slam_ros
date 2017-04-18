@@ -69,8 +69,6 @@ void prepareLaserScans(std::string folder)
   sensor_msgs::PointCloud2 laser_pcl_msg;
   PointCloud laser_pcl;
   laser_geometry::LaserProjection projector;
-
-  scans.clear();
   std::fstream laser_msg;
   std::stringstream file;
   file << folder << "/data.scans";

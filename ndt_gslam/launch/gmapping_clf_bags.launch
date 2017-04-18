@@ -1,5 +1,5 @@
 <launch>
-  <group ns="gmapping">
+ <group ns="gmapping">
     <node pkg="gmapping" type="slam_gmapping" name="gmapping" respawn="true" output="screen">
       <remap from="scan" to="/laser"/>
       <param name="base_frame" value="base_link"/>

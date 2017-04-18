@@ -170,8 +170,8 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , last_matcher_pose_(Pose::Zero())
   , covar_temp_()
   , map_()
-  , running_window_(new FrameType(cell_size_,FrameType::Pose(0, 0, 0)))
-  , frame_temp_(new FrameType(cell_size_,FrameType::Pose(0, 0, 0)))
+  , running_window_(new FrameType(cell_size_, FrameType::Pose(0, 0, 0)))
+  , frame_temp_(new FrameType(cell_size_, FrameType::Pose(0, 0, 0)))
   , opt_engine_(new Slam2D<FrameTypeHolder>(
         std::unique_ptr<LoopScanmatcher>(new LoopScanmatcher())))
   , inc_matcher_()
@@ -202,13 +202,18 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   // 8. add new node to graph
   // 9. add edge between last two nodes in graph with values saved in step 3
   // 10. execute 4. and repeat process
+  if (pcl.empty()) {
+    ROS_WARN_STREAM("[SLAM ALGORITHM]: Input point cloud is empty.");
+    return eigt::getPoseFromTransform(position_ * motion);
+  }
   if (!initialized_) {
     initialized_ = true;
     // enters first scan as it is to running window
-    running_window_->initialize(pcl);
-    frame_temp_->initialize(pcl);
+    running_window_->initializeSimple(pcl);
+    frame_temp_->initializeSimple(pcl);
     window_update_time_ = update_time;
     window_seq_ = 0;
+    ROS_INFO_STREAM("[SLAM ALGORITHM]: NDT Slam algorithm initialized!");
     return eigt::getPoseFromTransform(position_);
   }
   unused_trans_ = unused_trans_ * motion;
@@ -216,9 +221,11 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
     return eigt::getPoseFromTransform(position_ * motion);
   }
   unused_trans_.setIdentity();
-  FrameTypePtr local = FrameTypePtr(new FrameType(cell_size_,running_window_->getOrigin()));
+  FrameTypePtr local =
+      FrameTypePtr(new FrameType(cell_size_, running_window_->getOrigin()));
   PointCloud::Ptr pcl_out(new PointCloud());
   local->initializeSimple(pcl);
+  std::cout << local->getMeans()->size() << "\n";
   // std::cout << *local << std::endl;
   inc_matcher_.setInputTarget(running_window_);
   inc_matcher_.setInputSource(local->getMeans());

@@ -38,8 +38,9 @@ public:
   typedef boost::shared_ptr<const SelfType> ConstPtr;
 
 public:
- explicit NDTGrid2D(float cell_size=0.4, double timestamp = 0.0);
-  NDTGrid2D(float cell_size,const Eigen::Vector3d &origin, double timestamp = 0.0);
+  explicit NDTGrid2D(float cell_size = 0.4, double timestamp = 0.0);
+  NDTGrid2D(float cell_size, const Eigen::Vector3d &origin,
+            double timestamp = 0.0);
 
   /**
    * @brief      Creates NDT grid from point cloud and update occupancy of empty
@@ -417,7 +418,7 @@ protected:
 
 // //////////////////IMPLEMENTATION ///////////
 template <typename CellType, typename PointType>
-NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,double timestamp)
+NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size, double timestamp)
   : origin_(Eigen::Vector3d::Zero())
   , cell_size_(cell_size)
   , initialized_(false)
@@ -429,7 +430,8 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,double timestamp)
 }
 
 template <typename CellType, typename PointType>
-NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,const Eigen::Vector3d &origin,
+NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,
+                                          const Eigen::Vector3d &origin,
                                           double timestamp)
   : origin_(origin)
   , cell_size_(cell_size)
@@ -471,6 +473,9 @@ template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
                                              bool resize)
 {
+  if (cells.empty()) {
+    ROS_WARN_STREAM("[NDT_GRID2D]: MergeIn- empty input cell vector");
+  }
   // incoming vector of cells includes all cells [cells with gaussian, visited
   // unoccupied cells,unoccupied cells with gaussian]
   // only cells with gaussian are used
@@ -500,12 +505,15 @@ template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::mergeIn(std::vector<CellType> &&cells,
                                              bool resize)
 {
+  if (cells.empty()) {
+    ROS_WARN_STREAM("[NDT_GRID2D]: MergeIn- empty input cell vector");
+  }
   // incoming vector of cells includes all cells [cells with Gaussian, visited
   // unoccupied cells,unoccupied cells with Gaussian]
   if (resize || !initialized_) {
     initialized_ = true;
     float minx, miny, maxx, maxy;
-    pcl::getMinMaxNDT2D(cells, minx, miny, maxx, maxy);
+    pcl::getMinMaxNDT2D(cells, &minx, &miny, &maxx, &maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
       grid_.addCell(cell.getMean().head(2), std::move(cell));
@@ -575,6 +583,9 @@ void NDTGrid2D<CellType, PointType>::mergeInTraced(const SelfType &grid,
 template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::initialize(const PointCloud &pcl)
 {
+  if (pcl.size() == 0) {
+    ROS_WARN_STREAM("NDT_GRID2D::initialize: input point cloud is empty");
+  }
   grid_.clear();
   mergeInTraced(pcl, origin_, true);
 }
@@ -582,6 +593,9 @@ void NDTGrid2D<CellType, PointType>::initialize(const PointCloud &pcl)
 template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::initializeSimple(const PointCloud &pcl)
 {
+  if (pcl.size() == 0) {
+    ROS_WARN_STREAM("NDT_GRID2D::initializeSimple: input point cloud is empty");
+  }
   grid_.clear();
   mergeIn(pcl, origin_, true);
 }
@@ -883,13 +897,12 @@ NDTGrid2D<CellType, PointType>::createGrid(const PointCloud &pcl) const
   localGrid.enlarge(minx, miny, maxx, maxy);
   for (size_t i = 0; i < pcl.size(); ++i) {
     if (std::isnan(pcl[i].x) || std::isnan(pcl[i].y))
-     continue;
+      continue;
     localGrid.addPoint(pcl[i]);
   }
-  //std::vector<CellType> occupied_cells = localGrid.grid_.getValidCells();
-  // for (auto &&cell : occupied_cells) {
-  //   //std::cout << "valid cell: " << cell.toString() << std::endl;
-  // }
+  localGrid.computeNDTCells();
+  localGrid.updateMeansCloud();
+  localGrid.updateKDTree();
   return localGrid;
 }
 

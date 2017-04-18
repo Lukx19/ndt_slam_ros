@@ -219,5 +219,5 @@ std::ostream &operator<<(std::ostream &os, const NDTCell &cell)
   os << std::floor(cell.occup_);
   return os;
 }
-}  // end of slamuk namsace
+}  // end of slamuk namespace
 #endif
