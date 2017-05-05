@@ -160,7 +160,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , min_rotation_(0.1)
   , max_uncertanity_in_window_(1000000.0)
   , max_euclidean_distance_traveled_(1.5)
-  , cell_size_(0.4)
+  , cell_size_(0.5)
   , last_node_id_(0)
   , last_trans_(Transform::Identity())
   , unused_trans_(Transform::Identity())
@@ -169,7 +169,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , transform_temp_(Transform::Identity())
   , last_matcher_pose_(Pose::Zero())
   , covar_temp_()
-  , map_()
+  , map_(cell_size_)
   , running_window_(new FrameType(cell_size_, FrameType::Pose(0, 0, 0)))
   , frame_temp_(new FrameType(cell_size_, FrameType::Pose(0, 0, 0)))
   , opt_engine_(new Slam2D<FrameTypeHolder>(
@@ -322,7 +322,6 @@ void NdtSlamAlgortihm::updateGraph(const Transform &increase,
     first_node_added_ = true;
     // pcl::visualizePcl<PointType>(running_window_->getMeans());
     // find loop closures and optimize graph
-    Pose pre_opt_pose = opt_engine_->getPoseLocation(last_node_id_);
     if (opt_engine_->tryLoopClose()) {
       // optimize graph
       if (opt_engine_->optimalizeIterationaly()) {

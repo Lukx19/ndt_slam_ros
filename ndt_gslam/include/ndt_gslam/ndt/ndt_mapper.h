@@ -34,7 +34,7 @@ public:
   typedef std::vector<NDTGrid2DPtr> FrameStorage;
 
 public:
-  NDTMapper();
+  NDTMapper(float resulution);
 
   /**
    * @brief      Adds a frame to the map. Map is updated.
@@ -117,12 +117,12 @@ private:
 // ////////IMPLEMENTATION////
 
 template <typename CellType, typename PointType>
-NDTMapper<CellType, PointType>::NDTMapper()
+NDTMapper<CellType, PointType>::NDTMapper(float resulution)
   : width_(200)
   , height_(200)
-  , resolution_(0.25f)
+  , resolution_(resulution)
   , map_()
-  , map_ndt_(resolution_,Eigen::Vector3d(0, 0, 0))
+  , map_ndt_(resolution_, Eigen::Vector3d(0, 0, 0))
   , grids_()
   , means_(new Pcl())
 {
