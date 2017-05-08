@@ -14,15 +14,11 @@ NDTCell::NDTCell()
 
 NDTCell &NDTCell::operator+=(const NDTCell &other)
 {
-  for (auto &&pt : other.getPoints())
-    this->addPoint(pt);
-  // recalc NDT based on all points in this cell
-  if (this->points_vec_.size() >= MIN_POINTS_TO_COMPUTE_GAUSSIAN) {
-    this->computeGaussian();
-  }
-  if (!other.hasGaussian()) {
+  // invalid cell with too little points
+  if (other.points() <= 2)
     return *this;
-  }
+  if (!other.hasGaussian())
+    return *this;
   if (this->hasGaussian()) {
     size_t points1 = this->points_;
     size_t points2 = other.points_;
@@ -74,7 +70,9 @@ void NDTCell::computeGaussian()
   //   points_ = points_vec_.size();
   //   return;
   // }
-  if (points_vec_.size() < MIN_POINTS_TO_COMPUTE_GAUSSIAN) {
+  if (points_vec_.size() < 3) {
+    gaussian_ = false;
+    points_ = points_vec_.size();
     return;
   }
 
@@ -190,14 +188,6 @@ void NDTCell::transform(const Transform &trans)
     mean_ = trans * mean_;
     cov_ = trans.rotation() * cov_ * trans.rotation().transpose();
     rescaleCovar();
-  }
-  transformPoints(trans);
-}
-
-void NDTCell::transformPoints(const NDTCell::Transform &trans)
-{
-  for (Vector &point : points_vec_) {
-    point = trans * point;
   }
 }
 
