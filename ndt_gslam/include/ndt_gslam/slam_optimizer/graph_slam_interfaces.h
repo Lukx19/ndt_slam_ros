@@ -241,7 +241,7 @@ public:
    *
    * @param[in]  score  The score
    */
-  virtual void setScoreThreshold(float score);
+  virtual void setScoreThreshold(float score) = 0;
 };
 
 }  // slamuk namespace

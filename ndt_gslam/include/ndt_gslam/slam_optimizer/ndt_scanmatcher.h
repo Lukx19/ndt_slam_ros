@@ -27,9 +27,10 @@ public:
   {
   }
 
-  virtual MatchResult
-  match(const FrameType &source, const FrameType &target,
-        const Eigen::Matrix3d &initial_guess = Eigen::Matrix3d::Identity());
+  virtual MatchResult match(const FrameType &source, const FrameType &target,
+                            const Eigen::Matrix3d &initial_guess =
+                                Eigen::Matrix3d::Identity()) override;
+
   virtual void setScoreThreshold(float score) override
   {
     matcher.setRejectionLimit(score);
