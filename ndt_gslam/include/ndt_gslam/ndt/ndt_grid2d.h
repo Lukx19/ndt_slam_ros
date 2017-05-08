@@ -476,27 +476,23 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
   if (cells.empty()) {
     ROS_WARN_STREAM("[NDT_GRID2D]: MergeIn- empty input cell vector");
   }
-  // incoming vector of cells includes all cells [cells with gaussian, visited
-  // unoccupied cells,unoccupied cells with gaussian]
-  // only cells with gaussian are used
+  // incoming vector of cells includes all cells - all cells are used
   if (resize || !initialized_) {
     initialized_ = true;
     float minx, miny, maxx, maxy;
     pcl::getMinMaxNDT2D(cells, &minx, &miny, &maxx, &maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
-      if (cell.hasGaussian()) {
-        grid_.addCell(cell.getMean().head(2), cell, false);
-      }
+      grid_.addCell(cell.getMean().head(2), cell, false);
     }
   } else {
     for (auto &&cell : cells) {
       // cell is discarted if it is outside of the boundries for current grid_
-      if (cell.hasGaussian())
-        if (grid_.isInside(cell.getMean().head(2)))
-          grid_.addCell(cell.getMean().head(2), cell);
+      if (grid_.isInside(cell.getMean().head(2)))
+        grid_.addCell(cell.getMean().head(2), cell);
     }
   }
+  computeNDTCells();
   updateMeansCloud();
   updateKDTree();
 }
@@ -520,7 +516,8 @@ void NDTGrid2D<CellType, PointType>::mergeIn(std::vector<CellType> &&cells,
     }
   } else {
     for (auto &&cell : cells) {
-      // cell is discarded if it is outside of the boundaries for current grid_
+      // cell is discarded if it is outside of the boundaries for current
+      // grid_
       if (grid_.isInside(cell.getMean().head(2)))
         grid_.addCell(cell.getMean().head(2), std::move(cell));
     }
@@ -594,7 +591,8 @@ template <typename CellType, typename PointType>
 void NDTGrid2D<CellType, PointType>::initializeSimple(const PointCloud &pcl)
 {
   if (pcl.size() == 0) {
-    ROS_WARN_STREAM("NDT_GRID2D::initializeSimple: input point cloud is empty");
+    ROS_WARN_STREAM("NDT_GRID2D::initializeSimple: input point cloud is "
+                    "empty");
   }
   grid_.clear();
   mergeIn(pcl, origin_, true);
@@ -782,7 +780,8 @@ typename NDTGrid2D<CellType, PointType>::Transform
 NDTGrid2D<CellType, PointType>::move(const Transform &transform)
 {
   if (std::abs(origin_(2)) > 1e-7) {
-    std::cerr << "[NDT_GRID2D]: you may not use move of grid when grid is not "
+    std::cerr << "[NDT_GRID2D]: you may not use move of grid when grid is "
+                 "not "
                  "aligned with Kartesian coordinates (your grid is rotated). "
                  "Please use transform instead. origin: "
               << origin_.transpose() << std::endl;
@@ -825,13 +824,19 @@ NDTGrid2D<CellType, PointType>::move(const Transform &transform)
     origin_(0) += continuous_move(0);
     origin_(1) += continuous_move(1);
     // applies transformation to all means of ndt cells
-    for (auto &&cell : getGaussianCells()) {
+    for (auto &&cell : grid_.getValidCellsPtr()) {
       // e.g. if grid origin moves one cell forward all old cell needs to
       // recalculate
       // their position one step back
       // std::cout << cell->getMean().transpose();
-      cell->setMean(cell->getMean() + Eigen::Vector3d(-continuous_move(0),
-                                                      -continuous_move(1), 0));
+      auto translation =
+          Eigen::Vector3d(-continuous_move(0), -continuous_move(1), 0);
+      if (cell->hasGaussian()) {
+        cell->setMean(cell->getMean() + translation);
+      }
+      typename CellType::Transform t;
+      t.translate(translation);
+      cell->transformPoints(t);
       // std::cout << "after: " << cell->getMean().transpose() << std::endl;
     }
     updateMeansCloud();

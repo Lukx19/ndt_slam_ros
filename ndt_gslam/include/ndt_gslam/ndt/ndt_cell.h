@@ -12,6 +12,7 @@ class NDTCell
 {
   constexpr static float MAX_OCCUPANCY = 1;
   constexpr static float MIN_OCCUPANCY = -1;
+  constexpr static size_t MIN_POINTS_TO_COMPUTE_GAUSSIAN = 3;
   constexpr static float LOG_LIKE_OCCUPANCY = 0.405465108;
   constexpr static float SENSOR_NOISE = 0.01;
   constexpr static size_t MAX_POINTS = 1000000000;
@@ -45,7 +46,7 @@ public:
     return gaussian_;
   }
   /**
-   * @brief      { Returns number of points used in the cell. }
+   * @brief      { Returns number of points used in the cell's NDT. }
    *
    * @return     { Number of points. }
    */
@@ -152,6 +153,15 @@ public:
     points_vec_.push_back(pt);
   }
   /**
+   * @brief getPoints returns all unused points in current gaussian
+   * @return
+   */
+  const std::vector<Vector> &getPoints() const
+  {
+    return points_vec_;
+  }
+
+  /**
    * @brief      Calculates the Gaussian.
    */
   void computeGaussian();
@@ -170,12 +180,19 @@ public:
                        size_t new_points);
 
   /**
-   * @brief      { Transforms normal distribution inside this cell }
+   * @brief      { Transforms normal distribution inside this cell and calls
+   * transformPoints
+   * transformation on all points in points_vec_ }
    *
    * @param[in]  trans  The transformation
    */
   void transform(const Transform &trans);
 
+  /**
+   * @brief transform all points in the points_vec_
+   * @param trans the transformation
+   */
+  void transformPoints(const Transform &trans);
   /**
    * @brief      { Returns and cell representation in message format }
    *
