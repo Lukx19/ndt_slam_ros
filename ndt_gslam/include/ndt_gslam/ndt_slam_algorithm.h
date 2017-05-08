@@ -160,7 +160,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   , min_rotation_(0.1)
   , max_uncertanity_in_window_(1000000.0)
   , max_euclidean_distance_traveled_(1.5)
-  , cell_size_(0.5)
+  , cell_size_(0.25)
   , last_node_id_(0)
   , last_trans_(Transform::Identity())
   , unused_trans_(Transform::Identity())
@@ -180,8 +180,6 @@ NdtSlamAlgortihm::NdtSlamAlgortihm()
   inc_matcher_.setStepSize(0.01);
   inc_matcher_.setOulierRatio(0.7);
   inc_matcher_.setNumLayers(4);
-  running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
-                           win_radius_);
 }
 
 NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
@@ -208,6 +206,8 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   }
   if (!initialized_) {
     initialized_ = true;
+    running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
+                             win_radius_);
     // enters first scan as it is to running window
     running_window_->initializeSimple(pcl);
     frame_temp_->initializeSimple(pcl);
