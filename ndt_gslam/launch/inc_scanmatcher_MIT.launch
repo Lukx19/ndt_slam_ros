@@ -1,0 +1,17 @@
+<launch>
+<group ns="slam">
+  <node pkg="ndt_gslam" type="ndt_scanmatcher" name="ndt_scanmatcher" respawn="true" output="screen">
+    <!-- <param name="tf_prefix" value="p3dx_0"/> -->
+    <param name="robot_base_frame_id" value="base_footprint"/>
+    <!-- incomming odometry  tf frame_id without tf_prefix -->
+    <param name="odom_farme_id" value="odom_combined"/>
+    <!-- calculated map frame_id name -->
+    <param name="map_farme_id" value="odom_inc"/>
+    <param name="cell_size" value="0.4"/>
+
+    <remap from="/scan" to="/base_scan" />
+
+     <param name="scanmatch_window_radius" type="double" value="30.0"/>
+  </node>
+</group>
+</launch>

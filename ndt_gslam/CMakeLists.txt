@@ -202,6 +202,22 @@ target_link_libraries(graph_slam2d
    ${EIGEN3_LIBRARIES}
 )
 
+add_executable(ndt_scanmatcher
+  src/inc_scanmatcher_node.cpp
+  src/ndt/ndt_cell.cpp
+  )
+add_dependencies(ndt_scanmatcher ${PROJECT_NAME}_generate_messages_cpp)
+  #${${PROJECT_NAME}_EXPORTED_TARGETS})
+target_link_libraries(ndt_scanmatcher
+   ${catkin_LIBRARIES}
+   ${PCL_LIBRARIES}
+   ${Boost_LIBRARIES}
+   ${G2O_LIBRARIES}
+   ${CSPARSE_LIBRARY}
+   ${OpenCV_LIBS}
+   ${EIGEN3_LIBRARIES}
+)
+
 add_executable(ndt2d_visual
   src/registration/ndt2d_visual.cpp
   src/ndt/ndt_cell.cpp)
