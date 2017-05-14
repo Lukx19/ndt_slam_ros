@@ -64,26 +64,27 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
       new pcl::PointCloud<pcl::PointXYZ>());
 
   matcher.align(*pcl_out, init_guess);
-  std::string filename;
-  std::stringstream ss;
-  if (matcher.hasConverged()) {
-    ss << "valid_";
-  } else {
-    ss << "invalid_";
-  }
+  //  std::string filename;
+  //  std::stringstream ss;
+  //  if (matcher.hasConverged()) {
+  //    ss << "valid_";
+  //  } else {
+  //    ss << "invalid_";
+  //  }
   // save measured point clouds and solutions to the disk for testing
-  ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
+  //  ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
   ++seq_;
-  pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(), pcl_out,
-                                          ss.str());
-  std::cout << ss.str() << std::endl;
-  std::stringstream ss_source;
-  std::stringstream ss_target;
+  //  pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(),
+  //  pcl_out,
+  //                                          ss.str());
+  //  std::cout << ss.str() << std::endl;
+  //  std::stringstream ss_source;
+  //  std::stringstream ss_target;
 
-  ss_target << "target_" << time_ << seq_ << ".pcd";
-  ss_source << "source_" << time_ << seq_ << ".pcd";
-  pcl::io::savePCDFile(ss_target.str(), *(target.getData()->getMeans()));
-  pcl::io::savePCDFile(ss_source.str(), *(source.getData()->getMeans()));
+  //  ss_target << "target_" << time_ << seq_ << ".pcd";
+  //  ss_source << "source_" << time_ << seq_ << ".pcd";
+  //  pcl::io::savePCDFile(ss_target.str(), *(target.getData()->getMeans()));
+  //  pcl::io::savePCDFile(ss_source.str(), *(source.getData()->getMeans()));
 
   ROS_INFO_STREAM(
       "[NDT_SCANMATCHER]:Normal Distributions Transform has converged:"

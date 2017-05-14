@@ -65,26 +65,25 @@ public:
     , graph_()
     , matcher_(std::move(matcher))
     , g2o_opt_(new g2o::SparseOptimizer())
-    , linear_solver_(new SlamLinearSolver())
-    , block_solver_(new SlamBlockSolver(linear_solver_.get()))
-    , solver_gauss_(
-          new g2o::OptimizationAlgorithmGaussNewton(block_solver_.get()))
+    , terminal_action_(new g2o::SparseOptimizerTerminateAction())
     , loop_detector_(&graph_, matcher_.get())
     , nodes_to_edge_id_()
   {
-    linear_solver_->setBlockOrdering(false);
-    g2o_opt_->setAlgorithm(solver_gauss_.get());
-    g2o::SparseOptimizerTerminateAction *terminateAction =
-        new g2o::SparseOptimizerTerminateAction;
-    terminateAction->setGainThreshold(1e-6);
-    terminateAction->setMaxIterations(10);
-    g2o_opt_->addPostIterationAction(terminateAction);
+    auto *linear = new SlamLinearSolver();
+    linear->setBlockOrdering(false);
+    auto *block = new SlamBlockSolver(linear);
+    auto *gauss = new g2o::OptimizationAlgorithmGaussNewton(block);
+
+    g2o_opt_->setAlgorithm(gauss);
+    terminal_action_->setGainThreshold(1e-6);
+    terminal_action_->setMaxIterations(10);
+    g2o_opt_->addPostIterationAction(terminal_action_.get());
   }
 
-  ~Slam2D()
-  {
-    std::cout << "destructing Slam2d" << std::endl;
-  }
+  //  ~Slam2D()
+  //  {
+  //    std::cout << "destructing Slam2d" << std::endl;
+  //  }
 
   // return true if optimalization changed poses in graph
   virtual bool optimalize();
@@ -131,9 +130,7 @@ protected:
 
   std::unique_ptr<g2o::SparseOptimizer> g2o_opt_;  // needed for solving and
                                                    // graph manipulation
-  std::unique_ptr<SlamLinearSolver> linear_solver_;
-  std::unique_ptr<SlamBlockSolver> block_solver_;
-  std::unique_ptr<g2o::OptimizationAlgorithmGaussNewton> solver_gauss_;
+  std::unique_ptr<g2o::SparseOptimizerTerminateAction> terminal_action_;
 
   LoopDet loop_detector_;
 

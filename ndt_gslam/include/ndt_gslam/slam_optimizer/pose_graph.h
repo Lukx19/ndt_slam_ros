@@ -265,7 +265,7 @@ public:
   {
     ++current_;
     // in case of empty field in list skip this field and go on
-    while (*current_ == nullptr && current_ != end_) {
+    while (current_ != end_ && *current_ == nullptr) {
       ++current_;
     }
     return *this;
@@ -323,7 +323,7 @@ public:
   {
     ++current_;
     // in case of empty field in list skip this field and go on
-    while (*current_ == nullptr && current_ != end_) {
+    while (current_ != end_ && *current_ == nullptr) {
       ++current_;
     }
     return *this;
