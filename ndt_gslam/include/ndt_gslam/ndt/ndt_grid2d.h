@@ -9,6 +9,8 @@
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <Eigen/StdVector>
+#include <algorithm>
 #include <boost/shared_ptr.hpp>
 
 namespace slamuk
@@ -36,6 +38,12 @@ public:
   typedef typename VoxelGrid2D<CellType>::ConstIterator ConstIterator;
   typedef boost::shared_ptr<SelfType> Ptr;
   typedef boost::shared_ptr<const SelfType> ConstPtr;
+
+protected:
+  typedef Eigen::Transform<float, 2, Eigen::TransformTraits::Affine> Transformf;
+  typedef Eigen::Vector4f SampledPoint;
+  typedef std::vector<SampledPoint, Eigen::aligned_allocator<SampledPoint>>
+      IntensityCloud;
 
 public:
   explicit NDTGrid2D(float cell_size = 0.4, double timestamp = 0.0);
@@ -152,7 +160,7 @@ public:
    *
    * @return     The occupancy message.
    */
-  OccupancyGrid createOccupancyGrid() const;
+  OccupancyGrid createOccupancyGrid(float resolution) const;
 
   /**
    * @brief      Gets the cell size.
@@ -397,6 +405,7 @@ protected:
   DataGrid grid_;
   pcl::KdTreeFLANN<PointType> kdtree_;
   typename PointCloud::Ptr means_;
+  IntensityCloud cell_samples_;
 
   void mergeIn(std::vector<CellType> &&cells, bool resize);
   void addPoint(const PointType &pt);
@@ -414,6 +423,10 @@ protected:
   CellPtrVector getKNearestNeighborsKDTree(const Eigen::Vector2d &pt,
                                            size_t K) const;
   void updateMeansCloud();
+
+  IntensityCloud sample(size_t samples_per_cell) const;
+  void transform(IntensityCloud *cloud, const Transformf &t) const;
+  IntensityCloud genUnoccupiedCellSamples(float cell_size) const;
 };
 
 // //////////////////IMPLEMENTATION ///////////
@@ -426,6 +439,7 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size, double timestamp)
   , grid_(cell_size)
   , kdtree_()
   , means_(new PointCloud())
+  , cell_samples_(genUnoccupiedCellSamples(cell_size))
 {
 }
 
@@ -438,6 +452,7 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size,
   , initialized_(false)
   , timestamp_(timestamp)
   , grid_(cell_size)
+  , cell_samples_(genUnoccupiedCellSamples(cell_size))
 {
 }
 
@@ -702,31 +717,55 @@ bool NDTGrid2D<CellType, PointType>::isInside(const Eigen::Vector2d &pt) const
 }
 
 template <typename CellType, typename PointType>
-OccupancyGrid NDTGrid2D<CellType, PointType>::createOccupancyGrid() const
+OccupancyGrid
+NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
 {
-  OccupancyGrid oc_grid;
-  Eigen::Vector2d corner_origin(-static_cast<double>(grid_.left()) * cell_size_,
-                                grid_.up() * cell_size_);
-  eigt::transform2d_t<double> trans =
-      eigt::transBtwFrames(origin_, Eigen::Vector3d(0, 0, 0));
-  oc_grid.origin_.head(2) = trans * corner_origin;
-  oc_grid.origin_(2) = origin_(2);
-
-  oc_grid.centroid_ << grid_.left() * cell_size_, grid_.up() * cell_size_;
-
-  oc_grid.width_ = grid_.width();
-  oc_grid.height_ = grid_.height();
-  oc_grid.resolution_ = cell_size_;
-  oc_grid.cells_.reserve(oc_grid.width_ * oc_grid.height_);
-  for (const auto &cell_it : grid_) {
-    if (cell_it.get() == nullptr)
-      oc_grid.cells_.push_back(-1);
-    else if (cell_it->getOccupancyRaw() > 0.8)
-      oc_grid.cells_.push_back(99);
-    else
-      oc_grid.cells_.push_back(0);
+  IntensityCloud cloud = sample(500);
+  // align coordinate frame of sampled points with axis of world frame
+  // and
+  // rotate 90 deg CW to have these points in x fancing down coordinates
+  Eigen::Rotation2Df rotate_back(-origin_(2));
+  for (auto &point : cloud) {
+    point.head<2>() = rotate_back * point.head<2>();
   }
-  return oc_grid;
+  // find rectangular envelope around points
+  float minx, maxx, miny, maxy;
+  eigt::getMinMax<4, float>(cloud, &minx, &miny, &maxx, &maxy);
+  // translate all points so coordinate frame is bottom left corner
+  /*  y
+   * |
+   * |
+   * ------->x
+   */
+  for (auto &point : cloud) {
+    point(0) = (point(0) - minx);  // minx is negative
+    point(1) = (point(1) - miny);  // move down
+    point(2) = 0;                  // occupancy grid needs only 2D
+  }
+
+  OccupancyGrid occ_grid;
+  // inserting points into aligned grid
+  float width = -minx + maxx;
+  float height = -miny + maxy;
+  size_t rows = static_cast<size_t>(std::ceil(height / resolution));
+  size_t colls = static_cast<size_t>(std::ceil(width / resolution));
+  occ_grid.width_ = colls;
+  occ_grid.height_ = rows;
+  // initialize whole grid as unknown
+  occ_grid.cells_.resize(rows * colls, -1);
+  for (auto &point : cloud) {
+    size_t x = static_cast<size_t>(std::floor(point(0) / resolution));
+    size_t y = static_cast<size_t>(std::floor(point(1) / resolution));
+    size_t idx = y * colls + x;
+    occ_grid.cells_[idx] = point(3) * 100;  // add occupancy to grid
+  }
+
+  occ_grid.origin_(0) = origin_(0) + minx;
+  occ_grid.origin_(1) = origin_(1) + miny;
+  occ_grid.origin_(2) = 0;
+  occ_grid.resolution_ = resolution;
+
+  return occ_grid;
 }
 
 template <typename CellType, typename PointType>
@@ -978,6 +1017,50 @@ void NDTGrid2D<CellType, PointType>::updateMeansCloud()
     pcl->push_back(pt);
   }
   means_ = pcl;
+}
+
+template <typename CellType, typename PointType>
+typename NDTGrid2D<CellType, PointType>::IntensityCloud
+NDTGrid2D<CellType, PointType>::sample(size_t samples_per_cell) const
+{
+  IntensityCloud cloud;
+  auto cells = grid_.getValidCellsPtr();
+  // sample unoccupied cells
+  cloud.reserve(samples_per_cell * cells.size());
+  // sampling NDTs
+  for (CellType *cell : cells) {
+    auto samples = cell->sample(samples_per_cell, 0.2);
+    cloud.insert(cloud.end(), std::make_move_iterator(samples.begin()),
+                 std::make_move_iterator(samples.end()));
+  }
+  return cloud;
+}
+
+template <typename CellType, typename PointType>
+void NDTGrid2D<CellType, PointType>::transform(
+    NDTGrid2D::IntensityCloud *cloud, const NDTGrid2D::Transformf &t) const
+{
+  for (SampledPoint &point : *cloud) {
+    point.head<3>() = t * point.head<3>();
+  }
+}
+
+template <typename CellType, typename PointType>
+typename NDTGrid2D<CellType, PointType>::IntensityCloud
+NDTGrid2D<CellType, PointType>::genUnoccupiedCellSamples(float cell_size) const
+{
+  const float DENSITY = 0.05;
+  IntensityCloud cloud;
+  size_t width = static_cast<size_t>(std::ceil(cell_size / DENSITY));
+  cloud.reserve(width * width);
+  for (size_t i = 0; i < width; ++i) {
+    for (size_t j = 0; j < width; ++j) {
+      Eigen::Vector4f pt;
+      pt << i * DENSITY, j * DENSITY, 0, 0.5;
+      cloud.emplace_back(pt);
+    }
+  }
+  return cloud;
 }
 
 }  // end of namespace slamuk

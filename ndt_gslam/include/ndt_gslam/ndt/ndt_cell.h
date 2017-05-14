@@ -2,7 +2,11 @@
 #define NDT_GSLAM_NDT_CELL2D
 
 #include <ndt_gslam/ndt/output_msgs.h>
+#include <ndt_gslam/utils/eigen_tools.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <Eigen/Dense>
+#include <Eigen/StdVector>
 #include <iostream>
 #include <ostream>
 
@@ -22,6 +26,8 @@ public:
   typedef typename Eigen::Vector3d Vector;
   typedef typename Eigen::Matrix3d Matrix;
   typedef Eigen::Transform<double, 3, Eigen::TransformTraits::Affine> Transform;
+  typedef std::vector<Eigen::Vector4f, Eigen::aligned_allocator<Eigen::Vector4f>>
+      IntensityCloud;
 
 public:
   NDTCell();
@@ -197,6 +203,8 @@ public:
        << " mean: " << mean_.transpose() << " points: " << points_ << std::endl;
     return os.str();
   }
+
+  IntensityCloud sample(size_t samples, float std = 0.3) const;
 
 private:
   Vector mean_;

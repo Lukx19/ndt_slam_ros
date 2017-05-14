@@ -14,6 +14,7 @@ IncScanmatcherNode::IncScanmatcherNode(ros::NodeHandle &n,
   , laser_sub_()
   , odom_pub_()
   , pcl_pub_()
+  , occ_pub_()
   , seq_(0)
   , fixed_frame_()
   , robot_base_frame_()
@@ -32,6 +33,7 @@ IncScanmatcherNode::IncScanmatcherNode(ros::NodeHandle &n,
   laser_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
       laser_topic_, 1, boost::bind(&IncScanmatcherNode::laserCb, this, _1));
   pcl_pub_ = nh_.advertise<Pcl>("win_pcl", 1);
+  occ_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("move_map", 1);
   odom_pub_ = nh_.advertise<nav_msgs::Odometry>("odom", 5);
   inc_matcher_.setCellSize(cell_size_);
   running_window_.reset(new FrameType(cell_size_));
@@ -104,6 +106,7 @@ void IncScanmatcherNode::laserCb(const sensor_msgs::LaserScan::ConstPtr &laser)
       fixed_to_odom, laser->header.stamp, fixed_frame_, odom_frame_));
   publishOdometry(ros::Time::now());
   publishPcl(ros::Time::now());
+  publishOccupancyGrid(ros::Time::now());
   ++seq_;
 }
 
@@ -212,7 +215,8 @@ void IncScanmatcherNode::publishOdometry(const ros::Time &time)
   msg.header.frame_id = fixed_frame_;
   msg.header.seq = seq_;
   msg.header.stamp = time;
-  msg.pose.pose = slamuk::EigenToPoseMsg(eigt::getPoseFromTransform(position_));
+  msg.pose.pose = slamuk::EigenToPoseMsg(
+      eigt::getPoseFromTransform(position_).cast<float>());
   msg.child_frame_id = robot_base_frame_;
   odom_pub_.publish(msg);
 }
@@ -224,6 +228,22 @@ void IncScanmatcherNode::publishPcl(const ros::Time &time)
   pcl->header.stamp = time.toNSec();
   pcl->header.seq = seq_;
   pcl_pub_.publish(pcl);
+}
+
+void IncScanmatcherNode::publishOccupancyGrid(const ros::Time &time) const
+{
+  auto occ = running_window_->createOccupancyGrid(cell_size_ / 10);
+  nav_msgs::OccupancyGrid::Ptr occ_msg(new nav_msgs::OccupancyGrid);
+  occ_msg->header.frame_id = fixed_frame_;
+  occ_msg->header.seq = seq_;
+  occ_msg->header.stamp = time;
+  occ_msg->info.height = occ.height_;
+  occ_msg->info.width = occ.width_;
+  occ_msg->info.resolution = occ.resolution_;
+  occ_msg->info.origin = slamuk::EigenToPoseMsg(occ.origin_);
+  occ_msg->info.map_load_time = time;
+  occ_msg->data = std::move(occ.cells_);
+  occ_pub_.publish(occ_msg);
 }
 
 bool IncScanmatcherNode::movedEnough(const Transform &trans) const

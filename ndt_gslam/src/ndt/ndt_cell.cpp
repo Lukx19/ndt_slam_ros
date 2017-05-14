@@ -202,6 +202,24 @@ NDTCellMsg NDTCell::serialize() const
   return msg;
 }
 
+NDTCell::IntensityCloud NDTCell::sample(size_t samples, float std) const
+{
+  IntensityCloud cloud;
+
+  if (hasGaussian()) {
+    typedef eigt::NormalRandomVariable<float, 3> Generator;
+    Generator generator(mean_.cast<float>(), cov_.cast<float>());
+    cloud.reserve(samples);
+    for (size_t i = 0; i < samples; ++i) {
+      Generator::Vector sample = generator(std);
+      Eigen::Vector4f point;
+      point << sample(0), sample(1), sample(2), occup_;
+      cloud.push_back(std::move(point));
+    }
+  }
+  return cloud;
+}
+
 // PRIVATE///////////
 
 void NDTCell::updateOccupancy(float occup)

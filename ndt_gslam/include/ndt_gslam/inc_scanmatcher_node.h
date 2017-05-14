@@ -2,6 +2,7 @@
 #define NDT_GSLAM_INC_SCANMATCHER_NODE
 
 #include <laser_geometry/laser_geometry.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <nav_msgs/Odometry.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl_ros/point_cloud.h>
@@ -21,6 +22,7 @@
 
 #include <ndt_gslam/ndt/ndt_cell.h>
 #include <ndt_gslam/ndt/ndt_grid2d.h>
+#include <ndt_gslam/ndt/output_msgs.h>
 #include <ndt_gslam/registration/d2d_ndt2d.h>
 #include <ndt_gslam/registration/ndt2d.h>
 #include <ndt_gslam/utils/eigen_tools.h>
@@ -58,6 +60,7 @@ private:
   ros::Subscriber laser_sub_;
   ros::Publisher odom_pub_;
   ros::Publisher pcl_pub_;
+  ros::Publisher occ_pub_;
   uint seq_;
 
   // parameters from launch file***********
@@ -90,6 +93,7 @@ private:
 
   void publishOdometry(const ros::Time &time);
   void publishPcl(const ros::Time &time);
+  void publishOccupancyGrid(const ros::Time &time) const;
   bool movedEnough(const Transform &trans) const;
 };
 

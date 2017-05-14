@@ -257,4 +257,77 @@ Eigen::Matrix<Out, 3, 1> matToVec2d(const Eigen::Matrix<In, 4, 4> &trans)
   return vec;
 }
 
+//************************************ Normal distribution sampling
+namespace eigt
+{
+template <typename Type, size_t Size = 3>
+class NormalRandomVariable
+{
+public:
+  typedef Eigen::Matrix<Type, Size, Size> Matrix;
+  typedef Eigen::Matrix<Type, Size, 1> Vector;
+
+  NormalRandomVariable(const Matrix &covar);
+
+  NormalRandomVariable(const Vector &mean, const Matrix &covar);
+
+  Vector operator()(float std) const;
+
+private:
+  Vector mean_;
+  Matrix transform_;
+};
+
+template <typename Type, size_t Size>
+NormalRandomVariable<Type, Size>::NormalRandomVariable(const Matrix &covar)
+  : NormalRandomVariable(Vector::Zero(), covar)
+{
+}
+
+template <typename Type, size_t Size>
+NormalRandomVariable<Type, Size>::NormalRandomVariable(const Vector &mean,
+                                                       const Matrix &covar)
+  : mean_(mean)
+{
+  Eigen::SelfAdjointEigenSolver<Matrix> eigenSolver(covar);
+  transform_ = eigenSolver.eigenvectors() *
+               eigenSolver.eigenvalues().cwiseSqrt().asDiagonal();
+}
+
+template <typename Type, size_t Size>
+typename NormalRandomVariable<Type, Size>::Vector
+NormalRandomVariable<Type, Size>::operator()(float std) const
+{
+  static std::mt19937 gen{std::random_device{}()};
+  static std::normal_distribution<> dist(0, std);
+  Vector rand;
+  for (size_t i = 0; i < Size; ++i) {
+    rand(i) = dist(gen);
+  }
+  return mean_ + transform_ * rand;
+}
+
+// **************************************************
+template <size_t Dim, typename Scalar>
+void getMinMax(
+    const std::vector<Eigen::Matrix<Scalar, Dim, 1>,
+                      Eigen::aligned_allocator<Eigen::Matrix<Scalar, Dim, 1>>>
+        &cells,
+    Scalar *minx, Scalar *miny, Scalar *maxx, Scalar *maxy)
+{
+  static_assert(Dim > 2, "Dimension needs to be at least 2 to get max and min "
+                         "in 2D");
+  *minx = *miny = *maxx = *maxy = 0;
+  for (auto &&cell : cells) {
+    if (cell(0) < *minx)
+      *minx = cell(0);
+    if (cell(0) > *maxx)
+      *maxx = cell(0);
+    if (cell(1) < *miny)
+      *miny = cell(1);
+    if (cell(1) > *maxy)
+      *maxy = cell(1);
+  }
+}
+}
 #endif

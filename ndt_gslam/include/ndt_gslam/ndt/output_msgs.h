@@ -9,7 +9,7 @@ struct OccupancyGrid {
   // origin-----x---->
   // |
   // |
-  // y     centroid
+  // y
   // |
   // |
   // v
@@ -18,11 +18,7 @@ struct OccupancyGrid {
   x, y, theta of first node in cell array (left top
   cell in grid) in world's coordinate system
   */
-  Eigen::Vector3d origin_;
-  Eigen::Vector2d centroid_;  // center of the grid in coordinates of this grid.
-                              // Coordinate system has origin in top left corner
-                              // with only posistive values on x and y axis. X
-  // is horizontal axis and y is vertical axis. used for rotation of this grid
+  Eigen::Vector3f origin_;
   size_t width_;
   size_t height_;
   float resolution_;  // [m/cell]
