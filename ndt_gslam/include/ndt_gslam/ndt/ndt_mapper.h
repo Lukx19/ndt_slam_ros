@@ -5,6 +5,7 @@
 #include <ndt_gslam/ndt/ndt_grid2d.h>
 #include <ndt_gslam/utils/eigen_tools.h>
 #include <ndt_gslam/utils/msgs_conversions.h>
+#include <pcl/common/time.h>
 #include <pcl/point_cloud.h>
 #include <ros/ros.h>
 #include <Eigen/Dense>
@@ -136,7 +137,10 @@ void NDTMapper<CellType, PointType>::addFrame(const NDTGrid2DPtr &frame,
   grids_.push_back(frame);
   addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
-  map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  {
+    pcl::ScopeTime t("add frame occ time");
+    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  }
   means_ = map_ndt_.getMeansTransformed();
   std::cout << "node added" << std::endl;
 }
@@ -148,7 +152,10 @@ void NDTMapper<CellType, PointType>::addFrame(NDTGrid2DPtr &&frame,
   grids_.push_back(std::move(frame));
   addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
-  map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  {
+    pcl::ScopeTime t("add frame occ time");
+    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  }
   means_ = map_ndt_.getMeansTransformed();
   std::cout << "node added" << std::endl;
 }
@@ -190,7 +197,10 @@ void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
   for (const NDTGrid2DPtr &grid : grids_) {
     addToMap(*grid);
   }
-  map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  {
+    pcl::ScopeTime t("add frame occ time");
+    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+  }
   means_ = map_ndt_.getMeansTransformed();
   map_recalc_time_ = calc_time;
 }

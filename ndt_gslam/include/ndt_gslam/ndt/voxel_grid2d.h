@@ -99,7 +99,7 @@ public:
 
   CellType& operator[](const Point& pt);
   CellType* getCellPtr(const Point& pt) const;
-  std::pair<double, double> getCentroid(const Point& pt) const;
+  Eigen::Vector2f getCentroid(const Point& pt) const;
 
   /**
    * @brief      Gets all initialized cells in the grid.
@@ -277,7 +277,7 @@ private:
 template <typename CellType>
 VoxelGrid2D<CellType>::VoxelGrid2D(float cell_size)
   : cell_size_(cell_size)
-  , cell_size_half_(cell_size/2)
+  , cell_size_half_(cell_size / 2)
   , width_left_(0)
   , width_right_(0)
   , height_up_(0)
@@ -453,15 +453,15 @@ CellType* VoxelGrid2D<CellType>::getCellPtr(const Point& pt) const
 }
 
 template <typename CellType>
-std::pair<double, double>
-VoxelGrid2D<CellType>::getCentroid(const Point& pt) const
+Eigen::Vector2f VoxelGrid2D<CellType>::getCentroid(const Point& pt) const
 {
+  Eigen::Vector2f res;
   std::pair<size_t, size_t> coords = calcCoordinates(pt);
-  double x =
-      (static_cast<long>(coords.first) - static_cast<long>(left)) * cell_size_;
-  double y =
-      -(static_cast<long>(coords.second) - static_cast<long>(up)) * cell_size_;
-  return std::pair<double, double>(x, y);
+  res(0) = (static_cast<long>(coords.first) - static_cast<long>(left())) *
+           cell_size_;
+  res(1) = -(static_cast<long>(coords.second) - static_cast<long>(up())) *
+           cell_size_;
+  return res;
 }
 
 // returns all initialized cells by values. Should be used for creation of new
