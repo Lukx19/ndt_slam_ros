@@ -731,12 +731,6 @@ NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
   // find rectangular envelope around points
   float minx, maxx, miny, maxy;
   eigt::getMinMax<4, float>(cloud, &minx, &miny, &maxx, &maxy);
-  ROS_INFO_STREAM("minx: " << minx << " maxx: " << maxx << " miny: " << miny
-                           << " maxy: " << maxy);
-  ROS_INFO_STREAM(grid_.left() * cell_size_
-                  << "  " << grid_.right() * cell_size_ << "   "
-                  << grid_.down() * cell_size_ << "   "
-                  << grid_.up() * cell_size_);
   // translate all points so coordinate frame is bottom left corner
   /*  y
    * |
@@ -748,7 +742,6 @@ NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
     point(1) = (point(1) - miny);  // move down
     point(2) = 0;                  // occupancy grid needs only 2D
   }
-  ROS_INFO("points moved");
   OccupancyGrid occ_grid;
   // inserting points into aligned grid
   float width = -minx + maxx;
@@ -757,7 +750,6 @@ NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
   size_t colls = static_cast<size_t>(std::ceil(width / resolution));
   occ_grid.width_ = colls;
   occ_grid.height_ = rows;
-  ROS_INFO_STREAM("rows: " << rows << " colls: " << colls);
   // initialize whole grid as unknown
   occ_grid.cells_.resize(rows * colls, -1);
   for (auto &point : cloud) {
@@ -771,7 +763,6 @@ NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
   occ_grid.origin_(1) = origin_(1) + miny;
   occ_grid.origin_(2) = 0;
   occ_grid.resolution_ = resolution;
-  ROS_INFO("occ grid generated");
   return occ_grid;
 }
 
@@ -1081,7 +1072,7 @@ template <typename CellType, typename PointType>
 typename NDTGrid2D<CellType, PointType>::IntensityCloud
 NDTGrid2D<CellType, PointType>::genUnoccupiedCellSamples(float cell_size) const
 {
-  const float DENSITY = 0.05;
+  const float DENSITY = 0.02;
   IntensityCloud cloud;
   size_t width = static_cast<size_t>(std::ceil(cell_size / DENSITY));
   cloud.reserve(width * width);
