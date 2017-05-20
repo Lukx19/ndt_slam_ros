@@ -45,7 +45,7 @@ public:
    * @return     The occupancy grid.
    */
   virtual nav_msgs::OccupancyGrid
-  getOccupancyGrid(const std::string &world_frame_id) const = 0;
+  getOccupancyGrid(const std::string &world_frame_id) = 0;
 
   /**
    * @brief      Gets the graph serialized.
@@ -55,7 +55,7 @@ public:
    * @return     The graph serialized.
    */
   virtual visualization_msgs::MarkerArray
-  getGraphSerialized(const std::string &world_frame_id) const = 0;
+  getGraphSerialized(const std::string &world_frame_id) = 0;
 
   /**
    * @brief      Gets the ndt map.
@@ -64,65 +64,7 @@ public:
    *
    * @return     The ndt map.
    */
-  virtual ndt_gslam::NDTMapMsg
-  getNDTMap(const std::string &world_frame_id) const = 0;
-
-  /**
-   * @brief      Gets the pcl map.
-   *
-   * @param[in]  world_frame_id  The world frame identifier
-   *
-   * @return     The pcl map.
-   */
-  virtual typename PointCloud::Ptr
-  getPclMap(const std::string &world_frame_id) const = 0;
-
-  /**
-   * @brief      Gets the pcl map 2.
-   *
-   * @param[in]  world_frame_id  The world frame identifier
-   *
-   * @return     The pcl map 2.
-   */
-  virtual typename PointCloud::Ptr
-  getPclMap2(const std::string &world_frame_id) const = 0;
-
-  // parameters
-
-  /**
-   * @brief      Sets the move window radius.
-   *
-   * @param[in]  radius  The radius
-   */
-  virtual void setRunWindowRadius(float radius) = 0;
-
-  /**
-   * @brief      Sets the generation distance.
-   *
-   * @param[in]  distance  The distance
-   */
-  virtual void setGenerationDistance(float distance) = 0;
-
-  /**
-   * @brief      Sets the loop closure maximum distance.
-   *
-   * @param[in]  dist  The distance
-   */
-  virtual void setLoopClosureMaxDist(float dist) = 0;
-
-  /**
-   * @brief      Sets the loop closure minimum distance.
-   *
-   * @param[in]  dist  The distance
-   */
-  virtual void setLoopClosureMinDist(float dist) = 0;
-
-  /**
-   * @brief      Sets the loop closure score threshold.
-   *
-   * @param[in]  score  The score
-   */
-  virtual void setLoopClosureScoreThreshold(float score) = 0;
+  virtual ndt_gslam::NDTMapMsg getNDTMap(const std::string &world_frame_id) = 0;
 };
 }
 #endif

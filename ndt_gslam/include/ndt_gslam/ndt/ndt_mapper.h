@@ -11,6 +11,9 @@
 #include <Eigen/Dense>
 #include <map>
 #include <memory>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 namespace slamuk
 {
@@ -102,18 +105,28 @@ public:
     return means_;
   }
 
+  NDTGrid2DConstPtr getNDTMap() const
+  {
+    return map_ndt_;
+  }
+
 private:
-  const float RESOLUTION_DIVISOR = 5;
+  const static constexpr float RESOLUTION_DIVISOR = 5;
   size_t width_, height_;
   float resolution_;  // [m/cell]
   ros::Time map_recalc_time_;
   OccupancyGrid map_;
-  Grid map_ndt_;
+  NDTGrid2DPtr map_ndt_;
   FrameStorage grids_;
   typename Pcl::Ptr means_;
+
   // return id of frame if found. Otherwise exception
   typename FrameStorage::iterator getFrameIterator(const NDTGrid2DPtr &frame);
   void addToMap(const Grid &frame);
+  void repareOccupancyGrid();
+
+  cv::Mat frameToMat(const OccupancyGrid &occ_grid) const;
+  OccupancyGrid matToFrame(const cv::Mat &img) const;
 };
 
 // ////////IMPLEMENTATION////
@@ -124,7 +137,7 @@ NDTMapper<CellType, PointType>::NDTMapper(float resulution)
   , height_(200)
   , resolution_(resulution)
   , map_()
-  , map_ndt_(resolution_, Eigen::Vector3d(0, 0, 0))
+  , map_ndt_(new Grid(resolution_, Eigen::Vector3d(0, 0, 0)))
   , grids_()
   , means_(new Pcl())
 {
@@ -139,9 +152,10 @@ void NDTMapper<CellType, PointType>::addFrame(const NDTGrid2DPtr &frame,
   grids_.back()->setTimestamp(capture_time.toSec());
   {
     pcl::ScopeTime t("add frame occ time");
-    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    // repareOccupancyGrid();
   }
-  means_ = map_ndt_.getMeansTransformed();
+  means_ = map_ndt_->getMeansTransformed();
   std::cout << "node added" << std::endl;
 }
 
@@ -154,9 +168,10 @@ void NDTMapper<CellType, PointType>::addFrame(NDTGrid2DPtr &&frame,
   grids_.back()->setTimestamp(capture_time.toSec());
   {
     pcl::ScopeTime t("add frame occ time");
-    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    // repareOccupancyGrid();
   }
-  means_ = map_ndt_.getMeansTransformed();
+  means_ = map_ndt_->getMeansTransformed();
   std::cout << "node added" << std::endl;
 }
 
@@ -193,22 +208,38 @@ void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
             [](const NDTGrid2DPtr &a, const NDTGrid2DPtr &b) {
               return a->operator<(*b);
             });
-  map_ndt_.clear();
+  map_ndt_->clear();
   for (const NDTGrid2DPtr &grid : grids_) {
     addToMap(*grid);
   }
   {
     pcl::ScopeTime t("add frame occ time");
-    map_ = map_ndt_.createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
+    // repareOccupancyGrid();
   }
-  means_ = map_ndt_.getMeansTransformed();
+  means_ = map_ndt_->getMeansTransformed();
   map_recalc_time_ = calc_time;
 }
 
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::addToMap(const Grid &frame)
 {
-  map_ndt_.mergeInTraced(frame, true, true);
+  map_ndt_->mergeInTraced(frame, true, true);
+}
+
+template <typename CellType, typename PointType>
+void NDTMapper<CellType, PointType>::repareOccupancyGrid()
+{
+  cv::Mat image = frameToMat(map_);
+  cv::Mat dst;
+  int kernel_size = 3;
+  cv::Mat kernel = cv::getStructuringElement(
+      cv::MORPH_CROSS, cv::Size(2 * kernel_size + 1, 2 * kernel_size + 1),
+      cv::Point(kernel_size, kernel_size));
+  cv::imshow("img", image);
+  // Apply erosion or dilation on the image
+  cv::morphologyEx(image, dst, cv::MorphTypes::MORPH_CLOSE, kernel);
+  map_.cells_ = matToFrame(dst).cells_;
 }
 
 template <typename CellType, typename PointType>
@@ -236,6 +267,63 @@ NDTMapper<CellType, PointType>::getFrameIterator(const NDTGrid2DPtr &frame)
     throw std::invalid_argument("Id of frame doesn't exist");
   return iter;
 }
+
+template <typename CellType, typename PointType>
+cv::Mat
+NDTMapper<CellType, PointType>::frameToMat(const OccupancyGrid &occ_grid) const
+{
+  cv::Mat frame_mat(occ_grid.height_, occ_grid.width_, CV_8UC1);
+  for (size_t i = 0; i < occ_grid.cells_.size(); ++i) {
+    if (occ_grid.cells_[i] == -1 || occ_grid.cells_[i] > 100)
+      frame_mat.data[i] = 0;
+    else
+      frame_mat.data[i] = occ_grid.cells_[i] + 150;
+  }
+  return frame_mat;
+}
+
+template <typename CellType, typename PointType>
+OccupancyGrid
+NDTMapper<CellType, PointType>::matToFrame(const cv::Mat &img) const
+{
+  OccupancyGrid grid;
+  for (int i = 0; i < img.rows; i++) {
+    for (int j = 0; i < img.cols; j++) {
+      auto pt = img.at<unsigned char>(i, j);
+      if (pt == 0)
+        grid.cells_.push_back(-1);
+      else
+        grid.cells_.push_back(pt - 150);
+    }
+  }
+  return grid;
+}
+
+// OccupancyGrid occ_grid = frame.createOccupancyGrid();
+//   resolution_ = occ_grid.resolution_;
+//    cv::Mat src = frameToMat(occ_grid);
+//    // cv::Mat trans_src(frame_mat.size(),frame_mat.type());
+//   float angle = eigt::getAngleDiffrence(Pose(0, 0, 0), frame->getOrigin());
+//   float angle = eigt::getAngleDiffrence(Pose(0, 0, 0), frame.getOrigin());
+//    // get rotation matrix for rotating the image around its center
+//    cv::Point2f center(src.cols / 2.0f, src.rows / 2.0f);
+//    cv::Mat rot = cv::getRotationMatrix2D(center, angle, 1.0);
+//   // determine bounding rectangle
+//   cv::Rect bbox = cv::RotatedRect(center, src.size(), angle).boundingRect();
+//   // adjust transformation matrix
+//   rot.at<double>(0, 2) += bbox.width / 2.0 - center.x;
+//   rot.at<double>(1, 2) += bbox.height / 2.0 - center.y;
+//    cv::Mat rotated;
+//    cv::warpAffine(src, rotated, rot, bbox.size());
+//    // blend rotated frame with global map
+//   cv::Rect roi(occ_grid.origin_(0), occ_grid.origin_(1), rotated.cols,
+//   auto coords_pair = calcCoordinates(occ_grid.origin_(0),
+//   occ_grid.origin_(1),
+//                                      width_, height_, occ_grid.resolution_);
+//   cv::Rect roi(coords_pair.first, coords_pair.second, rotated.cols,
+//                 rotated.rows);
+//    addWeighted(map_(roi), 0.3, rotated, 0.7, 0.0, map_(roi));
+//  }
 
 }  // end of namespace slamuk
 #endif

@@ -37,16 +37,6 @@ namespace slamuk
 {
 class GraphSlamNode
 {
-  typedef message_filters::sync_policies::ApproximateTime<
-      nav_msgs::Odometry, sensor_msgs::LaserScan>
-      OdomSyncPolicy;
-  typedef message_filters::sync_policies::ApproximateTime<
-      geometry_msgs::PoseWithCovarianceStamped, sensor_msgs::LaserScan>
-      PoseSyncPolicy;
-  typedef message_filters::Subscriber<nav_msgs::Odometry> odom_sub_t;
-  typedef message_filters::Subscriber<sensor_msgs::LaserScan> laser_sub_t;
-  typedef message_filters::Subscriber<geometry_msgs::PoseWithCovarianceStamped>
-      pose_sub_t;
   typedef Eigen::Vector3d pose_t;
   typedef pcl::PointCloud<pcl::PointXYZ> Pcl;
   typedef Pcl::Ptr pcl_ptr_t;
@@ -54,7 +44,7 @@ class GraphSlamNode
 
 public:
   GraphSlamNode(ros::NodeHandle &n, ros::NodeHandle &n_private,
-                ISlamAlgorithm &alg);
+                ISlamAlgorithm *alg);
   void start();
 
 private:
@@ -68,17 +58,11 @@ private:
   laser_geometry::LaserProjection projector_;
   tf::TransformListener tf_list_;
   tf::TransformBroadcaster tf_broadcast_;
-  odom_sub_t odom_sub_;
-  pose_sub_t pose_sub_;
-  laser_sub_t laser_sub_;
+
   ros::Subscriber laser_only_sub_;
-  message_filters::Synchronizer<OdomSyncPolicy> odom_sync_;
-  message_filters::Synchronizer<PoseSyncPolicy> pose_sync_;
   ros::Publisher occ_map_pub_;
   ros::Publisher win_map_pub_;
   ros::Publisher graph_pub_;
-  ros::Publisher win_pcl_pub_;
-  ros::Publisher map_pcl_pub_;
   tf::Transform world_tf_trans_;
   uint seq_;
   bool is_ready_;
@@ -96,10 +80,6 @@ private:
 
   void initParameters();
 
-  void odom_cb(const nav_msgs::Odometry::ConstPtr &odom,
-               const sensor_msgs::LaserScan::ConstPtr &laser);
-  void pose_cb(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &pose,
-               const sensor_msgs::LaserScan::ConstPtr &laser);
   void laser_cb(const sensor_msgs::LaserScan::ConstPtr &laser);
 
   bool prepareAllData(const ros::Time &time_stamp,
