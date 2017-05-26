@@ -720,7 +720,7 @@ template <typename CellType, typename PointType>
 OccupancyGrid
 NDTGrid2D<CellType, PointType>::createOccupancyGrid(float resolution) const
 {
-  IntensityCloud cloud = sample(100);
+  IntensityCloud cloud = sample(200);
   // align coordinate frame of sampled points with axis of world frame
   // and
   // rotate 90 deg CW to have these points in x fancing down coordinates
@@ -1052,7 +1052,7 @@ NDTGrid2D<CellType, PointType>::sample(size_t samples_per_cell) const
   for (auto &&cell : grid_) {
     if (cell == nullptr)
       continue;
-    auto samples = cell->sample(samples_per_cell, 0.2);
+    auto samples = cell->sample(samples_per_cell, 0.1);
     cloud.insert(cloud.end(), std::make_move_iterator(samples.begin()),
                  std::make_move_iterator(samples.end()));
   }

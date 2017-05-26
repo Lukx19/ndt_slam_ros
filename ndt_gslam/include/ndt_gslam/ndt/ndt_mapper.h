@@ -6,6 +6,7 @@
 #include <ndt_gslam/utils/eigen_tools.h>
 #include <ndt_gslam/utils/msgs_conversions.h>
 #include <pcl/common/time.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/point_cloud.h>
 #include <ros/ros.h>
 #include <Eigen/Dense>
@@ -47,14 +48,6 @@ public:
    * @param[in]  capture_time  The capture time
    */
   void addFrame(const NDTGrid2DPtr &frame, const ros::Time &capture_time);
-
-  /**
-   * @brief      Adds a frame frame to the map. Map is updated.
-   *
-   * @param[in]  frame    The frame
-   * @param[in]  capture_time  The capture time
-   */
-  void addFrame(NDTGrid2DPtr &&frame, const ros::Time &capture_time);
 
   /**
    * @brief      Removes a frame.
@@ -147,29 +140,15 @@ template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::addFrame(const NDTGrid2DPtr &frame,
                                               const ros::Time &capture_time)
 {
+  pcl::io::savePCDFile("frame" + std::to_string(grids_.size()) + ".pcd",
+                       *(frame->getMeans()));
   grids_.push_back(frame);
   addToMap(*grids_.back());
   grids_.back()->setTimestamp(capture_time.toSec());
   {
     pcl::ScopeTime t("add frame occ time");
     map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
-    // repareOccupancyGrid();
-  }
-  means_ = map_ndt_->getMeansTransformed();
-  std::cout << "node added" << std::endl;
-}
-
-template <typename CellType, typename PointType>
-void NDTMapper<CellType, PointType>::addFrame(NDTGrid2DPtr &&frame,
-                                              const ros::Time &capture_time)
-{
-  grids_.push_back(std::move(frame));
-  addToMap(*grids_.back());
-  grids_.back()->setTimestamp(capture_time.toSec());
-  {
-    pcl::ScopeTime t("add frame occ time");
-    map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
-    // repareOccupancyGrid();
+    repareOccupancyGrid();
   }
   means_ = map_ndt_->getMeansTransformed();
   std::cout << "node added" << std::endl;
@@ -215,7 +194,7 @@ void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
   {
     pcl::ScopeTime t("add frame occ time");
     map_ = map_ndt_->createOccupancyGrid(resolution_ / RESOLUTION_DIVISOR);
-    // repareOccupancyGrid();
+    repareOccupancyGrid();
   }
   means_ = map_ndt_->getMeansTransformed();
   map_recalc_time_ = calc_time;
@@ -232,13 +211,14 @@ void NDTMapper<CellType, PointType>::repareOccupancyGrid()
 {
   cv::Mat image = frameToMat(map_);
   cv::Mat dst;
-  int kernel_size = 3;
+  int kernel_size = 1;
   cv::Mat kernel = cv::getStructuringElement(
       cv::MORPH_CROSS, cv::Size(2 * kernel_size + 1, 2 * kernel_size + 1),
       cv::Point(kernel_size, kernel_size));
-  cv::imshow("img", image);
   // Apply erosion or dilation on the image
-  cv::morphologyEx(image, dst, cv::MorphTypes::MORPH_CLOSE, kernel);
+  cv::morphologyEx(image, dst, cv::MorphTypes::MORPH_CLOSE, kernel,
+                   cv::Point(-1, -1), 5);
+  // cv::erode(dst, image, kernel);
   map_.cells_ = matToFrame(dst).cells_;
 }
 
@@ -276,6 +256,8 @@ NDTMapper<CellType, PointType>::frameToMat(const OccupancyGrid &occ_grid) const
   for (size_t i = 0; i < occ_grid.cells_.size(); ++i) {
     if (occ_grid.cells_[i] == -1 || occ_grid.cells_[i] > 100)
       frame_mat.data[i] = 0;
+    else if (occ_grid.cells_[i] < 50)
+      frame_mat.data[i] = 1;
     else
       frame_mat.data[i] = occ_grid.cells_[i] + 150;
   }
@@ -288,10 +270,12 @@ NDTMapper<CellType, PointType>::matToFrame(const cv::Mat &img) const
 {
   OccupancyGrid grid;
   for (int i = 0; i < img.rows; i++) {
-    for (int j = 0; i < img.cols; j++) {
+    for (int j = 0; j < img.cols; j++) {
       auto pt = img.at<unsigned char>(i, j);
       if (pt == 0)
         grid.cells_.push_back(-1);
+      else if (pt == 1)
+        grid.cells_.push_back(pt);
       else
         grid.cells_.push_back(pt - 150);
     }

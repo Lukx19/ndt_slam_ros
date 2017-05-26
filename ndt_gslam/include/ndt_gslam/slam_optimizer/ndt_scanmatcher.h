@@ -64,19 +64,22 @@ NdtScanmatcher<FrameType>::match(const FrameType &source,
       new pcl::PointCloud<pcl::PointXYZ>());
 
   matcher.align(*pcl_out, init_guess);
-  //  std::string filename;
-  //  std::stringstream ss;
-  //  if (matcher.hasConverged()) {
-  //    ss << "valid_";
-  //  } else {
-  //    ss << "invalid_";
-  //  }
+  //  std::string;
+  std::stringstream ss;
+  if (matcher.hasConverged()) {
+    ss << "valid_";
+    ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
+    pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(),
+                                            pcl_out, ss.str());
+    pcl::io::savePCDFile(ss.str() + "target.pcd",
+                         *(target.getData()->getMeans()));
+    pcl::io::savePCDFile(ss.str() + "source.pcd",
+                         *(source.getData()->getMeans()));
+  }
   // save measured point clouds and solutions to the disk for testing
-  //  ss << time_ << "_" << seq_ << "score:" << matcher.getAlignmentQuality();
+
   ++seq_;
-  //  pcl::savePcl<typename FrameType::Point>(target.getData()->getMeans(),
-  //  pcl_out,
-  //                                          ss.str());
+
   //  std::cout << ss.str() << std::endl;
   //  std::stringstream ss_source;
   //  std::stringstream ss_target;

@@ -1,3 +1,61 @@
 <launch>
 
+ <node pkg="ndt_gslam" type="ndt_scanmatcher" name="ndt_scanmatcher" respawn="true" output="screen">
+    <rosparam>
+      publish_tf: false
+      robot_base_frame_id: "base_footprint"
+      odom_farme_id: "odom"
+      map_farme_id: "odom_inc"
+      cell_size: 0.4
+      scanmatch_window_radius: 80.0
+    </rosparam>
+  </node>
+
+  <node pkg="robot_localization" type="ekf_localization_node" name="ekf_se" clear_params="true">
+     <rosparam>
+       two_d_mode: true
+       odom_frame: "odom"
+       base_link_frame: "base_footprint"
+       world_frame: "odom"
+       odom0: /odom
+       odom0_config: [true,  true,  false,
+                      false, false, true,
+                      false, false, false,
+                      false, false, false,
+                      false, false, false]
+       odom0_differential: true
+       odom0_relative: false
+       odom0_queue_size: 5
+       odom0_rejection_threshold: 2  # Note the difference in parameter name
+       odom0_nodelay: false
+
+       odom1: /odom_inc
+       odom1_config: [true,  true,  false,
+               false, false, true,
+               false, false, false,
+               false, false, false,
+               false, false, false]
+       odom1_differential: true
+       odom1_relative: false
+       odom1_queue_size: 5
+       odom1_rejection_threshold: 2  # Note the difference in parameter name
+       odom1_nodelay: false
+     </rosparam>
+   </node>
+  <group ns="slam">-->
+    <!-- <param name="tf_prefix" value="p3dx_0"/> -->
+   <node pkg="ndt_gslam" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
+      <rosparam>
+          robot_base_frame_id: "base_footprint"
+          odom_farme_id: "odom_combined"
+          map_farme_id: "map"
+          cell_size: 0.25
+          node_gen_distance: 2
+          loop_max_distance: 20.0
+          loop_min_distance: 4.0
+          loop_score_threshold: 0.8
+          serialize_graph: true
+      </rosparam>
+    </node>
+  </group>
 </launch>
