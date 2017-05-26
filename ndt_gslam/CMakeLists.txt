@@ -134,7 +134,8 @@ catkin_package(
 # c++11 support required
 #set(CMAKE_CXX_COMPILER "clang++")
 #set(CMAKE_C_COMPILER "clang")
-set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3")
+set(address_sanitizer_flags "-O -lasan -g -fsanitize=address -fno-omit-frame-pointer")
+set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3 -Wall")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)
@@ -218,28 +219,28 @@ target_link_libraries(ndt_scanmatcher
    ${EIGEN3_LIBRARIES}
 )
 
-add_executable(ndt2d_visual
-  src/registration/ndt2d_visual.cpp
-  src/ndt/ndt_cell.cpp)
-target_link_libraries (ndt2d_visual
-  ${PCL_LIBRARIES}
-  ${catkin_LIBRARIES}
-  ${EIGEN3_LIBRARIES}
-  )
-add_executable(ndt_grid2d_merging
-  src/ndt/ndt_grid2d_merging.cpp
-  src/ndt/ndt_cell.cpp
-  ${MAX_MIXTURES_SRC_FILES}
-  ${SWITCH_CONSTRAINS_SRC_FILES}
-  )
-target_link_libraries (ndt_grid2d_merging
-  ${PCL_LIBRARIES}
-  ${catkin_LIBRARIES}
-  ${OpenCV_LIBS}
-  ${EIGEN3_LIBRARIES}
-  ${G2O_LIBRARIES}
-  ${CSPARSE_LIBRARY}
-  )
+#add_executable(ndt2d_visual
+#  src/registration/ndt2d_visual.cpp
+#  src/ndt/ndt_cell.cpp)
+#target_link_libraries (ndt2d_visual
+#  ${PCL_LIBRARIES}
+#  ${catkin_LIBRARIES}
+#  ${EIGEN3_LIBRARIES}
+#  )
+#add_executable(ndt_grid2d_merging
+#  src/ndt/ndt_grid2d_merging.cpp
+#  src/ndt/ndt_cell.cpp
+#  ${MAX_MIXTURES_SRC_FILES}
+#  ${SWITCH_CONSTRAINS_SRC_FILES}
+#  )
+#target_link_libraries (ndt_grid2d_merging
+#  ${PCL_LIBRARIES}
+#  ${catkin_LIBRARIES}
+#  ${OpenCV_LIBS}
+#  ${EIGEN3_LIBRARIES}
+#  ${G2O_LIBRARIES}
+#  ${CSPARSE_LIBRARY}
+#  )
 
 #############
 ## Install ##

@@ -21,6 +21,7 @@ IncScanmatcherNode::IncScanmatcherNode(ros::NodeHandle &n,
   , odom_frame_()
   , tf_prefix_()
   , laser_topic_()
+  , publish_tf_(true)
   , win_radius_(40)
   , cell_size_(0.25)
   , min_rotation_(0.2)
@@ -34,7 +35,7 @@ IncScanmatcherNode::IncScanmatcherNode(ros::NodeHandle &n,
       laser_topic_, 1, boost::bind(&IncScanmatcherNode::laserCb, this, _1));
   pcl_pub_ = nh_.advertise<Pcl>("win_pcl", 1);
   occ_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("move_map", 1);
-  odom_pub_ = nh_.advertise<nav_msgs::Odometry>("odom", 5);
+  odom_pub_ = nh_.advertise<nav_msgs::Odometry>("odom_inc", 5);
   inc_matcher_.setCellSize(cell_size_);
   running_window_.reset(new FrameType(cell_size_));
   running_window_->enlarge(-win_radius_, -win_radius_, win_radius_,
@@ -69,6 +70,7 @@ void IncScanmatcherNode::initParameters()
       nh_private_.param<double>("scanmatch_window_radius", 40.0));
 
   cell_size_ = static_cast<float>(nh_private_.param<double>("cell_size", 0.25));
+  publish_tf_ = nh_private_.param<bool>("publish_tf", false);
 
   if (tf_prefix_ != "") {
     robot_base_frame_ = tf_prefix_ + "/" + robot_base_frame_;
@@ -101,12 +103,13 @@ void IncScanmatcherNode::laserCb(const sensor_msgs::LaserScan::ConstPtr &laser)
   //   fixed_to_base * odom_to_base.inverse
   fixed_to_odom = slamuk::eigenPoseToTF(
       eigt::getPoseFromTransform(position_ * last_odom_.inverse()));
-
-  tf_broadcast_.sendTransform(tf::StampedTransform(
-      fixed_to_odom, laser->header.stamp, fixed_frame_, odom_frame_));
-  publishOdometry(ros::Time::now());
-  publishPcl(ros::Time::now());
-  publishOccupancyGrid(ros::Time::now());
+  if (publish_tf_) {
+    tf_broadcast_.sendTransform(tf::StampedTransform(
+        fixed_to_odom, laser->header.stamp, fixed_frame_, odom_frame_));
+  }
+  publishOdometry(laser->header.stamp);
+  publishPcl(laser->header.stamp);
+  publishOccupancyGrid(laser->header.stamp);
   ++seq_;
 }
 
@@ -196,7 +199,7 @@ IncScanmatcherNode::calcScanMovement(const Pcl::Ptr &pcl)
   position_cumul_ = registration_tf;
   local->transform(registration_tf);
   // merge in new data to running window
-  running_window_->mergeIn(*local, true, true);
+  running_window_->mergeInTraced(*local, true, true);
   // move running window only horizontaly or verticaly if needed
   position_cumul_ = running_window_->move(registration_tf);
 

@@ -69,6 +69,7 @@ private:
   std::string odom_frame_;
   std::string tf_prefix_;
   std::string laser_topic_;
+  bool publish_tf_;
   float win_radius_;
   float cell_size_;
   double min_rotation_;
