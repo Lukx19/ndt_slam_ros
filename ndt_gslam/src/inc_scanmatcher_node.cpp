@@ -33,8 +33,8 @@ IncScanmatcherNode::IncScanmatcherNode(ros::NodeHandle &n,
   initParameters();
   laser_sub_ = nh_.subscribe<sensor_msgs::LaserScan>(
       laser_topic_, 1, boost::bind(&IncScanmatcherNode::laserCb, this, _1));
-  pcl_pub_ = nh_.advertise<Pcl>("win_pcl", 1);
-  occ_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("move_map", 1);
+  pcl_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("win_pcl", 1);
+  occ_pub_ = nh_.advertise<nav_msgs::OccupancyGrid>("map_inc", 1);
   odom_pub_ = nh_.advertise<nav_msgs::Odometry>("odom_inc", 5);
   inc_matcher_.setCellSize(cell_size_);
   running_window_.reset(new FrameType(cell_size_));
@@ -107,9 +107,12 @@ void IncScanmatcherNode::laserCb(const sensor_msgs::LaserScan::ConstPtr &laser)
     tf_broadcast_.sendTransform(tf::StampedTransform(
         fixed_to_odom, laser->header.stamp, fixed_frame_, odom_frame_));
   }
-  publishOdometry(laser->header.stamp);
-  publishPcl(laser->header.stamp);
-  publishOccupancyGrid(laser->header.stamp);
+  {
+    ros::ScopeTimer t("Publishing data from incremental scanmatcher");
+    publishOdometry(laser->header.stamp);
+    publishPcl(laser->header.stamp);
+    // publishOccupancyGrid(laser->header.stamp);
+  }
   ++seq_;
 }
 
@@ -174,7 +177,7 @@ IncScanmatcherNode::calcScanMovement(const Pcl::Ptr &pcl)
   if (!initialized_) {
     initialized_ = true;
     // enters first scan as it is to running window
-    running_window_->initializeSimple(*pcl);
+    running_window_->initialize(*pcl);
     ROS_INFO_STREAM("[INC SCANMATCHER NODE]: NDT window initialized!");
     return Transform::Identity();
   }
@@ -183,26 +186,34 @@ IncScanmatcherNode::calcScanMovement(const Pcl::Ptr &pcl)
   FrameTypePtr local =
       FrameTypePtr(new FrameType(cell_size_, running_window_->getOrigin()));
   local->initializeSimple(*pcl);
-  inc_matcher_.setInputTarget(running_window_);
-  inc_matcher_.setInputSource(local->getMeans());
-  inc_matcher_.align(*pcl_out,
-                     eigt::convertFromTransform(position_cumul_).cast<float>());
-  ROS_DEBUG_STREAM("[SLAM ALGORITHM]: incremental scanamtching converged:"
-                   << inc_matcher_.hasConverged());
+  {
+    ros::ScopeTimer t("Incremental scanmatching");
+    inc_matcher_.setInputTarget(running_window_);
+    inc_matcher_.setInputSource(local->getMeans());
+    inc_matcher_.align(
+        *pcl_out, eigt::convertFromTransform(position_cumul_).cast<float>());
+    ROS_DEBUG_STREAM("[SLAM ALGORITHM]: incremental scanamtching converged:"
+                     << inc_matcher_.hasConverged());
+  }
   if (!inc_matcher_.hasConverged()) {
     ROS_INFO_STREAM("[SLAM ALGORITHM]: unsucessful scanmatching-> not moving");
     return Transform::Identity();
   }
-  // prepare transformation from successful scan registration
-  Transform registration_tf = eigt::convertToTransform<double>(
-      inc_matcher_.getFinalTransformation().cast<double>());
-  position_cumul_ = registration_tf;
-  local->transform(registration_tf);
-  // merge in new data to running window
-  running_window_->mergeInTraced(*local, true, true);
-  // move running window only horizontaly or verticaly if needed
-  position_cumul_ = running_window_->move(registration_tf);
-
+  {
+    ros::ScopeTimer t("Moving window merging and raytracing");
+    // prepare transformation from successful scan registration
+    Transform registration_tf = eigt::convertToTransform<double>(
+        inc_matcher_.getFinalTransformation().cast<double>());
+    position_cumul_ = registration_tf;
+    pcl_out->clear();
+    pcl::transformPointCloud(*pcl, *pcl_out,
+                             eigt::convertFromTransform(registration_tf));
+    // merge in new data to running window
+    running_window_->mergeInTraced(*pcl_out, running_window_->getOrigin(),
+                                   true);
+    // move running window only horizontaly or verticaly if needed
+    position_cumul_ = running_window_->move(registration_tf);
+  }
   Transform scan_to_base =
       eigt::getTransFromPose(running_window_->getOrigin()) * position_cumul_;
 
@@ -227,10 +238,12 @@ void IncScanmatcherNode::publishOdometry(const ros::Time &time)
 void IncScanmatcherNode::publishPcl(const ros::Time &time)
 {
   Pcl::Ptr pcl = running_window_->getMeansTransformed();
-  pcl->header.frame_id = fixed_frame_;
-  pcl->header.stamp = time.toNSec();
-  pcl->header.seq = seq_;
-  pcl_pub_.publish(pcl);
+  sensor_msgs::PointCloud2::Ptr msg(new sensor_msgs::PointCloud2());
+  pcl::toROSMsg(*pcl, *msg);
+  msg->header.stamp = time;
+  msg->header.frame_id = fixed_frame_;
+  msg->header.seq = seq_;
+  pcl_pub_.publish(msg);
 }
 
 void IncScanmatcherNode::publishOccupancyGrid(const ros::Time &time) const

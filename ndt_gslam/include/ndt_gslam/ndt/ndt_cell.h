@@ -19,7 +19,7 @@ class NDTCell
   constexpr static float LOG_LIKE_OCCUPANCY = 0.405465108;
   constexpr static float SENSOR_NOISE = 0.01;
   constexpr static size_t MAX_POINTS = 1000000000;
-
+  constexpr static size_t MIN_POINTS = 5;
   constexpr static float NO_GAUSSIAN_OCCUP_UPDATE = -0.2;
 
 public:
@@ -58,25 +58,6 @@ public:
   size_t points() const
   {
     return points_;
-  }
-  /**
-   * @brief      Gets cell centroid.
-   *
-   * @return     The centroid.
-   */
-  const Vector &getCentroid() const
-  {
-    return centroid_;
-  }
-
-  /**
-   * @brief      Sets the centroid.
-   *
-   * @param[in]  centroid  The centroid
-   */
-  void setCentroid(const Vector &centroid)
-  {
-    centroid_ = centroid;
   }
 
   /**
@@ -213,13 +194,15 @@ private:
   float occup_;
   size_t points_;
   bool gaussian_;
-  Vector centroid_;
   std::vector<Vector> points_vec_;
 
   void updateOccupancy(float occup);
   void rescaleCovar();
   double calcMaxLikelihoodOnLine(const Vector &start, const Vector &end,
                                  Vector &pt) const;
+  std::tuple<size_t, Vector, Matrix> combineGaussians(
+      size_t points1, const Vector &mean1, const Matrix &cov1, size_t points2,
+      const Vector &mean2, const Matrix &cov2) const;
 };
 
 std::ostream &operator<<(std::ostream &os, const NDTCell &cell)

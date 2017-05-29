@@ -437,7 +437,7 @@ NDTGrid2D<CellType, PointType>::NDTGrid2D(float cell_size, double timestamp)
   , initialized_(false)
   , timestamp_(timestamp)
   , grid_(cell_size)
-  , kdtree_()
+  , kdtree_(false)
   , means_(new PointCloud())
   , cell_samples_(genUnoccupiedCellSamples(cell_size))
 {
@@ -462,7 +462,7 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const PointCloud &pcl,
 {
   eigt::transform2d_t<double> trans =
       eigt::transBtwFrames(origin, this->origin_);
-  // std::cout << trans.matrix() << std::endl;
+  //  std::cout << trans.matrix() << std::endl;
   PointCloud trans_pcl;
   // transforming input pcl to reference frame of this grid
   pcl::transformPointCloud(pcl, trans_pcl, eigt::convertFromTransform(trans));
@@ -500,44 +500,18 @@ void NDTGrid2D<CellType, PointType>::mergeIn(const std::vector<CellType> &cells,
     pcl::getMinMaxNDT2D(cells, &minx, &miny, &maxx, &maxy);
     grid_.enlarge(minx, miny, maxx, maxy);
     for (auto &&cell : cells) {
-      if (cell.hasGaussian()) {
-        grid_.addCell(cell.getMean().head(2), cell, false);
-      }
+      // if (cell.hasGaussian()) {
+      grid_.addCell(cell.getMean().head(2), cell, true);
+      //}
     }
   } else {
     for (auto &&cell : cells) {
       // cell is discarted if it is outside of the boundries for current grid_
-      if (cell.hasGaussian())
-        if (grid_.isInside(cell.getMean().head(2)))
-          grid_.addCell(cell.getMean().head(2), cell);
-    }
-  }
-  updateMeansCloud();
-  updateKDTree();
-}
-
-template <typename CellType, typename PointType>
-void NDTGrid2D<CellType, PointType>::mergeIn(std::vector<CellType> &&cells,
-                                             bool resize)
-{
-  if (cells.empty()) {
-    ROS_WARN_STREAM("[NDT_GRID2D]: MergeIn- empty input cell vector");
-  }
-  // incoming vector of cells includes all cells [cells with Gaussian, visited
-  // unoccupied cells,unoccupied cells with Gaussian]
-  if (resize || !initialized_) {
-    initialized_ = true;
-    float minx, miny, maxx, maxy;
-    pcl::getMinMaxNDT2D(cells, &minx, &miny, &maxx, &maxy);
-    grid_.enlarge(minx, miny, maxx, maxy);
-    for (auto &&cell : cells) {
-      grid_.addCell(cell.getMean().head(2), std::move(cell));
-    }
-  } else {
-    for (auto &&cell : cells) {
-      // cell is discarded if it is outside of the boundaries for current grid_
+      // if (cell.hasGaussian())
       if (grid_.isInside(cell.getMean().head(2)))
-        grid_.addCell(cell.getMean().head(2), std::move(cell));
+        grid_.addCell(cell.getMean().head(2), cell);
+      else
+        ROS_INFO("cell outside of window");
     }
   }
   updateMeansCloud();
@@ -800,7 +774,7 @@ void NDTGrid2D<CellType, PointType>::transform(const Transform &trans)
   typename DataGrid::CellVector cells = grid_.getValidCells();
   grid_.clear();
   Transform only_rotate = trans;
-  only_rotate.matrix().block(0, 2, 2, 1) << 0, 0;
+  only_rotate.translationExt() << 0, 0;
   transformNDTCells(cells, only_rotate);
   for (auto &&cell : cells) {
     if (cell.hasGaussian())
@@ -992,13 +966,25 @@ NDTGrid2D<CellType, PointType>::getKNearestNeighborsKDTree(
   point.x = pt(0);
   point.y = pt(1);
   point.z = 0;
-  std::vector<int> res_indexes;
-  std::vector<float> distances;
+  std::vector<int> res_indexes(K, 0);
+  std::vector<float> distances(K, 0);
   kdtree_.nearestKSearch(point, K, res_indexes, distances);
   for (int id : res_indexes) {
     PointType near_pt = means_->at(id);
-    res.push_back(grid_.getCellPtr(Eigen::Vector2d(near_pt.x, near_pt.y)));
+    auto grid_pt = Eigen::Vector2d(near_pt.x, near_pt.y);
+    if (!grid_.cellExists(grid_pt)) {
+      ROS_INFO("cell outside in KD search");
+      continue;
+    }
+
+    auto *cell = grid_.getCellPtr(grid_pt);
+    if (cell->hasGaussian())
+      res.push_back(cell);
+    else
+      ROS_INFO("no gaussian in KD search");
   }
+  if (res.size() == 0)
+    ROS_INFO("no cells in KD search");
   return res;
 }
 

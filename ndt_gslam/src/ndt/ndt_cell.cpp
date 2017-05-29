@@ -8,41 +8,31 @@ NDTCell::NDTCell()
   , occup_(0)
   , points_(0)
   , gaussian_(false)
-  , centroid_(Vector::Identity())
 {
 }
 
 NDTCell &NDTCell::operator+=(const NDTCell &other)
 {
+  if (other.occup_ < 0) {
+    return *this;
+  }
   // invalid cell with too little points
-  if (other.points() <= 2)
+  if (!other.hasGaussian()) {
+    //    //    std::cout << "mergig cell with little points \n";
+    //    std::copy(other.points_vec_.begin(), other.points_vec_.end(),
+    //              std::back_inserter(points_vec_));
+    //    computeGaussian();
     return *this;
-  if (!other.hasGaussian())
-    return *this;
+  }
+
   if (this->hasGaussian()) {
-    size_t points1 = this->points_;
-    size_t points2 = other.points_;
-
-    Vector m_sum1 = mean_ * static_cast<double>(points1);
-    Vector m_sum2 = other.mean_ * static_cast<double>(points2);
-
-    Matrix c_sum1 = cov_ * static_cast<double>(points1 - 1);
-    Matrix c_sum2 = other.cov_ * static_cast<double>(points2 - 1);
-
-    size_t points_sum = points2 + points1;
-
-    mean_ = (m_sum2 + m_sum1) / static_cast<double>(points_sum);
-
-    double w1 = static_cast<double>(points1) /
-                static_cast<double>(points2 * points_sum);
-    double w2 = static_cast<double>(points2) / static_cast<double>(points1);
-
-    Matrix c_sum3 =
-        c_sum1 + c_sum2 +
-        w1 * (w2 * m_sum1 - m_sum2) * (w2 * m_sum1 - m_sum2).transpose();
-    points_ = points_sum;
-    cov_ = (1.0 / static_cast<double>(points_sum - 1)) * c_sum3;
-    float occup_addition = static_cast<float>(points2) * LOG_LIKE_OCCUPANCY;
+    auto res = combineGaussians(points_, mean_, cov_, other.points_,
+                                other.mean_, other.cov_);
+    points_ = std::get<0>(res);
+    mean_ = std::get<1>(res);
+    cov_ = std::get<2>(res);
+    float occup_addition =
+        static_cast<float>(other.points_) * LOG_LIKE_OCCUPANCY;
     updateOccupancy(occup_addition);
     if (points_ > MAX_POINTS)
       points_ = MAX_POINTS;
@@ -65,26 +55,24 @@ void NDTCell::computeGaussian()
   float occup_addition =
       static_cast<float>(points_vec_.size()) * LOG_LIKE_OCCUPANCY;
   updateOccupancy(occup_addition);
-  // if (occup_ <= 0) {
-  //   gaussian_ = false;
-  //   points_ = points_vec_.size();
-  //   return;
-  // }
-  if (points_vec_.size() < 3) {
+  if (occup_ < 0) {
     gaussian_ = false;
-    points_ = points_vec_.size();
     return;
   }
-
   // compute gaussian of new points
   Vector mean_add = Vector::Zero();
   Matrix cov_add = Matrix::Identity();
-
   for (auto &&pt : points_vec_) {
     mean_add += pt;
     cov_add += (pt * pt.transpose());
   }
   Vector mean2 = mean_add / static_cast<double>(points_vec_.size());
+  if (points_vec_.size() < MIN_POINTS) {
+    if (!gaussian_)
+      mean_ = mean2;
+    return;
+  }
+
   // // simgle pass covariance calculation
   Matrix cov_temp = (cov_add - 2 * (mean_add * mean2.transpose())) /
                         static_cast<double>(points_vec_.size()) +
@@ -101,32 +89,14 @@ void NDTCell::computeGaussian()
     rescaleCovar();
   } else {
     // previously calculated gaussian needs to be updated from points added
-    Vector mean_sum1 = mean_ * points_;
-    Matrix cov_sum1 = cov_ * (points_ - 1);
-
-    Vector mean_sum2 = mean2 * points_vec_.size();
-    Matrix cov_sum2 = cov2 * (points_vec_.size() - 1);
-    double points1 = static_cast<double>(points_);
-    double points2 = static_cast<double>(points_vec_.size());
-    double w1 = points1 / (points2 * (points1 + points2));
-    double w2 = points2 / points1;
-    Vector mean_sum_comb = mean_sum1 + mean_sum2;
-    Matrix cov_sum_comb = cov_sum1 + cov_sum2 +
-                          w1 * ((w2 * mean_sum1 - mean_sum2) *
-                                (w2 * mean_sum1 - mean_sum2).transpose());
-
-    points_ += points_vec_.size();
-    // restrict number of points in cell
-    if (MAX_POINTS > 0 && MAX_POINTS < points_) {
-      mean_sum_comb *=
-          (static_cast<double>(MAX_POINTS) / static_cast<double>(points_));
-      cov_sum_comb *= (static_cast<double>(MAX_POINTS - 1) /
-                       static_cast<double>(points_ - 1));
+    auto res =
+        combineGaussians(points_, mean_, cov_, points_vec_.size(), mean2, cov2);
+    points_ = std::get<0>(res);
+    mean_ = std::get<1>(res);
+    cov_ = std::get<2>(res);
+    if (points_ > MAX_POINTS)
       points_ = MAX_POINTS;
-    }
-    mean_ = mean_sum_comb / points_;
-    cov_ = cov_sum_comb / (points_ - 1);
-    this->rescaleCovar();
+    rescaleCovar();
   }
   points_vec_.clear();
 }
@@ -136,7 +106,7 @@ void NDTCell::updateOccupancy(const Vector &start, const Vector &end,
 {
   if (!gaussian_) {
     updateOccupancy(NO_GAUSSIAN_OCCUP_UPDATE * new_points);
-    if (occup_ <= 0)
+    if (occup_ < 0)
       gaussian_ = false;
     // std::cout << "\nNOTHING\n";
     return;
@@ -184,10 +154,13 @@ void NDTCell::updateOccupancy(const Vector &start, const Vector &end,
 
 void NDTCell::transform(const Transform &trans)
 {
+  mean_ = trans * mean_;
   if (gaussian_) {
-    mean_ = trans * mean_;
     cov_ = trans.rotation() * cov_ * trans.rotation().transpose();
     rescaleCovar();
+  }
+  for (auto &&pt : points_vec_) {
+    pt = trans * pt;
   }
 }
 
@@ -274,4 +247,40 @@ double NDTCell::calcMaxLikelihoodOnLine(const Vector &start, const Vector &end,
   if (std::isnan(likelihood))
     return -1;
   return std::exp(-likelihood / 2);
+}
+
+std::tuple<size_t, NDTCell::Vector, NDTCell::Matrix> NDTCell::combineGaussians(
+    size_t points1, const NDTCell::Vector &mean1, const NDTCell::Matrix &cov1,
+    size_t points2, const NDTCell::Vector &mean2,
+    const NDTCell::Matrix &cov2) const
+{
+  Vector m_sum1 = mean1 * static_cast<double>(points1);
+  Vector m_sum2 = mean2 * static_cast<double>(points2);
+
+  Matrix c_sum1 = cov1 * static_cast<double>(points1 - 1);
+  Matrix c_sum2 = cov2 * static_cast<double>(points2 - 1);
+
+  size_t points_sum = points2 + points1;
+
+  double w1 =
+      static_cast<double>(points1) / static_cast<double>(points2 * points_sum);
+  double w2 = static_cast<double>(points2) / static_cast<double>(points1);
+
+  Matrix c_sum3 =
+      c_sum1 + c_sum2 +
+      w1 * (w2 * m_sum1 - m_sum2) * (w2 * m_sum1 - m_sum2).transpose();
+
+  return std::make_tuple(points1 + points2,
+                         (m_sum2 + m_sum1) / static_cast<double>(points_sum),
+                         (1.0 / static_cast<double>(points_sum - 1)) * c_sum3);
+
+  //  if (points_ > MAX_POINTS) {
+  //    mean_sum_comb *=
+  //        (static_cast<double>(MAX_POINTS) / static_cast<double>(points_));
+  //    cov_sum_comb *= (static_cast<double>(MAX_POINTS - 1) /
+  //                     static_cast<double>(points_ - 1));
+  //    points_ = MAX_POINTS;
+  //  }
+  //  mean_ = mean_sum_comb / points_;
+  //  cov_ = cov_sum_comb / (points_ - 1);
 }

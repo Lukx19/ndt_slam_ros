@@ -135,7 +135,7 @@ catkin_package(
 #set(CMAKE_CXX_COMPILER "clang++")
 #set(CMAKE_C_COMPILER "clang")
 set(address_sanitizer_flags "-O -lasan -g -fsanitize=address -fno-omit-frame-pointer")
-set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3 -Wall")
+set(cxx_compiler_flags "-mfpmath=sse -msse3 -fPIC -O3 -Wall ${address_sanitizer_flags}")
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 if(COMPILER_SUPPORTS_CXX11)

@@ -27,6 +27,7 @@
 #include <ndt_gslam/registration/ndt2d.h>
 #include <ndt_gslam/utils/eigen_tools.h>
 #include <ndt_gslam/utils/msgs_conversions.h>
+#include <ndt_gslam/utils/ros_scope_timer.h>
 #include <ndt_gslam/utils/tf_conversions.h>
 
 class IncScanmatcherNode

@@ -380,12 +380,12 @@ bool VoxelGrid2D<CellType>::removeCell(const Point& posistion)
 template <typename CellType>
 bool VoxelGrid2D<CellType>::isInside(const Point& pt) const
 {
-  if (pt(0) >=
+  if (pt(0) >
           -static_cast<double>(width_left_) * cell_size_ - cell_size_half_ &&
-      pt(0) <= width_right_ * cell_size_ + cell_size_half_ &&
-      pt(1) >=
+      pt(0) < width_right_ * cell_size_ + cell_size_half_ &&
+      pt(1) >
           -static_cast<double>(height_down_) * cell_size_ - cell_size_half_ &&
-      pt(1) <= height_up_ * cell_size_ + cell_size_half_)
+      pt(1) < height_up_ * cell_size_ + cell_size_half_)
     return true;
   else
     return false;
@@ -503,26 +503,17 @@ typename VoxelGrid2D<CellType>::CellPtrVector
 VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
 {
   CellPtrVector res;
+  res.reserve(100);
   Point end_in;
   Point start_in;
-  bool end_indise = false;
-  Point delta;
-  double minx =
-      -static_cast<double>(width_left_) * cell_size_ - cell_size_half_;
-  double maxx = width_right_ * cell_size_ + cell_size_half_;
-  double miny =
-      -static_cast<double>(height_down_) * cell_size_ - cell_size_half_;
-  double maxy = height_up_ * cell_size_ + cell_size_half_;
 
+  Point delta;
   if (!isInside(start)) {
     return res;
   }
   start_in = start;
-  end_indise = isInside(end);
   end_in = end;
   // calculation of delta movement along line
-  auto idx1 = calcCoordinates(start_in);
-
   double length_x = std::abs(end_in(0) - start_in(0)) / cell_size_;
   double length_y = std::abs(end_in(1) - start_in(1)) / cell_size_;
   delta(0) = (end_in(0) - start_in(0)) / std::max(length_x, length_y);
@@ -530,31 +521,44 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
   double length = std::max(length_x, length_y);
   delta *= 0.5;
   Point p = start_in;
-  size_t idx_old = calcIndex(start_in);
-  size_t idx_current = calcIndex(start_in);
+  size_t idx_old = std::numeric_limits<size_t>::max();
+  size_t idx_current = calcIndex(p);
 
   if (cells_[idx_current].get() == nullptr) {
     cells_[idx_current].reset(new CellType());
   }
-  res.push_back(cells_[idx_current].get());
-  double total_dist = 0;
+  res.push_back(cells_.at(idx_current).get());
+  bool known_end = false;
+  size_t end_idx = 0;
+  if (isInside(end)) {
+    known_end = true;
+    end_idx = calcIndex(end);
+  }
   for (size_t i = 0; i < 2 * static_cast<size_t>(std::floor(length)) - 1; ++i) {
     // total_dist += delta_dist;
     // if program  is still in the same cell like last time just step forward
-    if (idx_current != idx_old) {
-      if (cells_[idx_current].get() == nullptr) {
-        cells_[idx_current].reset(new CellType());
-      }
-      res.push_back(cells_[idx_current].get());
-      // std::cout << p.transpose() << std::endl;
+    if (cells_.at(idx_current).get() == nullptr) {
+      addCell(p, CellType(), true);
     }
+    res.push_back(cells_.at(idx_current).get());
+    // std::cout << p.transpose() << std::endl;
     p += delta;
-    if (p(0) >= maxx || p(0) <= minx || p(1) >= maxy || p(1) <= miny)
+    idx_current = calcIndex(p);
+    while (idx_old == idx_current) {
+      p += delta;
+      idx_current = calcIndex(p);
+    }
+
+    if (!isInside(p + delta)) {
+      return res;
+    }
+    if (known_end && idx_current == end_idx)
       return res;
     idx_old = idx_current;
-    idx_current = calcIndex(p);
-  }
 
+    //    std::cout << p.transpose() << " : " << idx_current << std::endl;
+  }
+  //  std::cout << "\n";
   return res;
 }
 
