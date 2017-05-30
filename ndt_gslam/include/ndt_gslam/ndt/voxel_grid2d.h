@@ -534,7 +534,7 @@ VoxelGrid2D<CellType>::rayTrace(const Point& start, const Point& end)
     known_end = true;
     end_idx = calcIndex(end);
   }
-  for (size_t i = 0; i < 2 * static_cast<size_t>(std::floor(length)) - 1; ++i) {
+  for (size_t i = 0; i < static_cast<size_t>(std::floor(length)) + 1; ++i) {
     // total_dist += delta_dist;
     // if program  is still in the same cell like last time just step forward
     if (cells_.at(idx_current).get() == nullptr) {

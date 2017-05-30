@@ -119,7 +119,8 @@ private:
   void repareOccupancyGrid();
 
   cv::Mat frameToMat(const OccupancyGrid &occ_grid) const;
-  OccupancyGrid matToFrame(const cv::Mat &img) const;
+  OccupancyGrid matToFrame(const cv::Mat &img,
+                           const OccupancyGrid &occ_grid) const;
 };
 
 // ////////IMPLEMENTATION////
@@ -183,10 +184,10 @@ NDTMapper<CellType, PointType>::combineFrames(const NDTGrid2DPtr &a,
 template <typename CellType, typename PointType>
 void NDTMapper<CellType, PointType>::recalc(const ros::Time &calc_time)
 {
-  std::sort(grids_.begin(), grids_.end(),
-            [](const NDTGrid2DPtr &a, const NDTGrid2DPtr &b) {
-              return a->operator<(*b);
-            });
+  //  std::sort(grids_.begin(), grids_.end(),
+  //            [](const NDTGrid2DPtr &a, const NDTGrid2DPtr &b) {
+  //              return a->operator<(*b);
+  //            });
   map_ndt_->clear();
   for (const NDTGrid2DPtr &grid : grids_) {
     addToMap(*grid);
@@ -213,13 +214,13 @@ void NDTMapper<CellType, PointType>::repareOccupancyGrid()
   cv::Mat dst;
   int kernel_size = 1;
   cv::Mat kernel = cv::getStructuringElement(
-      cv::MORPH_CROSS, cv::Size(2 * kernel_size + 1, 2 * kernel_size + 1),
+      cv::MORPH_ELLIPSE, cv::Size(2 * kernel_size + 1, 2 * kernel_size + 1),
       cv::Point(kernel_size, kernel_size));
   // Apply erosion or dilation on the image
   cv::morphologyEx(image, dst, cv::MorphTypes::MORPH_CLOSE, kernel,
-                   cv::Point(-1, -1), 5);
+                   cv::Point(-1, -1), 2);
   // cv::erode(dst, image, kernel);
-  map_.cells_ = matToFrame(dst).cells_;
+  map_.cells_ = matToFrame(dst, map_).cells_;
 }
 
 template <typename CellType, typename PointType>
@@ -257,7 +258,7 @@ NDTMapper<CellType, PointType>::frameToMat(const OccupancyGrid &occ_grid) const
     if (occ_grid.cells_[i] == -1 || occ_grid.cells_[i] > 100)
       frame_mat.data[i] = 0;
     else if (occ_grid.cells_[i] < 50)
-      frame_mat.data[i] = 1;
+      frame_mat.data[i] = 0;
     else
       frame_mat.data[i] = occ_grid.cells_[i] + 150;
   }
@@ -265,19 +266,21 @@ NDTMapper<CellType, PointType>::frameToMat(const OccupancyGrid &occ_grid) const
 }
 
 template <typename CellType, typename PointType>
-OccupancyGrid
-NDTMapper<CellType, PointType>::matToFrame(const cv::Mat &img) const
+OccupancyGrid NDTMapper<CellType, PointType>::matToFrame(
+    const cv::Mat &img, const OccupancyGrid &original_grid) const
 {
   OccupancyGrid grid;
+  size_t idx = 0;
   for (int i = 0; i < img.rows; i++) {
     for (int j = 0; j < img.cols; j++) {
       auto pt = img.at<unsigned char>(i, j);
-      if (pt == 0)
+      if (original_grid.cells_[idx] == -1)
         grid.cells_.push_back(-1);
-      else if (pt == 1)
-        grid.cells_.push_back(pt);
+      else if (pt == 0)
+        grid.cells_.push_back(0);
       else
         grid.cells_.push_back(pt - 150);
+      ++idx;
     }
   }
   return grid;

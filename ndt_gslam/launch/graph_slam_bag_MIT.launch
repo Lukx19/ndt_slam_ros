@@ -1,19 +1,59 @@
 <launch>
-  <group ns="slam">
+<node pkg="tf" type="tf_remap" name="tf_remapper" output="screen">
+  <rosparam param="mappings">
+    [{old: odom_combined, new: /odom}]
+  </rosparam>
+</node>
+
+ <node pkg="laser_scan_matcher" type="laser_scan_matcher_node" name="laser_scan_matcher_node" output="screen">
+   <remap from="/scan" to="/base_scan" />
+   <remap from="/odom" to="/base_odometry/odom" />
+   <rosparam>
+     use_odom: true
+     use_imu: false
+     use_vel: false
+     publish_tf: false
+     world_frame: "odom"
+     base_frame: "base_footprint"
+     publish_pose_with_covariance_stamped: true
+     do_compute_covariance: 1
+     max_iterations: 10
+   </rosparam>
+  </node>
+  <node pkg="robot_localization" type="ekf_localization_node" name="ekf_se" clear_params="true">
+     <rosparam>
+       two_d_mode: true
+       odom_frame: "odom"
+       base_link_frame: "base_footprint"
+       world_frame: "odom"
+       pose0: /pose_with_covariance_stamped
+       pose0_config: [true,  true,  false,
+                      false, false, true,
+                      false, false, false,
+                      false, false, false,
+                      false, false, false]
+       pose0_differential: true
+       pose0_relative: false
+       pose0_queue_size: 5
+       pose0_rejection_threshold: 2  # Note the difference in parameter name
+       pose0_nodelay: false
+     </rosparam>
+   </node>
+ <!-- <group ns="slam">-->
     <!-- <param name="tf_prefix" value="p3dx_0"/> -->
-    <node pkg="ndt_gslam" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
+   <!-- <node pkg="ndt_gslam" type="graph_slam2d" name="graph_slam2d" respawn="true" output="screen">
       <rosparam>
           robot_base_frame_id: "base_footprint"
           odom_farme_id: "odom_combined"
           map_farme_id: "map"
           cell_size: 0.25
-          node_gen_distance: 0.5
+          node_gen_distance: 2
           loop_max_distance: 20.0
-          loop_min_distance: 0.0
+          loop_min_distance: 4.0
           loop_score_threshold: 0.8
           serialize_graph: true
       </rosparam>
       <remap from="/scan" to="/base_scan" />
     </node>
-  </group>
+  </group>-->
 </launch>

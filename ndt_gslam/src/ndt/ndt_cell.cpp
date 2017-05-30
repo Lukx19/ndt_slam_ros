@@ -5,7 +5,7 @@ NDTCell::NDTCell()
   : mean_(Vector::Zero())
   , cov_(Matrix::Identity())
   , icov_(Matrix::Identity())
-  , occup_(0)
+  , occup_(-1)
   , points_(0)
   , gaussian_(false)
 {
@@ -13,9 +13,9 @@ NDTCell::NDTCell()
 
 NDTCell &NDTCell::operator+=(const NDTCell &other)
 {
-  if (other.occup_ < 0) {
-    return *this;
-  }
+  //  if (other.occup_ < 0) {
+  //    return *this;
+  //  }
   // invalid cell with too little points
   if (!other.hasGaussian()) {
     //    //    std::cout << "mergig cell with little points \n";
@@ -51,14 +51,10 @@ NDTCell &NDTCell::operator+=(const NDTCell &other)
 
 void NDTCell::computeGaussian()
 {
-  // update occupancy probability
-  float occup_addition =
-      static_cast<float>(points_vec_.size()) * LOG_LIKE_OCCUPANCY;
-  updateOccupancy(occup_addition);
-  if (occup_ < 0) {
-    gaussian_ = false;
-    return;
-  }
+  //  if (occup_ < 0) {
+  //    gaussian_ = false;
+  //    return;
+  //  }
   // compute gaussian of new points
   Vector mean_add = Vector::Zero();
   Matrix cov_add = Matrix::Identity();
@@ -98,6 +94,11 @@ void NDTCell::computeGaussian()
       points_ = MAX_POINTS;
     rescaleCovar();
   }
+
+  // update occupancy probability
+  float occup_addition =
+      static_cast<float>(points_vec_.size()) * LOG_LIKE_OCCUPANCY;
+  updateOccupancy(occup_addition);
   points_vec_.clear();
 }
 

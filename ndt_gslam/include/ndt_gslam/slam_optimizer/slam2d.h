@@ -165,6 +165,7 @@ bool Slam2D<T>::optimalize()
   g2o_opt_->computeActiveErrors();
   ROS_INFO_STREAM("[SLAM2D]: optimalization done: " << g2o_opt_->chi2());
   updatePoseGraph();
+
   return true;
 }
 

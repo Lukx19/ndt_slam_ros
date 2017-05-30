@@ -30,10 +30,10 @@
           odom_farme_id: "odom_inc"
           map_farme_id: "map"
           cell_size: 0.4
-          node_gen_distance: 2
+          node_gen_distance: 1.0
           loop_max_distance: 20.0
-          loop_min_distance: 4.0
-          loop_score_threshold: 0.8
+          loop_min_distance: 0.1
+          loop_score_threshold: 0.6
           serialize_graph: true
       </rosparam>
     </node>

@@ -331,11 +331,13 @@ void D2DNormalDistributionsTransform2DRobust<
   // standard D2D match try for good guess estimations
   d2d_.align(output, guess);
   double score = proofTransform(d2d_.getFinalTransformation());
-  Eigen::Matrix4f first_trans;
-  // test if first d2d has return bad result
-  if (!(d2d_.hasConverged() && score > 0.7)) {
+  if (d2d_.hasConverged() && score > rejection_limit_) {
+    converged_ = true;
+    alignment_quality_ = score;
+    final_transformation_ = d2d_.getFinalTransformation();
+    ROS_INFO_STREAM("[D2DRobust]:d2d score: " << score);
+  } else {
     // bad result -> robust alignment needed
-    first_trans = d2d_.getFinalTransformation();
     corr_est_.align(output, guess);
     if (!corr_est_.hasConverged()) {
       converged_ = false;
@@ -345,34 +347,28 @@ void D2DNormalDistributionsTransform2DRobust<
     }
     // second d2d -> precise alignment
     d2d_.align(output, corr_est_.getFinalTransformation());
-    if (!d2d_.hasConverged()) {  //||
-      //! proofTransform(d2d_.getFinalTransformation()))
-      //{
+    if (!d2d_.hasConverged()) {
       converged_ = false;
       final_transformation_ = corr_est_.getFinalTransformation();
       alignment_quality_ = 0;
       return;
     }
-  }
-  // score result
-  double score2 = proofTransform(d2d_.getFinalTransformation());
-  alignment_quality_ = score;
-  // robust alignment still not good enough
-  if (score2 < rejection_limit_) {
-    // Maybe at least first d2d got some reasonable result
-    if (score > 0.6) {
+    // score result
+    double score2 = proofTransform(d2d_.getFinalTransformation());
+    // robust alignment still not good enough
+    if (score2 > rejection_limit_) {
+      // we got good result by robust algorithm
       converged_ = true;
-      final_transformation_ = first_trans;
+      alignment_quality_ = score2;
+      final_transformation_ = d2d_.getFinalTransformation();
+      ROS_INFO_STREAM("[D2DRobust]:Correlative + d2d score: " << score2);
+
     } else {
       // everything is bad probably not the same place
       converged_ = false;
       final_transformation_ = d2d_.getFinalTransformation();
+      alignment_quality_ = 0;
     }
-  } else {
-    // we got good result by robust algorithm
-    converged_ = true;
-    alignment_quality_ = score2;
-    final_transformation_ = d2d_.getFinalTransformation();
   }
   // output cloud transform
   transformPointCloud(*input_, output, final_transformation_);
@@ -384,13 +380,21 @@ double D2DNormalDistributionsTransform2DRobust<
     PointSource, PointTarget,
     CellType>::proofTransform(const Eigen::Matrix4f &trans)
 {
-  ml_corr::LookUpTable<PointTarget> proof_grid;
-  proof_grid.initGrid(*target_, cell_size_, 0.5);
-  PclSource output;
-  transformPointCloud(*input_, output, trans);
-  double score = proof_grid.getScore(output);
-  ROS_DEBUG_STREAM("[D2DRobust]:proofer score: " << score);
-  return score;
+  if (target_->size() > input_->size()) {
+    ml_corr::LookUpTable<PointTarget> proof_grid;
+    proof_grid.initGrid(*target_, cell_size_, 0.5);
+    PclSource output;
+    transformPointCloud(*input_, output, trans);
+    double score = proof_grid.getScore(output);
+    return score;
+  } else {
+    ml_corr::LookUpTable<PointTarget> proof_grid;
+    proof_grid.initGrid(*input_, cell_size_, 0.5);
+    PclSource output;
+    transformPointCloud(*target_, output, trans.inverse());
+    double score = proof_grid.getScore(output);
+    return score;
+  }
 }
 }  // end of namespace pcl
 

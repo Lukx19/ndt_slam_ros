@@ -24,6 +24,8 @@ public:
   {
   }
 
+  virtual void init(const Transform &motion, const Covar &covariance,
+                    const PointCloud &pcl, const ros::Time &update_time) = 0;
   /**
    * @brief      This function updates state of the whole algorithm.
    *
@@ -44,8 +46,7 @@ public:
    *
    * @return     The occupancy grid.
    */
-  virtual nav_msgs::OccupancyGrid
-  getOccupancyGrid(const std::string &world_frame_id) = 0;
+  virtual nav_msgs::OccupancyGrid getOccupancyGrid() = 0;
 
   /**
    * @brief      Gets the graph serialized.
@@ -54,8 +55,7 @@ public:
    *
    * @return     The graph serialized.
    */
-  virtual visualization_msgs::MarkerArray
-  getGraphSerialized(const std::string &world_frame_id) = 0;
+  virtual visualization_msgs::MarkerArray getGraphSerialized() = 0;
 
   /**
    * @brief      Gets the ndt map.
@@ -64,7 +64,7 @@ public:
    *
    * @return     The ndt map.
    */
-  virtual ndt_gslam::NDTMapMsg getNDTMap(const std::string &world_frame_id) = 0;
+  //  virtual ndt_gslam::NDTMapMsg getNDTMap() = 0;
 };
 }
 #endif

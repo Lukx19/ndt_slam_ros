@@ -284,7 +284,7 @@ LookUpTable<PointType>::getScore(const pcl::PointCloud<PointType> &pcl) const
   }
   if (pcl.size() == 0)
     return 0;
-  return res / (OCCUPIED_CELL * target_points_);
+  return res / (OCCUPIED_CELL * pcl.size());
 }
 
 template <typename PointType>
@@ -308,7 +308,7 @@ double LookUpTable<PointType>::getScore(const std::vector<IndexPoint> &pcl) cons
     return 0;
   // ROS_DEBUG_STREAM("valid points: "<<valid_pts <<" score: "<<res <<"
   // (pts*score)/100 "<<res*valid_pts / 100);
-  return res / (target_points_ * OCCUPIED_CELL);
+  return res / (pcl.size() * OCCUPIED_CELL);
 }
 template <typename PointType>
 double LookUpTable<PointType>::getMaxScore() const

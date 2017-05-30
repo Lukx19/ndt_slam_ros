@@ -101,12 +101,12 @@ bool GraphSlamNode::preparePoseData(const ros::Time &time_stamp,
   tf::StampedTransform tf_odom;
   try {
     tf_list_.waitForTransform(robot_base_frame_, laser_frame_id, time_stamp,
-                              ros::Duration(10.0));
+                              ros::Duration(1.0));
     tf_list_.lookupTransform(robot_base_frame_, laser_frame_id, time_stamp,
                              tf_base);
 
     tf_list_.waitForTransform(odom_frame_, robot_base_frame_, time_stamp,
-                              ros::Duration(10.0));
+                              ros::Duration(1.0));
     tf_list_.lookupTransform(odom_frame_, robot_base_frame_, time_stamp,
                              tf_odom);
   } catch (...) {
@@ -159,8 +159,8 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
   if (!is_ready_) {
     is_ready_ = true;
     last_odom_ = odom;
-    last_pose_ = pose_t::Zero();
-    algorithm_->update(transform_t::Identity(), covar, *pcl, time_stamp);
+    // last_pose_ = pose_t::Zero();
+    algorithm_->init(eigt::getTransFromPose(odom), covar, *pcl, time_stamp);
     publishTF(time_stamp);
     return;
   }
@@ -168,19 +168,20 @@ void GraphSlamNode::doAlgorithm(const ros::Time &time_stamp, const pose_t &odom,
                     eigt::getTransFromPose(odom);
   last_odom_ = odom;
 
-  pose_t current_pose = last_pose_;
+  pose_t current_pose;
   current_pose = algorithm_->update(odom_trans, covar, *pcl, time_stamp);
-  last_pose_ = current_pose;
+  // last_pose_ = current_pose;
   updateTFTrans(odom, current_pose);
-
+  ROS_INFO_STREAM("ODOM: " << odom.transpose()
+                           << " SLAM: " << current_pose.transpose());
   // PUBLISHING MSGS
 
   publishTF(time_stamp);
-  win_map_pub_.publish(algorithm_->getNDTMap(fixed_frame_));
-  occ_map_pub_.publish(algorithm_->getOccupancyGrid(fixed_frame_));
+  //  win_map_pub_.publish(algorithm_->getNDTMap());
+  occ_map_pub_.publish(algorithm_->getOccupancyGrid());
   // publish serialized graph
   if (serialize_graph) {
-    graph_pub_.publish(algorithm_->getGraphSerialized(fixed_frame_));
+    graph_pub_.publish(algorithm_->getGraphSerialized());
     // saveDotGraph();
     ROS_DEBUG("Graph_slam2d:GRAPH Markers published.");
   }

@@ -54,21 +54,17 @@ private:
 public:
   NdtSlamAlgortihm(ros::NodeHandle &nh_private);
   ~NdtSlamAlgortihm();
-
+  virtual void init(const Transform &motion, const Covar &covariance,
+                    const PointCloud &pcl,
+                    const ros::Time &update_time) override;
   virtual inline Pose update(const Transform &motion, const Covar &covariance,
                              const PointCloud &pcl,
                              const ros::Time &update_time) override;
-  virtual nav_msgs::OccupancyGrid
-  getOccupancyGrid(const std::string &world_frame_id) override;
+  virtual nav_msgs::OccupancyGrid getOccupancyGrid() override;
 
-  virtual visualization_msgs::MarkerArray
-  getGraphSerialized(const std::string &world_frame_id) override
-  {
-    return opt_engine_->getGraphSerialized(world_frame_id);
-  }
+  virtual visualization_msgs::MarkerArray getGraphSerialized() override;
 
-  virtual ndt_gslam::NDTMapMsg
-  getNDTMap(const std::string &world_frame_id) override;
+  //  virtual ndt_gslam::NDTMapMsg getNDTMap() override;
 
 protected:
   bool initialized_;
@@ -78,11 +74,15 @@ protected:
   double max_uncertanity_in_window_;
   double max_euclidean_distance_traveled_;
   float cell_size_;
+  std::string world_frame_id_;
 
   size_t last_node_id_;
   Transform unused_trans_;  // transformation of unused odometry
 
   Transform position_;
+  Transform last_position_;
+  Transform position_graph_;
+  Transform unused_graph_trans_;
   Transform position_cumul_;
   Transform transform_temp_;  // transform of current temp frame
   Pose last_matcher_pose_;
@@ -99,9 +99,13 @@ protected:
   std::deque<BufferedFrame> built_frames_;
   std::mutex built_frames_mutex_;
   std::mutex position_mutex_;
-  std::mutex map_mutex_;
+  std::mutex backend_data_mutex_;
   std::atomic<bool> exit_;
+  std::atomic<bool> position_updated_;
   std::thread backend_thread_;
+
+  visualization_msgs::MarkerArray graph_msg_;
+  nav_msgs::OccupancyGrid occ_grid_;
 
   inline void updateGraph(const Transform &increase, const Covar &covariance,
                           const PointCloud &new_scan,
@@ -121,10 +125,13 @@ NdtSlamAlgortihm::NdtSlamAlgortihm(ros::NodeHandle &nh_private)
   , max_uncertanity_in_window_(1000000.0)
   , max_euclidean_distance_traveled_(1.5)
   , cell_size_(0.25)
+  , world_frame_id_()
   , last_node_id_(0)
   , unused_trans_(Transform::Identity())
   , position_(Transform::Identity())
+  , position_graph_(Transform::Identity())
   , position_cumul_(Transform::Identity())
+  , unused_graph_trans_(Transform::Identity())
   , transform_temp_(Transform::Identity())
   , last_matcher_pose_(Pose::Zero())
   , covar_temp_()
@@ -134,7 +141,7 @@ NdtSlamAlgortihm::NdtSlamAlgortihm(ros::NodeHandle &nh_private)
         std::unique_ptr<LoopScanmatcher>(new LoopScanmatcher())))
   , window_seq_(0)
   , exit_(false)
-  , backend_thread_(&NdtSlamAlgortihm::runBackend, this)
+  , backend_thread_()
 {
   max_euclidean_distance_traveled_ =
       static_cast<float>(nh_private.param<double>("node_gen_distance", 2.0));
@@ -153,6 +160,8 @@ NdtSlamAlgortihm::NdtSlamAlgortihm(ros::NodeHandle &nh_private)
 
   cell_size_ = nh_private.param<double>("cell_size", 0.25);
 
+  world_frame_id_ = nh_private.param<std::string>("map_farme_id", "map");
+
   frame_temp_.reset(new FrameType(cell_size_, FrameType::Pose(0, 0, 0)));
   map_ = NDTMapper<CellType, PointType>(cell_size_);
 }
@@ -161,6 +170,39 @@ NdtSlamAlgortihm::~NdtSlamAlgortihm()
 {
   exit_.store(true);
   backend_thread_.join();
+}
+
+void NdtSlamAlgortihm::init(const NdtSlamAlgortihm::Transform &pose,
+                            const NdtSlamAlgortihm::Covar &covariance,
+                            const NdtSlamAlgortihm::PointCloud &pcl,
+                            const ros::Time &update_time)
+{
+  if (pcl.empty()) {
+    ROS_FATAL_STREAM("[SLAM ALGORITHM]: Input point cloud is empty. "
+                     "Initialization failed");
+    return;
+  }
+  // enters first scan as it is to running window
+  frame_temp_.reset(new FrameType(cell_size_));
+  frame_temp_->setOrigin(eigt::getPoseFromTransform(pose));
+  frame_temp_->initialize(pcl);
+  BufferedFrame frame;
+  frame.frame_.reset(new FrameType(cell_size_));
+  frame.stamp_ = update_time;
+  frame.frame_.swap(frame_temp_);
+  built_frames_.emplace_back(std::move(frame));
+
+  frame_temp_->initializeSimple(pcl);
+  frame_temp_->setOrigin(eigt::getPoseFromTransform(pose));
+  window_update_time_ = update_time;
+  window_seq_ = 0;
+  position_updated_.store(false);
+  transform_temp_.setIdentity();
+  unused_graph_trans_.setIdentity();
+  position_ = pose;
+  last_position_ = pose;
+  backend_thread_ = std::thread(&NdtSlamAlgortihm::runBackend, this);
+  ROS_INFO_STREAM("[SLAM ALGORITHM]: NDT Slam algorithm initialized!");
 }
 
 NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
@@ -174,23 +216,18 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
     return eigt::getPoseFromTransform(position_ * motion);
   }
 
-  if (!initialized_) {
-    initialized_ = true;
-    // enters first scan as it is to running window
-    frame_temp_->initializeSimple(pcl);
-    window_update_time_ = update_time;
-    window_seq_ = 0;
-    ROS_INFO_STREAM("[SLAM ALGORITHM]: NDT Slam algorithm initialized!");
-    return eigt::getPoseFromTransform(position_);
-  }
   transform_temp_ = transform_temp_ * motion;
+  unused_graph_trans_ = unused_graph_trans_ * motion;
   covar_temp_.addToCovar(covariance, motion);
-
-  {
+  if (position_updated_.load()) {
     std::lock_guard<std::mutex> lock(position_mutex_);
+    position_ = position_graph_ * unused_graph_trans_;
+    unused_graph_trans_.setIdentity();
+    position_updated_.store(false);
+
+  } else {
     position_ = position_ * motion;
   }
-
   if (movedEnough(transform_temp_, covar_temp_)) {
     ROS_INFO_STREAM("[SLAM ALGORITHM]: creating new frame");
     {
@@ -201,15 +238,15 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
       frame.frame_.swap(frame_temp_);
       frame.cov_last_to_this_ = covar_temp_;
       frame.tf_last_to_this_ = transform_temp_;
+      //          eigt::transBtwPoses(eigt::getPoseFromTransform(last_position_),
+      //                              eigt::getPoseFromTransform(position_));
       built_frames_.emplace_back(std::move(frame));
     }
     covar_temp_ = CovarianceWrapper();
     transform_temp_.setIdentity();
     frame_temp_->initialize(pcl);
-    {
-      std::lock_guard<std::mutex> lock(position_mutex_);
-      frame_temp_->setOrigin(eigt::getPoseFromTransform(position_));
-    }
+    frame_temp_->setOrigin(eigt::getPoseFromTransform(position_));
+    last_position_ = position_;
 
   } else {
     PointCloud pcl_out;
@@ -220,21 +257,22 @@ NdtSlamAlgortihm::Pose NdtSlamAlgortihm::update(const Transform &motion,
   return eigt::getPoseFromTransform(position_);
 }
 
-nav_msgs::OccupancyGrid
-NdtSlamAlgortihm::getOccupancyGrid(const std::string &world_frame_id)
+nav_msgs::OccupancyGrid NdtSlamAlgortihm::getOccupancyGrid()
 {
-  std::lock_guard<std::mutex> lock(map_mutex_);
-  auto map = map_.calcOccupancyGridMsg();
-  map.header.frame_id = world_frame_id;
-  map.header.stamp = ros::Time::now();
-  return map;
+  std::lock_guard<std::mutex> lock(backend_data_mutex_);
+  return occ_grid_;
 }
 
-ndt_gslam::NDTMapMsg
-NdtSlamAlgortihm::getNDTMap(const std::string &world_frame_id)
+visualization_msgs::MarkerArray NdtSlamAlgortihm::getGraphSerialized()
 {
-  return toNdtMapMsg(map_.getNDTMap()->serialize(), world_frame_id);
+  std::lock_guard<std::mutex> lock(backend_data_mutex_);
+  return graph_msg_;
 }
+
+// ndt_gslam::NDTMapMsg NdtSlamAlgortihm::getNDTMap()
+//{
+//  return toNdtMapMsg(map_.getNDTMap()->serialize(), world_frame_id_);
+//}
 
 bool NdtSlamAlgortihm::movedEnough(const Transform &trans,
                                    const CovarianceWrapper &covar) const
@@ -299,6 +337,7 @@ void NdtSlamAlgortihm::runBackend()
 {
   bool first_node_added = false;
   size_t last_node_id = 0;
+  Transform trans_btw_frames = Transform::Identity();
   while (!exit_.load()) {
     if (built_frames_.size() > 0) {
       ROS_INFO_STREAM("NDTSLAM_ALGORITHM: frame used. Remaining:"
@@ -309,11 +348,26 @@ void NdtSlamAlgortihm::runBackend()
         fr = built_frames_.front();
         built_frames_.pop_front();
       }
-      frames_.emplace_back(fr.frame_);
-      {
-        std::lock_guard<std::mutex> lock(map_mutex_);
-        map_.addFrame(frames_.back(), fr.stamp_);
+      if (frames_.size() > 0) {
+        auto new_pose = eigt::getPoseFromTransform(
+            eigt::getTransFromPose(frames_.back()->getOrigin()) *
+            trans_btw_frames);
+        ROS_INFO_STREAM("pose comparison"
+                        << new_pose.transpose() << " old pose"
+                        << fr.frame_->getOrigin().transpose());
+        fr.frame_->setOrigin(new_pose);
+        trans_btw_frames = fr.tf_last_to_this_;
       }
+      frames_.emplace_back(fr.frame_);
+      //      if (first_node_added) {
+      //        // set new location of this frame based on optimalization in
+      //        //        previous iterration
+      //        frames_.back()->setOrigin(eigt::getPoseFromTransform(
+      //            eigt::getTransFromPose(opt_engine_->getPoseLocation(last_node_id))
+      //            *
+      //            fr.tf_last_to_this_));
+      //      }
+      map_.addFrame(frames_.back(), fr.stamp_);
 
       FrameTypeHolder frame_wrap(frames_.back());
 
@@ -326,25 +380,34 @@ void NdtSlamAlgortihm::runBackend()
             fr.cov_last_to_this_.covar_.inverse());
       }
       first_node_added = true;
+
       // find loop closures and optimize graph
       if (opt_engine_->tryLoopClose()) {
-        // optimize graph
-        //        if (opt_engine_->optimalizeIterationaly()) {
-        //          // optimization updates origins in grid through FrameHolder
-        //          // interface
-        //          {
-        //            std::lock_guard<std::mutex> lock(map_mutex_);
-        //            map_.recalc(fr.stamp_);
-        //          }
+        //         optimize graph
+        // if (opt_engine_->optimalizeIterationaly()) {
+        // optimization updates origins in grid through FrameHolder
+        // interface
+        // map_.recalc(fr.stamp_);
         //          {
         //            std::lock_guard<std::mutex> lock(position_mutex_);
-        //            position_ = eigt::getTransFromPose(
+        //            position_graph_ = eigt::getTransFromPose(
         //                opt_engine_->getPoseLocation(last_node_id));
+        //            position_updated_.store(true);
         //          }
         //        }
       }
+      auto map = map_.calcOccupancyGridMsg();
+      map.header.frame_id = world_frame_id_;
+      map.header.stamp = ros::Time::now();
+      auto graph = opt_engine_->getGraphSerialized(world_frame_id_);
+      {
+        std::lock_guard<std::mutex> lock(backend_data_mutex_);
+        occ_grid_ = std::move(map);
+        graph_msg_ = std::move(graph);
+      }
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 }
 }  // end of namespace slamuk
