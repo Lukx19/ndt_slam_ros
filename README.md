@@ -1,4 +1,4 @@
-# dynamic_slam
+# ndt_slam_ros
 
 This repository will contain collection of my packages for SLAM problem solution.
 
